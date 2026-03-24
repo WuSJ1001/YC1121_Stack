@@ -1,0 +1,1868 @@
+ifdef COMPILE_LE
+//******************************************//
+//*************LE INIT ****************//
+//******************************************//
+
+le_init_conn:
+	bpatchx patch21_6,mem_patch21
+	disable wake
+	jam 1,mem_le_conn_handle
+	jam 3,mem_le_state
+	jam 1,mem_le_arq
+	setarg -1
+	store 2,mem_le_event_count
+	force 0,pdata
+	store 1,mem_le_ch
+	store 1,mem_le_op
+	store 3,mem_sniff_rcv
+	store 3,mem_sniff_lost
+	call le_clear_enc
+	jam 1,mem_le_txheader
+	jam 0,mem_le_txlen
+	jam FUN_RX_LL_1M_PHY,mem_le_rx_phy
+	jam FUN_TX_LL_1M_PHY,mem_le_tx_phy
+	jam 0,mem_le_l2cap_att_states
+	branch le_supervision_flush
+
+le_init_master:
+	bpatchx patch21_7,mem_patch21
+	enable master
+	jam lemode_master,mem_le_mode
+	jam 1,mem_le_att_handle
+	jam 1,mem_le_search_handle_start
+	setarg 0xffff
+	store 2,mem_le_search_handle_end
+	force 0,pdata
+	store 5,mem_ccm_pcnt_rx
+	set1 LE_CCM_DIRECTIONBIT,pdata
+	store 5,mem_ccm_pcnt_tx	
+	branch le_init_conn
+
+
+le_init_slave:
+	bpatchx patch22_0,mem_patch22
+	disable master
+ 	setarg 0x17
+ 	store 2,mem_le_remote_mtu
+	increase 4,pdata
+	store 2,mem_remote_rx_max_octets
+	jam lemode_slave,mem_le_mode
+	jam 0,mem_le_adv_enable
+	jam 0,mem_lpm_current_mult
+	call le_clear_pairing_state
+	fetch 2,mem_le_superto
+	store 2,mem_le_init_superto
+	fetch 2,mem_le_tsniff
+	mul32 pdata,5,pdata
+	rshift4 pdata,pdata
+	store 2,mem_le_superto			// vol.6 part B 4.5.2 only 6*conninterval before establish
+	branch le_init_conn
+	
+
+//******************************************//
+//*************LE main process*********//
+//******************************************//
+
+le_conn_dispatch:
+	bpatchx patch22_1,mem_patch22
+	call le_enable
+ 	fetch 1,mem_le_state
+ 	isolate1 lestate_encryption,pdata
+ 	setflag true,mark_ble_encryption,mark
+	call app_process_ble
+	fetch 1,mem_le_mode
+	bbit1 mode_master,le_master_dispatch
+	branch le_slave_dispatch
+	
+//******************************************//
+//***********LE master process*********//
+//******************************************//
+	
+le_master_dispatch:
+	bpatchx patch22_2,mem_patch22
+	enable master
+	call le_supervision_update
+	branch le_master_disconn,positive
+	call le_setup
+	call le_prepare_tx
+	disable match
+	call le_transmit_receive_sifs
+	nrtn match
+	fetch 1,mem_le_conn_rcv
+	increase 1,pdata
+	store 1,mem_le_conn_rcv
+	call le_acknowledge
+	disable master
+	rtn
+	
+le_master_disconn:
+	call le_disconnect
+	disable master
+	rtn
+	
+//******************************************//
+//***********LE slave process***********//
+//******************************************//
+le_slave_dispatch:
+	bpatchx patch22_3,mem_patch22
+	jam 0,mem_le_md_count
+	set0 mark_ble_crc_fail,mark
+ifdef SECURE_CONNECTION
+	call sp_calc_sequence_256
+	call le_secure_connect_sm
+endif
+	disable attempt
+	call le_supervision_update
+	branch le_slave_disconn,positive
+	fetch 1,mem_le_rx_phy
+	call le_enable_phy_by_pdata
+	call le_setup
+	call le_receive_slave
+	nbranch le_slave_unsync,sync	// vol.6 part B 4.5.1 respond even crc error
+	call le_got_first_packet
+	branch le_slave_match,match
+	bmark1 mark_ble_crc_fail,le_slave_crc_fail
+	branch le_slave_cont
+	
+
+le_slave_crc_fail:
+le_slave_match:
+	bpatchx patch22_4,mem_patch22
+	fetch 1,mem_le_md_count
+	pincrease 1
+	store 1,mem_le_md_count
+	beq LE_MD_MAX_COUNT,le_slave_cont
+	call le_acknowledge
+	call le_prepare_tx
+	fetch 1,mem_le_tx_phy
+	call le_enable_phy_by_pdata
+	call le_transmit
+	call le_parse
+	fetch 2,mem_cb_ble_transmit
+	call callback_func
+	call le_check_md
+	branch le_slave_more_data,user
+le_slave_cont:
+	bpatchx patch22_5,mem_patch22
+	call le_pairing_sm
+ 	call le_check_paring_time
+	call check_51cmd
+	fetch 1,mem_le_op
+	bbit1 op_disconn,le_slave_disconn
+le_slave_unsync:
+	bpatchx patch22_6,mem_patch22
+	call end_of_packet
+	call le_lpm_set_mult
+	branch calc_clke_offset
+
+
+le_check_md:
+	disable user
+	bmark1 mark_ble_rx_md,enable_user
+	bmark1 mark_ble_tx_md,enable_user
+	bmark1 mark_ble_crc_fail,enable_user
+	rtn
+
+
+le_slave_more_data:
+	bpatchx patch22_7,mem_patch22
+	enable attempt
+	call le_transmit_receive_sifs_notx
+	branch le_slave_match,match
+	bmark1 mark_ble_crc_fail,le_slave_crc_fail
+	branch le_slave_cont
+
+le_slave_disconn:
+	//fall through
+le_disconnect:
+	bpatchx patch23_0,mem_patch23
+	call le_clear_connection_info
+	call app_disconn_reason_collect_ble
+	call le_clear_pairing_state
+ifdef SECURE_CONNECTION
+	call le_sc_state_clear
+endif
+	jam BT_EVT_LE_DISCONNECTED,mem_fifo_temp
+	branch ui_ipc_send_event
+
+le_clear_connection_info:
+	arg mem_used_map,contw
+	call memset0_16
+	jam 0,mem_le_conn_handle
+	jam lemode_idle,mem_le_mode
+	jam 0,mem_le_state
+le_clear_pairing_state:
+	bpatchx patch23_1,mem_patch23
+	jam FLAG_LE_ENC_NULL,mem_le_enc_state
+	jam FLAG_LE_PAIRING_NULL,mem_le_pairing_state 
+ifdef SECURE_CONNECTION
+	call sp_clear_flags
+endif
+	rtn
+	
+le_got_first_packet:
+	bpatchx patch23_2,mem_patch23
+	fetch 1,mem_le_conn_rcv
+	increase 1,pdata
+	store 1,mem_le_conn_rcv
+	fetch 1,mem_le_state
+	rtnbit1 lestate_got_first_packet
+	set1 lestate_got_first_packet,pdata
+	store 1,mem_le_state
+	fetch 2,mem_le_init_superto
+	store 2,mem_le_superto
+	setarg 0
+	store 4,mem_le_transmit_window
+	rtn
+
+
+//input: pdata is phy mode
+//bit0 is le 1M phy
+//bit1 is le 2M phy
+//bit2 is le coded phy s2
+//bit7 is le coded phy s8
+le_enable_phy_by_pdata:
+	copy pdata,temp
+	bpatchx patch23_3,mem_patch23
+le_enable_phy_by_pdata1:
+	copy temp,pdata
+	bbit1 BIT_LE_1M_PHY,le_enable
+	bbit1 BIT_LE_2M_PHY,le_enable_2M
+	bbit0 BIT_LE_CODED_PHY,le_enable
+	bbit1 BIT_LE_CODED_PHY_S8,le_enable_coded_s8
+	bbit1 BIT_LE_CODED_PHY_S2,le_enable_coded_s2
+	branch le_enable
+
+le_enable_2M:
+	set0 mark_ble_lr,mark
+	set1 mark_ble_2M,mark
+	rtn
+
+le_enable_coded_s2:
+le_enable_coded:
+	set0 mark_ble_2M,mark
+	set1 mark_ble_lr,mark
+	set0 mark_ble_lr_s8,mark
+	rtn
+
+
+le_enable_coded_s8:
+	set0 mark_ble_2M,mark
+	set1 mark_ble_lr,mark
+	set1 mark_ble_lr_s8,mark
+	rtn
+
+le_enable:
+	bpatchx patch23_4,mem_patch23
+	set0 mark_ble_2M,mark
+	set0 mark_ble_lr,mark
+	rtn
+
+
+le_disable:
+	bpatchx patch23_5,mem_patch23
+	set0 mark_ble_encryption,mark
+	jam 0x01,0x8901
+	jam 0x80,0x8920
+	jam 0x03,0x8930
+	rtn
+	
+le_prep:
+	bpatchx patch23_6,mem_patch23
+	disable enable_crc
+	disable enable_white
+	fetch 3,mem_le_crcinit
+	iforce crc24_init
+	fetch 1,mem_le_ch_mapped
+le_prep_next:
+	reverse pdata,temp
+	set1 1,temp
+	rshift temp,white_init
+	rtn
+	
+
+le_rx_setfreq:
+	call le_setfreq
+le_rf_rx_enable:	
+	call set_freq_rx
+	fetch 2,mem_param_pll_setup
+	call sleep
+	branch rf_rx_enable
+
+le_tx_setfreq:
+	branch txon,match
+	bmark1 mark_ble_crc_fail,txon
+le_tx_setfreq0:
+	call le_setfreq
+	branch set_freq_tx
+	
+le_setfreq:
+	bpatchx patch23_7,mem_patch23
+	call set_sync_on
+	fetch 1, mem_le_testtype
+	nbranch le_ctf_test,blank
+	fetch 1,mem_le_ch_mapped
+	sub pdata,36,null
+	branch le_ctf_normal,positive
+	force 0,temp
+	rtneq 37
+	force 24,temp
+	rtneq 38
+	force 78,temp
+	rtn
+	
+le_ctf_normal:
+	sub pdata,10,null
+	branch le_ctf_low,positive
+	increase 1,pdata
+	
+le_ctf_low:	
+	lshift pdata,pdata
+	add pdata,2,temp
+	rtn
+	
+le_ctf_test:
+	fetch 1,mem_le_ch_mapped
+	lshift pdata,temp
+	rtn
+
+le_sca_map:
+	arg 500,temp
+	rtn blank
+	arg 250,temp
+	rtneq 1
+	arg 150,temp
+	rtneq 2
+	arg 100,temp
+	rtneq 3
+	arg 75,temp
+	rtneq 4
+	arg 50,temp
+	rtneq 5
+	arg 40,temp
+	rtneq 6
+	arg 20,temp
+	rtn
+
+
+	
+le_setup:
+	bpatchx patch24_0,mem_patch24
+	enable swfine
+	fetch 4,mem_le_access
+	iforce access
+	call le_map_channel
+	setarg 0x200
+	branch le_setup_master,master
+	fetch 2,mem_le_receive_window
+	rshift pdata,pdata
+le_setup_master:
+	fetcht 2,mem_param_pll_setup
+	iadd temp,pdata
+	call ahead_window
+	deposit clke
+	rtn
+
+
+le_context_nextevent:
+	bpatchx patch24_1,mem_patch24
+	call push_stack_rega_b_c
+	storer loopcnt ,2,mem_loopcnt
+	add rega,coffset_mode,contr
+	ifetch 1,contr
+	rtnbit0 mode_le
+	add rega,coffset_le_event_cnt,contw
+	ifetch 2,contw
+	increase 1,pdata
+	istore 2,contw
+	call le_update_param
+	call le_update_channel_map
+	call le_update_phy	
+	call le_context_nexthop
+	call pop_stack_rega_b_c
+	fetchr loopcnt ,2,mem_loopcnt
+	rtn
+	
+le_context_nexthop:	
+	add rega,coffset_le_hop,contr
+	ifetch 1,contr
+	add rega,coffset_le_ch,contw
+	ifetcht 1,contw
+	iadd temp,pdata
+	sub pdata,36,null
+	branch le_nexthop_nowrap,positive
+	increase -37,pdata
+le_nexthop_nowrap:
+	istore 1,contw
+	rtn
+
+//input rega
+le_calc_channel_map:
+	add rega,coffset_le_channel_map,contr
+	ifetch 5,contr
+	force 0,temp
+	force 37,loopcnt
+le_count_channels_loop:
+	bbit0 0,le_count_channels_notused
+	increase 1,temp
+le_count_channels_notused:
+	rshift pdata,pdata
+	loop le_count_channels_loop
+	add temp,-1,pdata
+	add rega,coffset_le_channels,contw
+	istore 1,contw
+	rtn
+
+le_map_channel:
+	bpatchx patch24_2,mem_patch24
+	fetch 1,mem_le_ch
+	iforce queue
+	fetcht 5,mem_le_channel_map
+	qisolate1 temp
+	branch le_map_channel_end,true
+le_map_channel_next:
+	fetch 1,mem_le_channels
+	isub queue,pdata
+	branch le_map_channel_cont,positive
+	sub pdata,-1,queue
+	branch le_map_channel_next
+le_map_channel_cont:
+	copy queue,loopcnt
+	force 0,queue
+le_map_channel_loop:
+	qisolate1 temp
+	branch le_map_channel_skip,true
+	increase 1,loopcnt
+le_map_channel_skip:
+	deposit loopcnt
+	branch le_map_channel_end,blank
+	increase 1,queue
+	increase -1,loopcnt
+	branch le_map_channel_loop
+le_map_channel_end:
+	deposit queue
+	store 1,mem_le_ch_mapped
+	rtn
+
+
+le_wait_tx:
+	branch le_wait_master,master
+	until null,timeout
+	rtn
+	
+le_wait_master:
+	arg 0xea0,timeup
+	until clkn_rt,meet
+	rtn
+
+le_receive_adv:
+	disable swfine
+	fetch 2,mem_le_scan_window
+	copy pdata,timeup
+	branch le_receive_packet
+
+
+le_receive_slave:
+	bpatchx patch24_3,mem_patch24
+ 	call le_dec_init
+	enable swfine
+	fetch 2,mem_le_receive_window
+	fetcht 4,mem_le_transmit_window
+	iadd temp,timeup
+le_receive_packet:
+	call le_rx_setfreq
+le_receive_rxon:
+	bpatchx patch24_4,mem_patch24
+	call le_prep
+	bmark0 mark_ble_lr,le_receive_nolr
+	pulse dewhiten_code_calc
+	nop 30
+	call le_prep
+	lshift3 timeup,timeup
+le_receive_nolr:
+	disable match
+	enable decode_fec0
+	enable is_rx
+	disable is_tx
+	copy timeup,stop_watch
+	correlate null,timeout
+	branch le_receive_on_attempt,attempt
+	copy clke,temp
+	storet 6,mem_sync_clke
+le_receive_on_attempt:
+	nbranch le_unsync_end,sync
+	enable swfine
+	fetch 1,mem_le_tx_ifs_defference
+	arg PARAM_20MS_INIT,temp
+	iadd temp,temp
+	fetch 1,mem_system_clk
+	imul32 temp,stop_watch
+	call rf_debug_rx_sync_line	//L-H
+	branch le_receive_skip,attempt
+	call calc_clke_all_modem
+	fetch 1,mem_le_state
+	bbit0 lestate_got_first_packet,le_receive_skip
+	fetcht 6,mem_sync_clke
+	call lpm_adjust_clk,wake
+le_receive_skip:
+	call save_rssi
+	enable enable_white
+	enable enable_crc
+	parse demod,bucket,8
+	rshift3 pwindow,pdata
+	store 1,mem_le_rxbuf_data_header
+	parse demod,bucket,8
+	rshift3 pwindow,pdata
+	store 1,mem_le_rxbuf_data_length
+ 	copy pdata,loopcnt
+	branch le_rx_nopayload,zero
+
+	bmark1 mark_ble_encryption,le_rx_dec
+
+le_rx_loop:
+	parse demod,bucket,8
+	rshift3 pwindow,pdata
+	istore 1,contw
+	loop le_rx_loop
+	branch le_rx_nopayload
+
+le_rx_dec: 
+	copy contw,regb
+	bpatchx patch24_5,mem_patch24
+	call le_check_retransmit	
+//	bmark1 mark_old_packet,le_retransmit_end_of_packet
+	fetchr rega, 1,mem_le_rxbuf_data_length
+	increase -4,rega
+	nbranch le_mic_error,positive
+//	storer rega, 1,mem_le_rxbuf_data_length
+	call le_dec_start	
+	copy regb,contw
+	arg 0,temp
+	fetchr loopcnt, 1,mem_le_rxbuf_data_length
+	increase -4,loopcnt
+	branch le_rx_dec_loop_end,zero
+le_rx_dec_loop:
+	
+	parse demod,bucket,8
+	rshift3 pwindow,pdata
+	istore 1,contw
+	increase 1,temp
+	and temp,0xf,null
+	call le_dec,zero
+	loop le_rx_dec_loop
+le_rx_dec_loop_end:
+	call le_dec_end	
+	copy regb,contw
+	
+
+le_rx_nopayload:
+	bpatchx patch24_6,mem_patch24
+	parse demod,bucket,24	
+	rshift32 pdata,pdata
+	rshift16 pdata,pdata
+	istore 3,contw
+	enable swfine
+	call le_set_until_tx_timer
+	branch le_crc_fail,crc_failed
+	bmark0 mark_ble_encryption,le_rx_match
+	fetch 1,mem_le_rxbuf_data_length
+	branch le_rx_match,blank
+	increase -4,pdata
+	store 1,mem_le_rxbuf_data_length
+	call wait_ccm_done
+ 	fetch 1,core_misc_status
+	bbit0 7, le_mic_error
+ 	force regidx_result,regext_index
+	storer regext, 4,mem_le_peer_mic
+le_rx_match:
+	call rf_debug_rx_crc_line	//L
+	enable match
+	set0 mark_ble_crc_fail,mark
+le_crc_fail_tx:
+	bpatchx patch24_7,mem_patch24
+	call ccm_ctrl_clr
+	fetch 1,mem_le_rx_phy
+	nsetflag ble_coded_info,BIT_LE_CODED_PHY_S8,pdata
+	store 1,mem_le_rx_phy
+	call le_match_set_sync_on
+	branch le_match_set_txfreq
+	
+le_match_set_sync_on:	
+	disable decode_fec0
+	branch set_sync_on
+	
+le_match_set_txfreq:
+	bpatchx patch25_0,mem_patch25
+	fetcht 1,mem_last_freq
+	branch set_freq_tx_int	
+	
+
+le_dec_init:
+	rtnmark0 mark_ble_encryption
+	call load_sk
+	force regidx_result,regext_index
+	call aes_clear
+	branch aes_clear_data
+	
+	
+le_dec_start:
+	bpatchx patch25_1,mem_patch25
+	jam 0,core_ccm_aad0 
+	jam 1,core_ccm_aad1
+	fetch 1,mem_le_rxbuf_data_header
+	and_into 0x3,pdata
+	store 1,core_ccm_aad2
+	
+	setarg mem_le_rxbuf_data_payload
+	store 2,core_ccm_input_playload_addr
+	store 2,core_ccm_output_playload_addr
+
+	fetchr rega, 1,mem_le_rxbuf_data_length
+	increase -4,rega
+
+	fetcht 5,mem_ccm_pcnt_rx	
+	isolate1 mark_old_packet,mark
+	call le_pcnt_rx_sub1,true
+	call ccm_b0
+	setarg 0
+	store 2,core_ccm_inptr
+	jam 6,core_ccm_ctrl
+	jam 7,core_ccm_ctrl	
+	rtn	
+
+le_pcnt_rx_sub1:
+	sub temp,0,null
+	branch le_pcnt_rx_sub1_0,zero
+	increase -1,temp
+	set1 LE_CCM_DIRECTIONBIT,temp
+	rtn
+
+le_pcnt_rx_sub1_0:
+	setarg 0xffffff
+	lshift16 pdata,pdata
+	arg 0xffff,temp
+	ior temp,temp
+	rtn
+
+le_dec:
+	copy contw,regb
+	fetch 1,mem_le_rxbuf_data_length
+	increase -4,pdata
+	isub temp,null
+	rtn zero
+	storet 2,core_ccm_inptr
+	copy regb,contw
+	rtn
+	
+le_dec_end://mic
+	parse demod,bucket,32
+	rshift32 pdata,pdata
+	rshift8 pdata,pdata
+	istore 4,contw
+	copy contw,regb
+//	store 4,mem_le_peer_mic
+	force regidx_data,regext_index
+	copy  pdata,regext
+	storet 2,core_ccm_inptr
+	rtn
+
+le_mic_error:
+	branch le_end_of_packet
+
+le_retransmit_end_of_packet:
+	call le_set_until_tx_timer	// start SIFS timer after last bit of crc
+	call end_of_packet
+	branch le_rx_match
+
+le_crc_fail:
+	call rf_debug_rx_crc_fail_line
+	bmark1 mark_ble_crc_fail,le_crc_fail_consecutive //two consecutive packets received with an invalid CRC match within a connection event shall close the event
+	set1 mark_ble_crc_fail,mark
+	branch le_crc_fail_tx
+	
+le_unsync_end:	
+le_crc_fail_consecutive:
+	set0 mark_ble_crc_fail,mark
+	branch le_end_of_packet
+
+le_end_of_packet:
+	bpatchx patch25_2,mem_patch25
+	call ccm_ctrl_clr
+	branch end_of_packet
+	
+calc_clke_all_modem:
+	bmark1 mark_ble_lr,calc_clke_modem_coded
+	bmark1 mark_ble_2M,calc_clke_modem_2M
+	fetch 2,mem_param_clke_cal_le_1m
+	copy pdata,clke_rt
+	copy bt_clk,clke_bt
+	rtn
+
+
+calc_clke_modem_coded:
+	fetch 2,mem_param_clke_cal_le_coded
+	copy pdata,clke_rt
+	add bt_clk,1,clke_bt
+	rtn
+
+calc_clke_modem_2M:
+	fetch 2,mem_param_clke_cal_le_2m
+	copy pdata,clke_rt
+	copy bt_clk,clke_bt
+	rtn
+
+
+le_set_until_tx_timer:
+	fetch 1,mem_le_rxbuf_data_length
+	add pdata,5,temp	//PDU Length
+	lshift3 temp,temp	//PDU bit size
+	fetch 1,mem_le_rx_phy
+	bmark1 mark_ble_lr,le_set_until_tx_timer_rx_lr
+	bbit1 BIT_LE_1M_PHY,le_set_until_tx_timer_rx_1M
+	bbit1 BIT_LE_2M_PHY,le_set_until_tx_timer_rx_2M
+le_set_until_tx_timer_rx_lr:
+	branch le_set_until_tx_timer_rx_coded_s2,ble_coded_info
+	branch le_set_until_tx_timer_rx_coded_s8
+
+le_set_until_tx_timer_rx_1M:
+	branch le_calc_stop_watch
+
+le_set_until_tx_timer_rx_2M:
+	rshift temp,temp
+	branch le_calc_stop_watch
+
+le_set_until_tx_timer_rx_coded_s2:
+	add temp,3,temp	//term2
+	lshift temp,temp
+	branch le_set_until_tx_timer_rx_coded
+
+le_set_until_tx_timer_rx_coded_s8:
+	add temp,3,temp	//term2
+	lshift3 temp,temp
+le_set_until_tx_timer_rx_coded:
+	setarg PARAM_CODED_C1_TERM1_TIME_40US
+	iadd temp,temp
+	branch le_calc_stop_watch
+
+le_calc_stop_watch:
+	fetch 1,mem_system_clk
+	imul32 temp,temp		//mips cpu
+	arg PARAM_20MS_INIT,rega
+	imul32 rega,pdata
+	isub temp,temp
+	copy stop_watch,pdata
+	isub temp,stop_watch
+	rtn
+
+le_transmit_receive_sifs_without_change_mode:
+	call le_transmit
+	fetcht 1,mem_last_freq
+	call set_freq_rx
+	call rf_rx_enable
+	enable swfine
+	arg 5500,timeup
+	branch le_receive_rxon
+
+
+le_transmit_receive_sifs:
+	bpatchx patch25_3,mem_patch25
+	fetch 1,mem_le_tx_phy
+	call le_enable_phy_by_pdata
+	call le_transmit
+le_transmit_receive_sifs_notx:
+	fetch 1,mem_le_rx_phy
+	call le_enable_phy_by_pdata
+
+	fetcht 1,mem_last_freq
+	call set_freq_rx
+	call rf_rx_enable
+	enable swfine
+	arg 5500,timeup
+	bmark0 mark_ble_lr,le_receive_rxon
+	arg 8500,timeup
+	branch le_receive_rxon
+
+le_transmit_norx:
+	bpatchx patch25_4,mem_patch25
+	call le_transmit
+	branch end_of_packet
+	
+le_transmit:
+	bpatchx patch25_5,mem_patch25
+	call le_prep
+	call le_tx_setfreq
+	call rf_debug_tx_on_line	//H
+	set1 TXGFSK,radio_ctrl
+	enable encode_fec0
+	enable is_tx
+	disable is_rx
+	call le_wait_tx
+	disable lr_s2en
+	bmark1 mark_ble_lr,le_transmit_lr
+	bmark1 mark_ble_2M,le_transmit_2M
+	rshift16 access,pdata
+	rshift8 pdata,pdata
+	rshift4 pdata,pdata
+	inject mod,40
+le_transmit_packet:
+	enable enable_white
+	enable enable_crc
+	bpatchx patch25_6,mem_patch25
+	fetch 1,mem_le_txheader
+	inject mod,8
+	ifetch 1,contr
+	copy pdata,loopcnt
+	inject mod,8
+	sub loopcnt,0,null
+	branch le_tr_nopayload,zero
+
+	fetch 1,core_ccm_ctrl
+	branch le_transmit_packet_not_enc,blank 
+	bmark1 mark_ble_encryption,le_transmit_packet_enc
+le_transmit_packet_not_enc:	
+	arg mem_le_txpayload,contr
+le_tr_loop:
+	ifetch 1,contr
+	inject mod,8
+	loop le_tr_loop
+	
+le_tr_nopayload:
+	enable enable_parity
+	inject mod,24
+	disable enable_parity
+	bmark0 mark_ble_lr,le_transmit_skip
+	disable enable_white
+	setarg 0
+	inject mod,3
+le_transmit_skip:
+	until null,tx_clear
+	nop 100          /* flush out the last bit */
+	bpatchx patch25_7,mem_patch25
+	disable encode_fec0
+	disable encode_fec3
+	call set_sync_on
+	call rf_debug_tx_off_line	//L
+le_check_start_pause_enc:
+	fetch 1,mem_le_txheader
+	and pdata,LLID_LE_LL,pdata
+	rtnne LLID_LE_LL
+	fetch 1,mem_le_enc_state
+	beq  FLAG_LE_ENC_PAUSE,le_clear_enc
+	rtnne FLAG_LE_SEND_START_ENC_REQ
+	fetch 1,mem_le_txpayload
+	beq LL_START_ENC_REQ,le_set_enc
+	rtn
+	
+
+le_transmit_packet_enc:
+	increase -4,loopcnt
+	copy loopcnt,temp	
+	call ccm_wait_enc	
+	arg mem_le_txpayload,contr
+le_transmit_packet_enc_loop:
+	ifetch 1,contr
+	inject mod,8
+	loop le_transmit_packet_enc_loop
+	call ccm_check_enc_done
+	copy regext,pdata
+	inject mod,32
+	branch le_tr_nopayload
+
+le_transmit_lr:
+	arg 10,loopcnt
+le_transmit_lr_preamble_loop:
+	setarg 0x3c
+	inject mod,8
+	loop le_transmit_lr_preamble_loop
+	disable encode_fec0
+	enable encode_fec3
+	rshift16 access,pdata
+	rshift16 pdata,pdata
+	rshift4 pdata,pdata
+	inject mod,32
+	bmark1 mark_ble_lr_s8,le_transmit_lr_s8
+le_transmit_lr_s2:
+	setarg 1
+	inject mod,5
+	enable lr_s2en
+	branch le_transmit_packet
+
+le_transmit_lr_s8:
+	setarg 0
+	inject mod,5
+	branch le_transmit_packet
+
+le_transmit_2M:
+	fetch 1,mem_system_clk	
+	fetcht 1,mem_le_tx2m_delay
+	iadd temp,pdata
+	call sleep				//2M 前端发送比1M快
+	rshift16 access,pdata
+	rshift8 pdata,pdata
+	rshift4 pdata,temp
+	copy temp,pdata
+	inject mod,8
+	copy temp,pdata
+	inject mod,40
+	branch le_transmit_packet
+	
+
+le_update_param:
+	arg le_update_param_ahead1_cb,regc
+	arg le_update_param_cb,regb
+	arg lestate_update_param,queue
+	branch le_check_update_flag
+
+le_update_param_ahead1_cb:
+	add rega,coffset_sniff_anchor,contr
+	ifetcht 4,contr
+	add rega,coffest_le_new_transmitwindowsize,contr
+	ifetch 1,contr
+	add rega,coffset_le_window_size,contw
+	istore 1,contw
+	ifetch 2,contr
+	lshift2 pdata,pdata
+	iadd temp,timeup	//add windowsize
+	add rega,coffset_sniff_anchor,contw  
+	deposit timeup
+	istore 4,contw
+	ifetch 2,contr
+	lshift2 pdata,pdata
+	add rega,coffset_tsniff,contw
+	istore 2,contw
+	ifetch 2,contr
+	add rega,coffset_le_slave_latency,contw
+	istore 2,contw
+	ifetch 2,contr
+	store 2,mem_le_init_superto
+	branch le_receive_window_size
+
+le_update_param_cb:
+	ifetch 1,rega
+	set0 lestate_got_first_packet,pdata
+	istore 1,rega
+	storer rega,2,mem_rega
+	jam BT_EVT_LE_PARSE_CONN_PARAM_ACCEPTED,mem_fifo_temp
+	call ui_ipc_send_event
+	fetchr rega,2,mem_rega
+	rtn	
+
+le_update_channel_map:
+	arg 0,regc
+	arg le_update_channel_map_cb,regb
+	arg lestate_update_map,queue
+	branch le_check_update_flag
+	
+le_update_channel_map_cb:
+	add rega,coffset_le_new_map,contr
+	ifetch 5,contr
+	add rega,coffset_le_channel_map,contw
+	istore 5,contw
+	branch le_calc_channel_map
+	
+
+le_update_phy:
+	arg 0,regc
+	arg le_update_phy_cb,regb
+	arg lestate_update_phy,queue
+	branch le_check_update_flag
+	
+le_update_phy_cb:
+	add rega,coffset_le_new_m2s_phy,contr
+	ifetch 1,contr
+	call le_update_phy_cb_m2s
+	istore 1,contw
+	add rega,coffset_le_new_s2m_phy,contr
+	ifetch 1,contr
+	call le_update_phy_cb_s2m
+	istore 1,contw
+	storer rega,2,mem_rega
+	jam BT_EVT_LE_UPDATE_PHY,mem_fifo_temp
+	call ui_ipc_send_event
+	fetchr rega,2,mem_rega
+	rtn	
+
+le_update_phy_cb_m2s:
+	call le_update_phy_cb_m2s_no_change,blank
+	add rega,coffset_le_rx_phy,contw
+	nrtn master
+	fetcht 1,mem_le_tx_phys
+	isolate1 BIT_LE_CODED_PHY_S8,temp
+	setflag true,BIT_LE_CODED_PHY_S8,pdata
+	add rega,coffset_le_tx_phy,contw
+	rtn
+
+le_update_phy_cb_m2s_no_change:
+	add rega,coffset_le_rx_phy,contr
+	ifetch 1,contr
+	nrtn master
+	add rega,coffset_le_tx_phy,contr
+	ifetch 1,contr
+	rtn
+
+le_update_phy_cb_s2m:
+	call le_update_phy_cb_s2m_no_change,blank
+	fetcht 1,mem_le_tx_phys
+	isolate1 BIT_LE_CODED_PHY_S8,temp
+	setflag true,BIT_LE_CODED_PHY_S8,pdata
+	add rega,coffset_le_tx_phy,contw
+	nrtn master
+	set0 BIT_LE_CODED_PHY_S8,pdata
+	add rega,coffset_le_rx_phy,contw
+	rtn
+
+le_update_phy_cb_s2m_no_change:
+	add rega,coffset_le_tx_phy,contr
+	ifetch 1,contr
+	nrtn master
+	add rega,coffset_le_rx_phy,contr
+	ifetch 1,contr
+	rtn
+	
+
+//regb regc is cb function
+//queue is state flag
+le_check_update_flag:
+	bpatchx patch26_0,mem_patch26
+	ifetch 1,rega
+	qisolate0 pdata
+	rtn true
+	add rega,coffset_le_event_cnt,contr
+	ifetcht 2,contr
+	add rega,coffset_le_instant,contr
+	ifetch 2,contr
+	
+	isub temp,pdata
+	branch le_update,zero
+	nbranch le_check_update_small,positive
+	sub pdata,1,null
+	branch le_update_ahead1,zero
+	rtn
+	
+le_update_ahead1:
+	copy regc,pdata
+	branch callback_func
+
+le_update:
+	ifetch 1,rega
+	qset0 pdata
+	istore 1,rega
+	copy regb,pdata
+	branch callback_func
+	
+le_check_update_small:
+	add rega,coffset_le_event_cnt,contr
+	ifetch 2,contr
+	add rega,coffset_le_instant,contr
+	ifetch 2,contr
+	isub temp,pdata
+	arg 0xffff,temp
+	isub temp,null
+	branch le_update,zero
+	arg 0xf000,temp
+	isub temp,null
+	nbranch le_update,positive
+	rtn
+	
+
+le_check_retransmit:
+	fetcht 1,mem_le_arq
+	fetch 1,mem_le_rxbuf_data_header
+//	isolate1 md,pdata
+//	setflag true,mark_ble_rx_md,mark
+	rshift pdata,pdata
+	ixor temp,pdata
+	isolate1 nesn,pdata
+	setflag true,mark_old_packet,mark	/* retransmit */
+	rtn
+
+
+le_acknowledge:
+	bpatchx patch26_1,mem_patch26
+	call le_supervision_flush
+	rtnmark1 mark_ble_crc_fail
+	call le_check_wak
+	fetch 1,mem_le_rxbuf_data_header
+	isolate1 md,pdata
+	setflag true,mark_ble_rx_md,mark
+	rshift pdata,pdata
+	ixor temp,pdata
+	isolate1 nesn,pdata
+	setflag true,mark_old_packet,mark	/* retransmit */
+	rtnmark1 mark_old_packet
+	fetch 1,mem_le_rxbuf_data_length
+	branch le_ack_unenc,blank		/* empty packet, no decryption */
+	fetch 1,mem_le_state
+	bbit0 lestate_encryption,le_ack_unenc
+	fetcht 4,mem_le_peer_mic
+	fetch 4,mem_ccm_last_mic			
+	isub temp,null
+	branch assert,zero
+	storet 4,mem_ccm_last_mic
+	fetch 5,mem_ccm_pcnt_rx
+	increase 1,pdata
+	set1 LE_CCM_DIRECTIONBIT,pdata
+	store 5,mem_ccm_pcnt_rx
+	
+le_ack_unenc:
+	fetcht 1,mem_le_arq
+	setflip nesn,temp
+	storet 1,mem_le_arq
+	fetch 1,mem_le_configuration
+	rtnbit0 BIT_BLE_DEAL_BB_PACKET
+	bpatchx patch26_2,mem_patch26
+	fetch 1,mem_le_rxbuf_data_length
+	rtn blank		//empty packet
+	fetch 1,mem_le_rxbuf_data_header
+	compare LLID_CONTINUE,pdata,3
+	branch le_parse_writing_attribute_continue,true //ACL-U continue
+	compare LLID_START,pdata,3
+	branch le_parse_writing_attribute_start,true
+	rtn
+
+	
+le_check_wak:
+	bpatchx patch26_3,mem_patch26
+	fetcht 1,mem_le_arq
+	isolate0 wak,temp
+	rtn true
+	fetch 1,mem_le_rxbuf_data_header
+	lshift pdata,pdata
+	ixor temp,pdata
+	rtnbit0 sn			/* received NESN is same as SN, NAK */
+	set0 wak,temp
+	setflip sn,temp
+	storet 1,mem_le_arq
+	compare 3,temp,3
+//	nrtn true
+	rtn
+	
+
+le_set_enc:
+	fetch 1,mem_le_state
+	set1 lestate_encryption,pdata
+	store 1,mem_le_state
+	set1 mark_ble_encryption,mark
+	rtn	
+	
+le_clear_enc:
+	bpatchx patch26_4,mem_patch26
+	jam FLAG_LE_ENC_NULL,mem_le_enc_state
+	arg 0,pdata
+	store 4,mem_ccm_last_mic
+	store 5,mem_ccm_pcnt_tx
+	set1 LE_CCM_DIRECTIONBIT,pdata
+	store 5,mem_ccm_pcnt_rx
+	fetch 1,mem_le_state
+	set0 lestate_encryption,pdata
+	store 1,mem_le_state
+	set0 mark_ble_encryption,mark
+	rtn
+
+
+
+
+le_scan_check_sender_addr_type:
+	arg 1,rega// sender_addr_type
+	fetch 1,mem_le_rxbuf_adv_connect_ind_header
+	rtnbit1 LE_SENDER_ADDR_BIT
+	arg 0,rega
+	rtn
+
+
+le_get_master_rx_max:
+	copy contr,contw
+	fetcht 2,mem_remote_rx_max_octets
+	copy contw,contr
+	rtn
+
+
+le_prepare_tx:
+	bpatchx patch26_5,mem_patch26
+	fetch 1,mem_le_arq
+	rtnbit1 wak
+	call le_check_tx_md
+	call le_fifo_get_first_tx_ptr	//no packet to send
+	branch le_send_empty,blank
+	ifetch 2,contr
+	ifetcht 2,contr
+	copy temp,rega
+	isub rega,pdata
+	call le_get_master_rx_max
+	call not_greater_than
+	copy pdata,temp
+	ifetchr type,1,contr
+	copy rega,pdata
+	iadd contr,pdata
+	store 2,mem_contr
+	call le_update_tx_type
+	call le_send_packet
+	
+	call le_fifo_get_first_tx_ptr
+	ifetch 2,contr
+	copy pdata,rega	//rega:total length
+	copy contr,regc
+	ifetcht 2,contr
+	copy temp,regb	//temp&regb is offset
+	isub regb,pdata
+	call le_get_master_rx_max
+	call not_greater_than
+	iadd regb,pdata
+	istore 2,regc
+	isub rega,null
+	nrtn zero
+	branch le_fifo_release_first_node
+
+	
+le_check_tx_md:
+	call le_check_continue
+	rtnmark1 mark_ble_tx_md
+	fetch 1,mem_le_configuration
+	bbit0 BIT_BLE_TRANSMIT_PACKET_BY_MD,le_clear_md
+	call le_fifo_get_second_tx_ptr	//no packet to send
+	branch le_clear_md,blank
+	branch le_set_md
+
+	
+le_check_continue:
+	call le_fifo_get_first_tx_ptr	//no packet to send
+	branch le_clear_md,blank
+	ifetch 2,contr				//pdata:length
+	ifetcht 2,contr				//temp:offest
+	isub temp,rega			//pdata:length - offset
+	call le_get_master_rx_max
+	copy temp,pdata
+	isub rega,null
+	branch le_clear_md,positive				//27 > length -offset
+le_set_md:
+	set1 mark_ble_tx_md,mark
+	rtn
+
+le_clear_md:
+	set0 mark_ble_tx_md,mark
+	rtn
+
+le_update_tx_type:
+	copy rega,pdata
+	rtn blank
+	arg LLID_CONTINUE,type
+	rtn
+
+
+le_att_check_notification_enable: // temp ->handle,output-> pdata,output :contr->rega
+	bpatchx patch26_6,mem_patch26
+	increase 1,temp
+	call le_att_get_handle_ptr
+	increase -2,contr
+	ifetch 2,contr
+	arg CLIENT_CHARACTERTIC_CONFIGURATION,temp
+	isub temp,null
+	nrtn zero
+	increase 1,contr
+	copy contr,rega
+	ifetch 1,contr
+	rtn
+	
+
+le_send_empty:
+	force 0,temp
+	force 1,type
+	
+le_send_packet:
+	bpatchx patch26_7,mem_patch26
+	storet 1,mem_le_txlen
+	fetcht 1,mem_le_arq
+	set1 wak,temp
+	and temp,0xfc,pdata
+	ior type,pdata
+	store 1,mem_le_arq
+	and_into 0x1f,pdata
+	isolate1 mark_ble_tx_md,mark
+	setflag true,md,pdata
+	store 1,mem_le_txheader
+
+	fetch 1,mem_le_txheader
+	compare 1,type,3
+	nbranch le_send_no_txlen,true
+	fetch 1,mem_le_txlen
+	rtn blank
+	
+le_send_no_txlen:	
+	bmark1 mark_ble_encryption,le_send_packet_enc
+	fetchr loopcnt,1,mem_le_txlen
+	fetch 2,mem_contr
+	copy pdata,contr
+	arg mem_le_txpayload,contw
+	branch memcpy_fast
+	
+le_send_packet_enc:
+	call load_sk
+	branch le_encrypt_new_start
+
+get_lpm_wake_ble_rx_lock:
+	arg wake_lock_ble_rx,queue
+	branch lpm_get_wake_lock
+
+put_lpm_wake_ble_rx_lock:
+	arg wake_lock_ble_rx,queue
+	branch lpm_put_wake_lock
+
+
+le_parse:
+	bpatchx patch27_0,mem_patch27
+	rtnmark1 mark_old_packet
+	rtnmark1 mark_ble_crc_fail
+	fetch 1,mem_le_rxbuf_data_header
+	and pdata,0x3,pdata
+	store 1,mem_le_packet_llid
+	fetch 1,mem_le_rxbuf_data_length
+	rtn blank							//empty rtn
+	setarg mem_le_rxbuf_data_payload
+	store 2,mem_le_payload_ptr
+	bpatchx patch27_1,mem_patch27
+	fetch 1,mem_le_packet_llid
+	beq LLID_LE_LL,le_parse_ll
+le_parse_l2cap:
+	call le_check_l2cap_complete
+	nbranch get_lpm_wake_ble_rx_lock,user
+	call put_lpm_wake_ble_rx_lock
+	setarg 0
+	store 2,mem_le_packet_len_recved
+	fetch 2,mem_le_payload_ptr
+	add pdata,2,contr	//l2cap length
+	bpatchx patch27_2,mem_patch27
+	ifetch 2,contr
+	beq LE_L2CAP_CID_ATT,le_parse_att
+	beq LE_L2CAP_CID_SMP,le_parse_smp
+	beq LE_L2CAP_CID_SIGNAL,le_parse_signaling
+	rtn
+
+
+le_check_l2cap_complete:
+	fetch 1,mem_le_packet_llid
+	beq LLID_START,le_check_l2cap_llid_start
+	beq LLID_CONTINUE,le_check_l2cap_llid_continue
+	rtn
+
+//input: pdata is CID number
+//output: 	if CID is legal ,enable user
+//		if ICD is illegal,disable user 
+le_check_l2cap_CID_legal:
+	call enable_user
+	arg LE_L2CAP_CID_ATT,temp
+	isub pdata,null
+	rtn zero
+	arg LE_L2CAP_CID_SIGNAL,temp
+	isub pdata,null
+	rtn zero
+	arg LE_L2CAP_CID_SMP,temp
+	isub pdata,null
+	rtn zero
+	branch disable_user
+
+	
+le_check_l2cap_llid_start:
+	fetch 2,mem_le_payload_ptr
+	copy pdata,contr
+	ifetch 2,contr
+	store 2,mem_le_l2cap_size
+	ifetch 2,contr			//CID
+	call le_check_l2cap_CID_legal
+	nrtn user		//CID error
+	fetcht 1,mem_le_rxbuf_data_length
+	storet 2,mem_le_packet_len_recved
+	fetch 2,mem_le_l2cap_size
+	increase 4,pdata		//CID:2 L2cap length 2
+	isub temp,null
+	branch enable_user,zero
+	fetchr loopcnt,1,mem_le_rxbuf_data_length
+	arg mem_le_l2cap_buf,contw
+	fetch 2,mem_le_payload_ptr
+	copy pdata,contr
+	call memcpy_fast
+	branch disable_user
+
+//no input
+//output: 	if CID is legal ,enable user
+//		if ICD is illegal,disable user 
+le_check_l2cap_continue_legal:
+	call enable_user
+	fetch 2,mem_le_packet_len_recved
+	nrtn blank
+	branch disable_user
+
+le_check_l2cap_llid_continue:
+	call le_check_l2cap_continue_legal
+	nrtn user		//check receive start packet
+	fetch 2,mem_le_packet_len_recved
+	arg mem_le_l2cap_buf,contw
+	iadd contw,rega
+	fetcht 1,mem_le_rxbuf_data_length
+	iadd temp,pdata
+	store 2,mem_le_packet_len_recved
+	fetchr loopcnt,1,mem_le_rxbuf_data_length
+	copy rega,contw
+	fetch 2,mem_le_payload_ptr
+	copy pdata,contr
+	call memcpy_fast
+	setarg mem_le_l2cap_buf
+	store 2,mem_le_payload_ptr		//update ptr->mem_le_l2capbuff
+	fetch 2,mem_le_l2cap_size
+	increase 4,pdata
+	fetcht 2,mem_le_packet_len_recved
+	isub temp,null
+	branch enable_user,zero
+	branch disable_user
+
+
+
+	/* rega pointers to data, regb is length */
+le_writeatt_cb:
+	fetch 2,mem_cb_att_write
+	branch callback_func
+	
+le_supervision_update:
+	bpatchx patch27_3,mem_patch27
+	fetcht 4,mem_le_supervision_timer
+	call get_clkbt
+	isub temp,timeup					/* and to 28 bits */
+	deposit timeup
+	fetcht 2,mem_le_superto
+	lshift4 temp,temp
+	lshift temp,temp
+	isub temp,pdata
+	rtn
+	
+le_supervision_flush:
+	call get_clkbt
+	store 4,mem_le_supervision_timer
+	rtn
+
+	
+//input rega
+le_receive_window_size:
+	bpatchx patch27_4,mem_patch27
+	add rega, coffset_le_peer_sca,contr
+	ifetch 1,contr
+	call le_sca_map
+	add rega, coffset_tsniff,contr
+	ifetch 2,contr
+	imul32 temp,pdata
+	fetcht 2,mem_param_rt_rthalfslot
+	imul32 temp,pdata
+	arg 1000000,temp
+	idiv temp
+	arg PARAM_WINDOWN_SIZE,temp
+	fetch 1,mem_system_clk
+	imul32 temp,temp
+	add rega, coffset_le_window_size,contr
+	ifetch 1,contr
+	imul32 temp,pdata
+	iadd temp,pdata
+	store 4,mem_le_transmit_window	
+	fetch 2,mem_rx_window_sniff
+	call wait_div_end
+	quotient temp
+	iadd temp,pdata
+	add rega, coffset_rx_window,contw
+	istore 2,contw
+	rtn
+
+	
+
+	
+le_modified_name:
+	bpatchx patch27_5,mem_patch27
+	call le_modified_name_att_list
+	branch le_modified_name_adv
+
+le_modified_name_att_list:
+	jam 2,mem_le_search_att_type_length
+	arg UUID_CHRCTR_DEVICE_NAME,temp
+	storet 2,mem_le_search_att_type
+	call le_att_get_uuid_ptr
+	rtn blank
+	ifetch 1,contr						// attribute length
+	copy contr,contw
+	fetcht 1,mem_le_name_len
+	copy temp,loopcnt
+	isub temp,null
+	nbranch le_name_length_longer_than_att,positive
+	isub temp,temp
+	arg mem_le_name,contr
+	call memcpy_fast
+	copy temp,loopcnt
+	ncall memcpy_empty,zero
+	rtn
+le_name_length_longer_than_att:
+	copy pdata,loopcnt
+	arg mem_le_name,contr
+	branch memcpy_fast
+
+
+le_modified_name_adv:
+	arg mem_le_adv_data_len+32,regc
+	arg mem_le_adv_data,rega
+	call le_modified_name_adv_and_scan
+	setarg 0
+	setflag user,0,pdata
+	store 1,mem_pdatatemp
+	arg mem_le_scan_data_len+32,regc
+	arg mem_le_scan_data,rega
+	call le_modified_name_adv_and_scan
+	rtn user
+	fetch 1,mem_pdatatemp
+	branch assert,blank
+	rtn
+
+
+le_modified_name_adv_and_scan:
+	bpatchx patch27_6,mem_patch27
+	call enable_user
+	call clear_temp_block
+	arg 0,regb	//current length
+	arg mem_le_data_temp,contw
+	call le_modified_name_adv_loop
+	fetch 1,mem_le_name_len
+	add pdata,1,temp
+	iadd regb,rega	
+	increase 2,rega
+	sub rega,0x1f,null
+	nbranch le_modified_name_adv_and_scan_name_overflow,positive
+	istoret 1,contw		//store ble name length
+	arg GAP_ADTYPE_LOCAL_NAME_COMPLETE,temp
+	istoret 1,contw		//store ble name type
+	iforce loopcnt
+	call memcpy_fast
+	copy rega,regb
+le_modified_name_adv_and_scan_store_data:
+	deposit regb
+	store 1,mem_le_data_len_temp
+	arg mem_le_data_len_temp,contr
+	setarg -32
+	iadd regc,contw
+	branch memcpy32
+
+le_modified_name_adv_and_scan_name_overflow:
+	call disable_user
+	branch le_modified_name_adv_and_scan_store_data
+	
+le_modified_name_adv_loop:
+	ifetch 1,rega		//pdata:length
+	rtn blank			//length is zero,ending find
+	pincrease 1		//length += 1
+	ifetcht 1,contr		//pdata:type
+	sub temp,GAP_ADTYPE_LOCAL_NAME_COMPLETE,null
+	branch le_modified_name_adv_found_name,zero
+	iadd regb,regb	
+	copy rega,contr
+	iforce loopcnt
+	call memcpy_fast
+	copy contr,rega
+le_modified_name_adv_loop2:
+	deposit rega
+	isub regc,null
+	rtn positive
+	branch le_modified_name_adv_loop
+
+le_modified_name_adv_found_name:
+	iadd rega,rega
+	branch le_modified_name_adv_loop2
+
+
+memcpy_empty:
+	setarg SPACE
+	istore 1,contw
+	loop memcpy_empty
+	rtn
+
+	
+le_lpm_set_mult:
+	bpatchx patch27_7,mem_patch27
+	disable wake
+	branch le_lpm_set_mult_attempt,attempt
+	nbranch le_lpm_lost,match
+le_lpm_set_mult_attempt:
+	call lpm_match
+	fetch 2,mem_rx_window_sniff
+	store 2,mem_le_receive_window
+	fetch 1,mem_le_configuration
+	bbit1 BIT_BLE_SHORT_MULT,lpm_mult_short	//check flag,if flag is 1,always short mult
+	bmark1 mark_old_packet,lpm_mult_short
+	fetch 1,mem_le_rxbuf_data_length
+	nbranch lpm_mult_short,blank		// rx not empty, short interval
+	fetch 1,mem_le_txlen
+	nbranch lpm_mult_short,blank		// tx not empty, short interval
+	
+	fetch 1,mem_le_state
+	bbit1 lestate_update_param,lpm_mult_short
+	bbit1 lestate_update_phy,lpm_mult_short
+	bbit1 lestate_update_map,lpm_mult_short
+	branch lpm_mult_wait_timeout
+	
+le_lpm_lost:
+	fetch 1,mem_sniff_unint_lost
+	sub pdata,30,null
+	nbranch lpm_lost,positive
+	fetcht 2,mem_rx_window_sniff
+	rshift temp,temp
+	fetch 2,mem_le_receive_window
+	iadd temp,pdata
+	store 2,mem_le_receive_window
+	branch lpm_lost
+
+///////////////////////////////BLE CONFIG//////////////////////////////////////////
+le_set_config_fixed_tk:
+	arg BIT_BLE_PASSKEY_FIXED_KEY,queue
+	branch le_set_config
+
+le_clr_config_fixed_tk:
+	arg BIT_BLE_PASSKEY_FIXED_KEY,queue
+	branch le_clr_config
+
+le_set_config_fixed_ltk:
+	arg BIT_BLE_PAIRING_FIXED_LTK,queue
+	branch le_set_config
+
+le_clr_config_fixed_ltk:
+	arg BIT_BLE_PAIRING_FIXED_LTK,queue
+	branch le_clr_config
+
+le_set_config_more_data:
+	arg BIT_BLE_TRANSMIT_PACKET_BY_MD,queue
+	branch le_set_config
+
+le_clr_config_more_data:
+	arg BIT_BLE_TRANSMIT_PACKET_BY_MD,queue
+	branch le_clr_config
+
+le_set_config_read_authentication:
+	arg BIT_BLE_READ_AUTH,queue
+	branch le_set_config
+
+le_clr_config_read_authentication:
+	arg BIT_BLE_READ_AUTH,queue
+	branch le_clr_config
+
+le_set_config_write_authentication:
+	arg BIT_BLE_WRITE_AUTH,queue
+	branch le_set_config
+
+le_clr_config_write_authentication:
+	arg BIT_BLE_WRITE_AUTH,queue
+	branch le_clr_config
+
+le_set_config_short_mult:
+	arg BIT_BLE_SHORT_MULT,queue
+//	branch le_set_config
+le_set_config:
+	fetch 1,mem_le_configuration
+	qset1 pdata
+	store 1,mem_le_configuration
+	rtn
+
+
+le_clr_config_short_mult:
+	arg BIT_BLE_SHORT_MULT,queue
+//	branch le_clr_config
+le_clr_config:
+	fetch 1,mem_le_configuration
+	qset0 pdata
+	store 1,mem_le_configuration
+	rtn
+
+
+
+le_set_fixed_ltk:
+	setarg 0x112233
+	store 3,mem_le_fixed_ltk
+	setarg 0x445566
+	istore 3,contw
+	setarg 0x778899
+	istore 3,contw
+	setarg 0x001122
+	istore 3,contw
+	setarg 0x334455
+	istore 3,contw
+	setarg 0x66
+	istore 1,contw
+	rtn
+
+
+le_set_justwork:
+	setarg 0x01000302
+	store 4,mem_le_pres
+	setarg 0x010010
+	store 3,mem_le_pres_max_keysize
+	jam 1,mem_le_pairing_mode
+	rtn
+
+/////////////////////////////////////////////////////////////////////////
+
+le_fifo_malloc_tx_empty:
+	arg 0,rega
+	arg LLID_EMPTY,type
+	branch le_fifo_malloc_tx
+
+
+//rega:len regb:ll opcode
+le_fifo_malloc_tx_ll:
+	bpatchx patch28_0,mem_patch28
+	arg LLID_LE_LL,type
+	call le_fifo_malloc_tx
+	copy regb,pdata
+	istore 1,contw
+	rtn
+	
+
+//rega:len regb:cid
+le_fifo_malloc_tx_l2cap:
+	bpatchx patch28_1,mem_patch28
+	force LLID_START,type
+	increase 4,rega
+	call le_fifo_malloc_tx
+	increase -4,rega
+	copy rega,pdata
+	istore 2,contw
+	copy regb,pdata
+	istore 2,contw
+	rtn
+
+
+//rega:len type:llid
+le_fifo_malloc_tx:
+	bpatchx patch28_2,mem_patch28
+	increase 5,rega
+	call ble_l2cap_malloc
+	increase -5,rega
+	copy rega,pdata
+	istore 2,contw				//lengh
+	setarg 0
+	istore 2,contw				//offset
+	copy type,pdata
+	istore 1,contw				//LLID
+	rtn
+
+
+le_fifo_get_first_tx_ptr:
+	bpatchx patch28_3,mem_patch28
+	call l2cap_malloc_fifo_out
+	copy pdata,contr
+	rtn
+
+le_fifo_get_second_tx_ptr:
+	fetch 2,mem_tx_fifo2_ptr
+	rtn
+
+le_fifo_get_last_tx_ptr:
+	call le_fifo_get_last_tx_ptr0
+	copy pdata,contr
+	rtn
+
+
+le_fifo_get_last_tx_ptr0:
+	fetch 2,mem_tx_fifo3_ptr
+	rtn
+
+
+le_fifo_get_first_l2cap_ptr:
+	call le_fifo_get_first_tx_ptr
+	increase 5,contr
+	rtn
+
+le_fifo_get_first_att_ptr:
+	call le_fifo_get_first_tx_ptr
+	increase 9,contr
+	rtn
+
+le_fifo_get_last_att_ptr:
+	call le_fifo_get_last_tx_ptr
+	increase 9,contr
+	rtn
+
+le_fifo_get_last_l2cap_ptr:
+	call le_fifo_get_last_tx_ptr
+	increase 5,contr
+	rtn
+
+
+le_fifo_check_full:
+	branch l2cap_malloc_is_fifo_full
+
+
+le_fifo_check_nearly_full:
+	branch l2cap_malloc_is_fifo_nearly_full
+
+	
+le_fifo_check_empty:
+	branch l2cap_malloc_is_fifo_empty
+
+
+le_fifo_release_first_node:
+	branch l2cap_malloc_free
+
+
+/*
+	function name:le_set_dle (data packet length extension)
+	input:pdata is dle params
+	bit0~bit15 max rx octets
+	bit16~bit31 max rx time
+	bit32~bit47 max tx octets
+	bit48~bit63 max tx time
+*/
+le_set_dle:
+	store 8,mem_local_rx_max_octets
+	branch le_set_feature_data_packet_length_extension
+
+
+/*
+	function name:le_set_phys
+	input:temp is tx & rx phys
+	bit0~bit7 is tx phys
+	bit8~bit15 is rx phys
+*/
+le_set_phys:
+	and temp,0xff,rega
+	call le_set_tx_phy
+	rshift8 temp,rega
+//	branch le_set_rx_phy
+le_set_rx_phy:
+	storer rega,1,mem_le_rx_phys
+	branch le_set_phy_common
+
+le_set_tx_phy:
+	storer rega,1,mem_le_tx_phys
+le_set_phy_common:	
+	isolate1 BIT_LE_2M_PHY,rega
+	call le_set_feature_2M_phy,true
+	isolate1 BIT_LE_CODED_PHY,rega
+	call le_set_feature_coded_phy,true
+	rtn
+
+
+
+le_set_feature_2M_phy:
+	arg BIT_LL_FEATURE_LE_2M_PHY,queue
+	branch le_set_feature
+
+
+le_set_feature_coded_phy:
+	arg BIT_LL_FEATURE_LE_CODED_PHY,queue
+	branch le_set_feature
+
+le_set_feature_data_packet_length_extension:
+	arg BIT_LL_FEATURE_LE_DATA_PACKET_LENGTH_EXTENSION,queue
+//	branch le_set_feature
+le_set_feature:
+	fetch 8,mem_le_local_feature
+	qset1 pdata
+	store 8,mem_le_local_feature
+	rtn
+
+le_set_fixed_ltk_justwork:
+	call le_set_config_fixed_ltk
+	call le_set_justwork
+	call le_set_fixed_ltk
+	branch le_set_config_read_authentication
+
+

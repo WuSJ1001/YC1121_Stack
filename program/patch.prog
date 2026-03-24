@@ -1,0 +1,1380 @@
+
+//define ADC_1121SA
+//define ADC_1121SB
+ifdef ADC_1121SB
+//define ADC_1121SB_1V8_MODE
+endif 
+
+	bbit1 8,pf_patch_ext
+	beq patch00_0,p_soft_reset
+//	beq patch01_7,p_rx_dcoc
+	beq patch02_1,p_set_sync_on
+	beq patch02_4,p_set_lemode	
+	beq patch02_5,p_rf_rx_enable
+	beq patch02_6,p_calc_freq
+	beq patch03_0,p_txon
+	beq patch03_1,p_set_tx_power
+	beq patch03_2,p_initialize_radio_cont
+//	beq patch03_3,p_rfpll_aac_ghpc
+//	beq patch03_5,p_dpll_ring_ibias_calc
+	beq patch04_5,p_lpm_sleep
+	beq patch04_7,p_lpm_adjust_clk
+
+	beq patch08_5,p_keyboard_cb_fuction
+	beq patch0d_0,p_mouse_cb_fuction
+	beq patch0f_7,p_mouse_3io6key_check
+	beq patch11_6,p_mouse_idle
+	beq patch11_3,p_mouse_app_initflag_check
+	beq patch16_1,p_my_feature
+
+	beq patch18_4,p_otp_write
+	beq patch1b_2,p_sadc_calibration
+ifdef ADC_1121SA
+	beq patch1b_3,p_adc_init_data_a
+	beq patch1b_4,p_enable_adc_a
+	beq patch1b_5,p_vdd_calculate_by_mode_a
+endif
+ifdef ADC_1121SB
+	beq patch1b_3,p_adc_init_data
+	beq patch1b_4,p_enable_adc
+	beq patch1b_5,p_vdd_calculate_by_mode
+endif
+	branch assert
+
+pf_patch_ext:
+	beq patch24_4,p_le_receive_rxon
+	beq patch24_5,p_le_rx_dec
+	beq patch24_6,p_le_rx_nopayload
+	beq patch27_1,p_le_parse
+	beq patch29_4,p_le_adv_not_match
+	beq patch29_5,p_le_init_adv
+	rtneq patch3f_7
+	branch assert
+
+p_soft_reset:
+	nbranch soft_reset+1,wake
+	until null,lpo_edge
+	until null,lpo_edge
+	branch soft_reset+1
+
+
+p_set_sync_on:
+	jam 0x60,0x8a0f 
+	jam 0xaa,0x8a10 
+	jam 0x7a,0x8a12 
+	jam 0x00,0x8a25 
+	jam 0x00,0x8a26 
+	nop 60
+	jam 0x20,0x8a20 
+	jam 0xf5,0x8a23 
+	jam 0x12,0x8a24 
+	jam 0x10,0x8a24 
+	nop 60
+	jam 0x60,0x8a12 
+	jam 0xdd,0x8a23 
+	rtn
+
+p_calc_freq:
+//	bpatch patch02_6,mem_patch02
+	setarg 2400
+	iadd temp,pdata
+	copy pdata, rega
+	fetcht 1,mem_fcomp_div
+	rshift temp,temp
+	idiv temp
+//	mul32 pdata,12,rega
+	call wait_div_end
+	quotient pdata
+	rshift8 pdata,queue
+	storer queue, 1,0x890a
+	store 1,0x8909
+	branch calc_freq+10
+
+
+p_set_ck2rfpll:
+	until null,lpo_edge
+	jam 0x58,0x813c
+	until null,lpo_edge
+	rtn	
+
+p_initialize_radio_cont:	
+	jam 0,mem_le_testtype
+	jam 0,mem_cmd_le_create_conn
+	until null,lpo_edge
+	
+	jam 0x0d,0x8946
+	jam 0x10,0x896f
+	
+	jam 0x40,core_rx_cfg0
+	jam 0xcd,0x8a13
+	jam 0x10,0x8a06
+	jam 0x4a,0x8a84
+	jam 0x40,0x8a85
+	jam 0xfe,0x8a16
+	call p_set_otp_config
+//	branch initialize_radio_cont+1
+	fetch 1,mem_wdt_always_work
+	call wdt_set_disable,blank
+	ncall p_set_ck2rfpll,wake
+	until null,lpo_edge
+	jam 0x5f,0x813b 
+	until null,lpo_edge
+	fetch 1,mem_fcomp_div
+	beq XTAL_16M,p_initialize_radio_16m
+	fetch 1,mem_ring_ibias_trim
+	or_into 0x04,pdata
+	store 1,0x8a02
+	jam 0x01,0x890f
+	jam 0x24,0x8a80
+	jam 0x62,0x8a81
+	setarg 0xe61212
+	store 3,0x8a73	
+p_initialize_radio2:
+	jam 0x60,0x8a86
+	jam 0x3b,0x8a8b 
+	call p_dpll_on
+	jam 0,core_config
+	jam CLKSEL_DPLL,core_clksel
+	setarg 0x557474
+	store 3,0x8968
+	jam 0x6e,0x8960
+	call p_rx_dcoc
+	call p_rfpll_aac_ghpc
+	call p_set_xtal_cap
+	jam 0x06,0x8a30
+	jam 0xdd,0x8a32
+	jam 0xe0,0x8a88
+	jam 0x2d,0x8a8c
+	jam 0x78,0x8a31
+
+	jam SYSTEM_CLK_12M,mem_system_clk
+	call sadc_calibration
+	branch p_dpll_ring_ibias_calc
+	
+p_set_xtal_cap:
+	rtn wake
+	until null,lpo_edge
+	fetch 1,mem_xtal_c_sel
+	store 1,core_xtal_cap
+	until null,lpo_edge
+	rtn
+	
+p_dpll_on:
+	fetch 1,mem_fcomp_div
+	beq XTAL_24M,p_dpll_on_24m
+	fetch 1,mem_ring_ibias_trim
+	or_into 0x06,pdata
+	store 1,0x8a02
+	jam 0xe0,0x8a05
+p_dpll_on_24m:	
+	jam 0xd8,0x8a00
+	nop 60
+	jam 0xa0,0x8a01
+	jam 0xdf,0x8a00
+	jam 0xfa,0x8a01
+	nop 20
+	jam 0x9f,0x8a00
+	rtn
+	
+p_initialize_radio_16m:
+	fetch 1,mem_ring_ibias_trim
+	or_into 0x06,pdata
+	store 1,0x8a02
+	jam 0x00,0x890f
+	jam 0x23,0x8a80
+	jam 0xb0,0x8a81
+	setarg 0xe40909
+	store 3,0x8a73
+	jam 0x2a,0x8a76
+	jam 0x04,0x8902	
+	branch p_initialize_radio2
+		
+p_set_otp_config:
+	branch p_set_otp_config_wake, wake
+	fetch 4 ,mem_otp_core_ldo
+	rtn blank
+	until null,lpo_edge
+	fetch 1,0x8136
+	and pdata,0xf0,pdata
+	fetcht 1,mem_otp_core_ldo
+	ior temp,pdata
+	store 1,0x8136 
+	until null,lpo_edge
+
+	fetch 1,0x8138
+	and pdata,0x7,pdata
+	fetcht 1,mem_otp_verf_bg
+	lshift3 temp,temp
+	ior temp,pdata
+	store 1,0x8138 
+	until null,lpo_edge
+	
+p_set_otp_config2:
+	fetch 1,0x8acb
+	and pdata,0xf0,pdata
+	fetcht 1,mem_otp_charge_pump
+	storet 1,mem_otp_charge_pump_x
+	ior temp,pdata
+	store 1,0x8acb
+
+	fetch 1,mem_otp_dpll_ibais
+	store 1,mem_otp_dpll_ibais_x
+	isolate1 3,pdata
+	fetch 1,0x8a06
+	setflag true,7,pdata
+	store 1,0x8a06
+	
+	fetch 1,mem_otp_dpll_ibais
+	and pdata,7,temp
+	lshift4 temp,temp
+	lshift temp,temp
+	storet 1,mem_ring_ibias_trim
+	fetch 1,0x8a02
+	and pdata,0x1f,pdata
+	ior temp,pdata
+	store 1,0x8a02
+	rtn
+	
+p_set_otp_config_wake:
+	fetch 2,mem_otp_charge_pump_x
+	rtn blank
+	store 2,mem_otp_charge_pump
+	branch p_set_otp_config2
+
+p_rf_rx_enable:
+//	bpatch patch02_5,mem_patch02
+	call rf_debug_rx_gpio_high
+	call rf_rx_agc_set
+	force 8,radio_ctrl
+	force 0,radio_ctrl
+
+	setarg 0x0aaada
+	store 3,0x8a0f
+	jam 0x40,0x8a25
+	jam 0x10,0x8a26
+	nop 60
+	jam 0xfb,0x8a01
+	jam 0xff,0x8a25
+	jam 0x30,0x8a26
+	jam 0xfe,0x8a16
+	branch rf_rx_enable+14
+	
+p_txon:
+//	bpatch patch03_0,mem_patch03
+	setarg 0x0aaa7e
+	store 3,0x8a0f
+	nop 60
+	jam 0x00,0x8a25 
+	jam 0x0d,0x8a26 
+	jam 0xf6,0x8a16 
+	branch txon+7
+
+p_set_tx_power:	
+	fetch 1,mem_tx_power
+	beq TX_POWER_10DB,p_set_tx_power_10db
+	branch set_tx_power+2
+	
+p_set_tx_power_10db:
+	jam 0x25,0x8a14 
+	setarg 0xa93f3f
+	store 3,0x8a60
+	jam 0x1f,0x8a63 
+	rtn
+	
+	
+p_rx_dcoc:
+//	bpatch patch01_7,mem_patch01
+	rtn wake
+	call set_sync_on
+	arg 39,temp
+	call set_freq_rx	
+	call rf_rx_enable
+	jam 0x7f,0x8a25
+	jam 0x1a,0x8a30
+	jam 0x78,0x8a31
+	jam 0xb2,0x8a8f
+	jam 0,0x8ac2
+	jam 0,0x8ac3
+	arg 6,queue
+	call p_rx_dcoc_avg
+	isolate1 13,rega
+	call qset_start
+	isolate1 13,regb
+	call qset_p
+	arg 5,queue
+p_rx_dcoc_loop2:
+	call qset1_p
+	call qset_p
+	call p_rx_dcoc_avg
+	arg 0x8ac2,contw
+	rshift4 rega,pdata
+	call qsetxor
+	rshift4 regb,pdata
+	call qsetxor
+	increase -1,queue
+	branch p_rx_dcoc_loop2,positive
+	branch rx_dcoc_loop2+10
+
+p_rx_dcoc_avg:
+	nop 60
+	setarg mem_dcoc_buf
+	store 2,0x8982
+	setarg mem_dcoc_buf_end
+	store 2,0x8984
+	jam 0x9,0x8981
+	jam 0x3,0x8981
+	jam 0x6,0x8980	
+	nop 60
+	arg 0,rega
+	arg 0,regb
+	arg 16,loopcnt
+	arg mem_dcoc_buf,contr
+	branch rx_dcoc_loop
+
+p_rfpll_aac_ghpc:
+	rtn wake
+	branch rfpll_aac_ghpc+1
+	
+p_dpll_ring_ibias_calc:
+	rtn
+
+p_sadc_calibration:
+	rtn wake
+	jam 0x77,core_gpadc_ctrl
+	jam 0xc9,core_gpadc_cfg0
+	jam 0x01,core_gpadc_cfg3
+	fetch 1,mem_adc_clkdiv
+	store 1,core_sadc_clkdiv
+	nop 3000
+	call p_sadc_read
+	jam 0xc1,core_gpadc_cfg0
+	fetchr regb,1,mem_spi_write_addr
+	arg 8,loopcnt	//rg_gpadc_sar_dat_sel c0-c7
+	call sadc_cal_read+1
+	fetch 1,mem_spi_write_addr
+	store 1,mem_adc_cal_c7
+	storer regb,1,mem_spi_write_addr
+	rtn
+
+
+
+
+p_sadc_read:
+	jam 0x03,core_sadc_ctrl
+p_sadc_read_wait:
+	fetch 1,core_perf_status
+	bbit0 SARADC_DONE,p_sadc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_adc_current_value
+	jam 0x00,core_sadc_ctrl
+	rtn
+	
+
+
+p_set_lemode:
+	jam 0x11,0x8a82
+	jam 0x12,0x8a8d
+	jam 0x0a,0x8a8e
+	fetch 1,mem_fcomp_div
+	beq XTAL_16M,p_set_lemode_2m_16m
+	setarg 0x5762
+	store 2,0x8907
+p_set_lemode_2m:
+	jam 3,0x8901
+	jam 3,0x8930
+	rtnmark1 mark_ble_2M
+	jam 1,0x8901
+	jam 0x07,0x8a82
+	jam 0x44,0x8a8d
+	jam 0x0a,0x8a8e
+	fetch 1,mem_fcomp_div
+	beq XTAL_16M,p_set_lemode_1m_16m
+	setarg 0x2bb1
+	store 2,0x8907
+p_set_lemode_1m:
+	rtnmark0 mark_ble_lr
+	jam 0x24,0x8930
+	jam 5,0x8901
+	rtn
+
+p_set_lemode_1m_16m:
+	setarg 0x4189
+	store 2,0x8907
+	branch p_set_lemode_1m
+
+p_set_lemode_2m_16m:
+	setarg 0x8312
+	store 2,0x8907
+	branch p_set_lemode_2m
+
+p_le_rx_dec:
+	call le_check_retransmit	
+//	bmark1 mark_old_packet,le_retransmit_end_of_packet
+	fetchr rega, 1,mem_le_rxbuf_data_length
+	increase -4,rega
+	nbranch le_crc_fail_consecutive,positive
+	branch le_rx_dec+6
+
+p_le_rx_nopayload:
+	parse demod,bucket,24	
+	rshift32 pdata,pdata
+	rshift16 pdata,pdata
+	istore 3,contw
+	enable swfine
+	call le_set_until_tx_timer
+	branch le_crc_fail,crc_failed
+	bmark0 mark_ble_encryption,le_rx_match
+	fetch 1,mem_le_rxbuf_data_length
+	branch le_rx_match,blank
+	increase -4,pdata
+	store 1,mem_le_rxbuf_data_length
+	call wait_ccm_done
+ 	fetch 1,core_misc_status
+	bbit0 7, le_crc_fail_consecutive
+ 	force regidx_result,regext_index
+	storer regext, 4,mem_le_peer_mic
+	branch le_rx_match
+p_le_parse:
+	fetch 1,mem_le_packet_llid
+	rtneq LLID_RESERVED
+	beq LLID_LE_LL,le_parse_ll
+	branch le_parse_l2cap
+
+p_le_adv_not_match:
+	call shutdown_radio
+	jam 0,0x8900
+	set0 mark_ble_crc_fail,mark
+	branch le_adv_not_match+1
+	
+p_le_init_adv:
+	set0 mark_ble_crc_fail,mark	
+	branch le_init_adv+1
+
+
+
+p_le_receive_rxon:
+//	bpatchx patch24_4,mem_patch24
+	call le_prep
+	bmark0 mark_ble_lr,p_le_receive_nolr
+	pulse dewhiten_code_calc
+	nop 30
+	call le_prep
+	lshift3 timeup,timeup
+p_le_receive_nolr:
+	disable match
+	enable decode_fec0
+	enable is_rx
+	disable is_tx
+	copy timeup,stop_watch
+	correlate null,timeout
+	branch p_le_receive_on_attempt,attempt
+	copy clke,temp
+	storet 6,mem_sync_clke
+p_le_receive_on_attempt:
+	nbranch le_unsync_end,sync
+	enable swfine
+	fetch 1,mem_le_tx_ifs_defference
+	arg PARAM_20MS_INIT,temp
+	iadd temp,temp
+	fetch 1,mem_system_clk
+	imul32 temp,stop_watch
+	call rf_debug_rx_sync_line	//L-H
+	branch le_receive_skip,attempt
+	call p_calc_clke_all_modem
+	fetch 1,mem_le_state
+	bbit0 lestate_got_first_packet,le_receive_skip
+	call lpm_adjust_clk,wake
+	branch le_receive_skip
+
+	
+p_calc_clke_all_modem:
+	fetcht  6,mem_sync_clke
+	copy clke,pdata
+	call clk_diff
+	copy pdata,temp
+
+	call calc_clke_all_modem
+	copy clke,rege
+	copy clke_rt,pdata
+	iadd temp,pdata
+//	add pdata,8,pdata
+	copy pdata,clke_rt	
+	rtn
+
+
+p_lpm_adjust_clk:
+	//bpatch patch04_7,mem_patch04
+	bmark0 mark_context,lpm_clear_counter
+	fetcht 4,mem_sleep_counter_all
+	arg 0x600,pdata
+	isub temp,null
+	rtn positive				// interval too small
+	copy temp,rega
+	fetcht 6,mem_sync_clke
+	deposit rege
+	call clk_diff_rt
+//	sub pdata,13,null
+//	rtn positive
+	copy rega,temp
+	branch lpm_adjust_clk+6
+	
+
+p_lpm_sleep:
+	//call xtal_fast_wake
+	fetch 2,mem_cb_before_lpm_sleep
+	call callback_func
+p_lpm_sleep_skip_cb_function:
+	fetch 4,mem_sleep_counter_all	// sleep total time, 32k unit
+	iadd temp,pdata
+	store 4,mem_sleep_counter_all
+	call p_lpm_save_context
+	fetch 1,mem_lpm_hv_sel
+	set1 LPM_DOZE_EN_BIT, pdata
+	call lpm_write_sel_hv
+	ncall lpm_preon_counter,wake
+	until null,lpo_edge
+	copy clkn,pdata
+	store 6,mem_sleep_clkn
+	branch lpm_sleep_skip_cb_function+10
+
+p_lpm_save_context:
+	storer mark,8,mem_saved_mark
+	arg core_gpio_conf,contr
+	arg mem_saved_gpio,contw
+	call memcpy16
+	arg core_gpio_conf_hi,contr
+	call memcpy8
+	fetch 1,core_spid_ctrl
+	store 1,mem_saved_spidctrl
+	copy temp,regb
+p_lpm_write_gpio_wakeup:		// gpio auto wakeup
+	arg 12,loopcnt
+	arg mem_gpio_wakeup_cfg,rega
+	arg core_gpio_wakeup_cfg,regc
+	until null,lpo_edge
+
+p_lpm_write_gpio_loop:
+	ifetch 1,rega
+	ifetcht 1,regc
+	isub temp,null
+	branch p_lpm_write_gpio_loop_next,zero
+	istore 1,regc
+	until null,lpo_edge
+p_lpm_write_gpio_loop_next:	
+	increase 1,rega
+	increase 1,regc
+	loop p_lpm_write_gpio_loop
+	copy regb,temp
+	rtn
+
+
+p_mouse_cb_fuction:
+	setarg mouse_24g_short_sleep
+	store 2,mem_cb_24g_transmit_short_sleep
+	setarg mouse_24g_long_sleep
+	store 2,mem_cb_24g_transmit_long_sleep
+	setarg p_mouse_24g_before_lpm_sleep
+	store 2,mem_cb_before_lpm_sleep
+	branch mouse_cb_fuction+7
+
+p_keyboard_cb_fuction:
+	setarg p_mouse_24g_before_lpm_sleep
+	store 2,mem_cb_before_lpm_sleep
+	branch keyboard_cb_fuction+3
+
+p_mouse_24g_before_lpm_sleep:
+	fetch 1,mem_device_flag
+	rtnne MODE_24G_DEVICE
+	branch mouse_24g_before_lpm_sleep+2	
+	
+
+p_mouse_app_initflag_check:
+	fetch 2,mem_store_flag
+	arg EEPROM_INIT_FLAG,temp
+	isub temp,null
+	branch p_mouse_load_device_info,zero
+	branch mouse_app_initflag_check_next
+
+p_mouse_load_device_info:
+	call mouse_select_reconn_device
+	branch mouse_load_device_info
+
+p_mouse_idle:
+	call mouse_low_voltage_led_no_enter_lpm
+	call ui_check_paring_button
+	call p_mouse_dpi_check
+	branch mouse_idle+4
+
+p_mouse_dpi_check:
+	fetch 1,mem_dpi_button_gpio
+	rtneq GPIO_DISABLE
+	arg 0,rega
+	jam MOUSE_DPI_KEY,mem_mouse_key_temp
+	fetcht 1,mem_dpi_button_gpio
+	call p_mouse_dpi_key_check
+	branch mouse_dpi_check_next
+
+p_mouse_dpi_key_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_DPI_KEY_CONNECT_GND,mouse_dpi_key_connect_gnd
+	fetch 1,mem_mouse_dpikey_press_status
+	copy pdata,regc
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,p_mouse_3io6key_dpi_check
+	branch mouse_dpi_key_check_next
+
+p_mouse_3io6key_dpi_check:
+	fetch 1,mem_dpi_button_gpio
+	call mouse_gpio_config_output_low
+	fetcht 1,mem_dpi_button_gpio
+	branch p_mouse_3io6key_check
+	
+p_mouse_3io6key_check:
+	copy regc,pdata
+	store 1,mem_mouse_key_status
+	lshift pdata,pdata
+	copy pdata,regb
+	copy temp,regc
+	call mouse_gpio_config_input_pd
+	copy regc,temp
+	call gpio_get_bit
+	nsetflag true,0,regb
+	call mouse_check_press
+	branch mouse_check_key_connect_gnd_1
+
+/*
+core_clksel
+[7:6]pwm clock select
+	0:sysclk 
+	1:sysclk undivided
+	2:rc2M
+	3:lpo
+*/
+p_pwm_clk_set:
+	fetch 1,core_clksel
+	and pdata,0xc0,pdata
+	beq 0x40,pwm_24m_clk_set
+	beq 0x80,p_pwm_2m_clk_set
+	beq 0xc0,pwm_33k_clk_set
+	branch pwm_12m_clk_set
+p_pwm_2m_clk_set:
+	setarg 2000000
+	rtn
+
+p_pwm_out_set:
+	fetcht 3,mem_pdatatemp+2
+	call p_pwm_clk_set
+	branch pwm_out_set+2
+
+ifdef ADC_1121SA
+
+p_adc_init_data_a:
+	fetch 8,mem_otp_adc
+	branch adc_init_cal_data_default,blank
+	store 8,mem_inter1v_adc_ft_data
+	fetch 1,mem_otp_adc_ratio
+	store 1,mem_adc_ratio
+	rtn
+
+p_sadc_cal_write:
+	fetch 1,core_sadc_ctrl
+	set1 1,pdata
+	store 1,core_sadc_ctrl
+	fetchr regb,1,mem_spi_write_addr
+	fetch 1,mem_adc_cal_c7
+	store 1,mem_spi_write_addr
+	arg 8,loopcnt	//rg_gpadc_sar_dat_sel c0-c7
+	call sadc_cal_write+4
+	storer regb,1,mem_spi_write_addr
+	fetch 1,core_gpadc_cfg2	
+	set0 4,pdata//caliberation write disable	
+	store 1,core_gpadc_cfg2	
+	rtn
+	
+p_vdd_calculate_by_mode_a:
+//	bpatch patch1b_5,mem_patch1b
+	fetch 1,mem_adc_config_flag
+	beq ADC_CONFIG_HVIN,p_vdd_calculate_by_mode_vdcdc
+	beq ADC_CONFIG_GPIO,p_vdd_calculate_by_mode_gpio
+p_vdd_calculate_by_mode_gpio:
+	fetch 2,mem_gpio_adc_value
+	rtn
+	
+p_vdd_calculate_by_mode_vdcdc:
+	fetch 2,mem_vdcdc_adc_value	
+	rtn
+
+p_enable_adc_a:
+	fetch 1,mem_adc_config_flag
+	beq ADC_CONFIG_HVIN,p_read_adc_vdcdc
+	beq ADC_CONFIG_GPIO,p_read_adc_gpio
+	rtn
+	
+p_read_adc_gpio:
+	call p_enable_gpio_adc
+	call p_saradc_gpio_calculate
+	store 2,mem_gpio_adc_value
+	branch p_adc_disable
+
+p_read_adc_vdcdc:
+	jam 0x0a,mem_adc_gpio_gnd_channel  ///ADC_CH_GPIO6
+
+	call p_enable_vdcdc_adc
+	call p_saradc_vdcdc_calculate
+	store 2,mem_vdcdc_adc_value
+	branch p_adc_disable
+	
+
+p_wait_reset_adc:
+	fetch 1,core_perf_status
+	bbit1 SARADC_DONE,P_wait_reset_adc
+	rtn
+	
+p_adc_disable:
+	fetch 1,core_gpadc_ctrl
+	set0 6,pdata
+	store 1,core_gpadc_ctrl
+	rtn
+	
+p_enable_vdcdc_adc:
+	call p_sadc_cal_write	
+//	jam 0x80,core_gpadc_cfg1//continus mode	
+	jam 0x77,core_gpadc_ctrl
+	jam 0x41,core_gpadc_cfg0
+	jam 0x14,0x8ac6
+	jam 0x61,core_vtest_ctrl0//rg_test_vdc_en
+	fetch 1,mem_adc_clkdiv
+	store 1,core_sadc_clkdiv
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc
+	jam 0,core_sadc_ctrl
+	jam 0x10,core_gpadc_cfg3//switch vdcdc channel 
+//rg_gpadc_sar_vref_sel:from internal voltage buffer ,3V
+	jam 0x03,core_sadc_ctrl
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_adc_current_value  
+
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc	
+	jam 0x00,core_sadc_ctrl		
+	jam 0x50,core_gpadc_cfg3//swtich vref1.2v channel
+	jam 0x20,core_vtest_ctrl1//select dvdd_dig_lpm	
+	jam 0x03,core_sadc_ctrl	
+	
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_inter1p2v_adc_now_data 
+
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc	
+	jam 0x00,core_sadc_ctrl	
+	jam 0x50,core_gpadc_cfg3//switch vref1V channel
+	jam 0xc0,core_vtest_ctrl1//select vref1v
+	jam 0x03,core_sadc_ctrl	
+	
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_inter1v_adc_now_data 
+
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc	
+	jam 0x00,core_sadc_ctrl	
+ 	jam 0x20,core_gpadc_cfg3//switch channel2_gnd
+ 	jam 0x03,core_sadc_ctrl	
+ 	
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_channel2_gnd_adc_now_data        
+
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc
+	jam 0x00,core_sadc_ctrl		
+
+	fetch 1,mem_adc_gpio_gnd_channel
+	call p_adc_channel_set_gpio	
+	copy temp,pdata
+	set1 GPIO_ACTIVE_BIT,pdata
+	arg gpcfg_output_low,temp
+	call gpio_config_function	
+	
+	fetch 1,mem_adc_gpio_gnd_channel
+	call sadc_channel+1
+	jam 0x03,core_sadc_ctrl	
+
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_gpio_gnd_adc_now_data 	
+	
+	jam 0x00,core_sadc_ctrl
+	jam 0x00,core_sadc_clkdiv
+	jam 0x60,core_vtest_ctrl0
+	rtn
+
+
+p_saradc_vdcdc_calculate:
+	call p_saradc_calculate_Vinter1p2v                 //��ʽ�в���1
+	rtn blank
+	store 2,mem_Vinter1p2v_adc_data
+	call p_saradc_calculate_Vinter1v                   //��ʽ�в���2
+	rtn blank
+	store 2,mem_Vinter1v_adc_data
+	call p_saradc_difference_between_ext_gnd_and_in_gnd//��ʽ�в���3 
+	store 2,mem_difference_between_ext_gnd_and_in_gnd
+	call p_saradc_calculate_temp_vbat                 //��ʽ�в���4
+	rtn blank
+	copy pdata,rega
+p_saradc_calculate_valid_vbat:                        //��ʽ�в���5
+	setarg 29
+	fetcht 2,mem_difference_between_ext_gnd_and_in_gnd
+	imul32 temp,regb
+	setarg 39
+	imul32 rega,pdata
+	isub regb,pdata
+	nbranch set_pdata_0,positive
+	arg 10,temp
+	idiv temp
+	call wait_div_end
+	quotient pdata
+	rtn
+
+
+p_saradc_calculate_Vinter1p2v:
+p_vdd_calculate_io:
+//	setarg 1000
+//	store 2,mem_reference_voltage
+	fetcht 2,mem_io1v_adc_ft_data
+	fetch 2,mem_io2v_adc_ft_data
+	arg 1000,regc
+p_vdd_calculate:
+	isub temp,rega
+	nbranch set_pdata_0,positive
+	fetch 2,mem_inter1p2v_adc_ft_data
+	isub temp,pdata
+	nbranch p_vdd_calculate1,positive
+	arg 1000,temp
+//	fetcht 2,mem_reference_voltage
+	imul32 temp,regb
+	copy regc,pdata
+	imul32 rega,pdata
+	iadd regb,pdata
+p_vdd_calculate2:
+	idiv rega
+	call wait_div_end
+	quotient pdata
+	rtn
+	
+p_vdd_calculate1:
+	fetcht 2,mem_inter1p2v_adc_now_data
+	fetch 2,mem_io1v_adc_ft_data
+	isub temp,pdata
+	nbranch set_pdata_0,positive
+	arg 1000,temp
+//	fetcht 2,mem_reference_voltage
+	imul32 temp,regb
+	copy regc,pdata
+	imul32 rega,pdata
+	isub regb,pdata
+	nbranch set_pdata_0,positive
+	branch vdd_calculate2
+
+p_saradc_calculate_Vinter1v:
+	fetcht 2,mem_inter1v_adc_ft_data
+	imul32 temp,pdata
+	fetcht 2,mem_inter1p2v_adc_ft_data
+	idiv temp
+	call wait_div_end
+	quotient pdata
+	rtn	
+
+
+p_saradc_difference_between_ext_gnd_and_in_gnd:
+	fetcht 2,mem_channel2_gnd_adc_now_data
+	fetch 2,mem_gpio_gnd_adc_now_data
+	isub temp,rega
+	nbranch set_pdata_0,positive
+	fetcht 2,mem_Vinter1v_adc_data
+	fetch 2,mem_Vinter1p2v_adc_data	
+	isub temp,pdata
+	nbranch set_pdata_0,positive
+	imul32 rega,pdata
+	arg 150,rega
+	fetcht 1,mem_adc_ratio
+	sub temp,0,null
+	nbranch p_saradc_difference_between_ext_gnd_and_in_gnd2,zero
+	copy  rega,temp
+p_saradc_difference_between_ext_gnd_and_in_gnd2:	
+	imul32 temp,rega
+	fetcht 2,mem_inter1p2v_adc_now_data
+	fetch 2,mem_inter1v_adc_now_data	
+	isub temp,regb
+	nbranch set_pdata_0,positive
+	copy rega,pdata
+	idiv regb
+	call wait_div_end
+	quotient pdata
+	arg 100,temp
+	idiv temp
+	call wait_div_end
+	quotient pdata	
+	rtn	
+
+p_saradc_calculate_temp_vbat:
+	fetcht 2,mem_adc_current_value
+	fetch 2,mem_gpio_gnd_adc_now_data
+	isub temp,rega
+	nbranch set_pdata_0,positive
+	fetch 2,mem_Vinter1p2v_adc_data
+	imul32 rega,rega
+	fetcht 2,mem_inter1p2v_adc_now_data
+	fetch 2,mem_gpio_gnd_adc_now_data
+	isub temp,regb	
+	nbranch set_pdata_0,positive
+	copy rega,pdata
+	idiv regb
+	call wait_div_end
+	quotient pdata
+	rtn	
+
+
+p_enable_gpio_adc:
+	call p_sadc_cal_write	
+//	jam 0x80,core_gpadc_cfg1//continus mode	
+	jam 0x77,core_gpadc_ctrl
+	jam 0xc1,core_gpadc_cfg0
+	jam 0,0x8ac6
+	jam 0x61,core_vtest_ctrl0//rg_test_vdc_en
+	jam 0x00,core_gpadc_cfg3//rg_gpadc_sar_vref_sel:from internal voltage buffer ,3V
+	fetch 1,mem_adc_clkdiv
+	store 1,core_sadc_clkdiv
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc
+	jam 0,core_sadc_ctrl
+	fetch 1,mem_adc_channel
+	call p_adc_channel_set_gpio	
+	copy temp,pdata
+	set1 GPIO_ACTIVE_BIT,pdata
+	arg gpcfg_input,temp
+	call gpio_config_function	
+	call sadc_channel
+	jam 0x03,core_sadc_ctrl
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_adc_current_value  
+
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc	
+	jam 0x00,core_sadc_ctrl	
+	jam 0x50,core_gpadc_cfg3//swtich vref1.2v channel
+	jam 0x20,core_vtest_ctrl1//select dvdd_dig_lpm	
+	jam 0x03,core_sadc_ctrl
+	
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_inter1p2v_adc_now_data 
+
+	jam 6,core_sadc_ctrl
+	call p_wait_reset_adc	
+	jam 0x00,core_sadc_ctrl		
+	jam 0x50,core_gpadc_cfg3//switch vref1V channel
+	jam 0xc0,core_vtest_ctrl1//select vref1v
+	jam 0x03,core_sadc_ctrl
+	
+	nop 3000	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_inter1v_adc_now_data 
+	
+	jam 0x00,core_sadc_ctrl
+	jam 0,core_sadc_clkdiv
+	jam 0x60,core_vtest_ctrl0
+	rtn
+
+p_adc_channel_set_gpio:
+	arg 18,temp 
+	rtneq 0x6
+	arg 10,temp 	
+	rtneq 0x7
+	arg 9,temp 	
+	rtneq 0x8
+	arg 12,temp 	
+	rtneq 0x9
+	arg 6,temp 	
+	rtneq 0xa
+	arg 20,temp 	
+	rtneq 0xb
+	arg 21,temp 	
+	rtneq 0xc
+	arg 22,temp 	
+	rtneq 0xd
+	arg 13,temp 	
+//	rtnne 0xe
+	rtn
+	
+
+p_sar_adc_read_wait:
+	fetch 1,core_perf_status
+	bbit0 SARADC_DONE,p_sar_adc_read_wait
+	rtn
+
+
+p_saradc_gpio_calculate:
+	call p_saradc_gpio_k1000_caculate
+	call p_saradc_b_caculate
+	fetcht 2,mem_adc_gpio_k
+	fetch 2,mem_adc_current_value
+	imul32 temp,pdata
+	div pdata,100
+	call wait_div_end
+	quotient pdata
+	div pdata,10
+	call wait_div_end
+	quotient pdata
+	fetcht 2,mem_adc_gpio_b
+	iadd temp,pdata
+	rtn 
+
+	
+p_saradc_gpio_k1000_caculate://��б��K�Ŵ�1000��
+	fetch 2,mem_io2v_adc_ft_data
+	fetcht 2,mem_io1v_adc_ft_data
+	isub temp,rega
+	nbranch set_pdata_0,positive
+	branch set_pdata_0,zero
+	fetch 2,mem_inter1p2v_adc_ft_data
+	fetcht 2,mem_inter1v_adc_ft_data
+	isub temp,regb
+	nbranch set_pdata_0,positive
+	branch set_pdata_0,zero
+	fetch 2,mem_inter1p2v_adc_now_data
+	fetcht 2,mem_inter1v_adc_now_data
+	isub temp,regc
+	nbranch set_pdata_0,positive
+	branch set_pdata_0,zero
+	copy rega,pdata
+	imul32 regc,rega
+	setarg 1000000//enlarge 1000
+	imul32 regb,pdata
+	idiv rega
+	call wait_div_end
+	quotient pdata 
+	store 2,mem_adc_gpio_k
+	rtn
+	
+p_saradc_b_caculate://��������һ�ߵ�ƫ����b�������Ĭ�ϴ��ڵ���0
+	fetch 2,mem_io1v_adc_ft_data
+	iadd pdata,pdata
+	fetcht 2,mem_io2v_adc_ft_data
+	isub temp,null
+	branch p_ft_offset_less_than_zero,positive
+p_ft_offset_greater_than_zero:
+	fetch 2,mem_io2v_adc_ft_data
+	fetcht 2,mem_io1v_adc_ft_data
+	isub temp,pdata
+	copy pdata,rega
+	isub temp,pdata
+	fetcht 2,mem_inter1v_adc_ft_data
+	iadd temp,regb
+	setarg 1000
+	imul32 regb,pdata
+	idiv rega
+	call wait_div_end
+	quotient rega 
+
+	fetcht 2,mem_adc_gpio_k           
+	fetch 2,mem_inter1v_adc_now_data
+	imul32 temp,regb
+	div regb,100
+	call wait_div_end
+	quotient regb 
+	div regb,10
+	call wait_div_end
+	quotient regb 
+	copy rega,pdata
+	isub regb,pdata
+	nbranch p_new_offset_less_than_zero,positive
+	store 2,mem_adc_gpio_b
+	rtn
+	
+p_new_offset_less_than_zero:
+	jam 0,mem_adc_gpio_b
+	rtn 
+p_ft_offset_less_than_zero:
+	jam 0,mem_adc_gpio_b
+	rtn
+
+endif
+
+
+ifdef ADC_1121SB
+
+
+	
+p_adc_init_data:
+	fetch 8,mem_otp_adc
+	branch adc_init_cal_data_default,blank
+	store 8,mem_reference_inter1p8v_2v_adc_io_data
+	call enable_otp_read
+	call loadcode_check_otp_lock
+	arg OTP_OFFSET_ADC_PARAM_L_C0,pdata
+	iadd regb,regb
+	arg 10,loopcnt
+	arg mem_otp_temp,rega
+	call otp_read_data
+	call disable_otp
+	fetch 8, mem_otp_temp
+	rtn blank
+	store 8,mem_adc_reference3v_gpio1v_ft_data
+	ifetch 2,contr
+	istore 2,contw	
+	//call  eut_test_data_init	
+	rtn
+
+p_sadc_cal_write:
+	fetch 1,core_sadc_ctrl
+	set1 1,pdata
+	store 1,core_sadc_ctrl
+	fetchr regb,1,mem_spi_write_addr
+	fetch 1,mem_adc_cal_c7
+	store 1,mem_spi_write_addr
+	arg 8,loopcnt	//rg_gpadc_sar_dat_sel c0-c7
+	call sadc_cal_write+4
+	storer regb,1,mem_spi_write_addr
+	fetch 1,core_gpadc_cfg2	
+	set0 4,pdata//caliberation write disable	
+	store 1,core_gpadc_cfg2	
+	rtn
+
+
+
+p_vdd_calculate_by_mode:
+ifdef  ADC_1121SB_1V8_MODE
+	fetch 1,mem_adc_reference_mode
+	beq SADC_REFERENCE_INTER3V,p_vdd_reference_inter3V_calculate
+	beq SADC_REFERENCE_INTER1P8V_DIV2,p_vdd_reference_inter1p8V_calculate
+	branch p_vdd_reference_inter3V_calculate
+endif
+
+p_vdd_reference_inter3V_calculate:
+	fetch 1,mem_adc_config_flag
+	beq ADC_CONFIG_HVIN,p_vdd_reference_inter3V_calculate_by_mode_vdcdc
+	beq ADC_CONFIG_GPIO,p_vdd_reference_inter3V_calculate_by_mode_gpio
+	rtn
+	
+p_vdd_reference_inter3V_calculate_by_mode_vdcdc:
+	setarg 1000
+	store 2,mem_reference_voltage
+	fetcht 2,mem_adc_reference3v_vdcdc3p6v_ft_data
+	fetch 2,mem_adc_reference3v_vdcdc4p6v_ft_data
+	arg 3600,regc
+	call vdd_calculate
+	branch p_mul1V_div1V_to_cal
+	
+p_vdd_reference_inter3V_calculate_by_mode_gpio:
+	setarg 1000
+	store 2,mem_reference_voltage
+	fetcht 2,mem_adc_reference3v_gpio1v_ft_data
+	fetch 2,mem_adc_reference3v_gpio2v_ft_data
+	arg 1000,regc
+	call vdd_calculate
+p_mul1V_div1V_to_cal:
+	fetcht 2,mem_adc_reference3v_inter1v_ft_data
+	imul32 temp,pdata
+	fetcht 2,mem_adc_reference3v_inter1v_now_data
+	idiv temp
+	branch get_div_result
+
+p_enable_adc_init_config:
+	call p_sadc_cal_write
+	fetch 1,core_gpadc_cfg1
+	set0 7,pdata
+	store 1,core_gpadc_cfg1
+	jam 0x77,core_gpadc_ctrl
+	jam 0xc1,core_gpadc_cfg0
+	jam 0x61,core_vtest_ctrl0
+	jam 0x00,core_gpadc_cfg3
+	rtn	
+	
+p_enable_adc:
+ifdef  ADC_1121SB_1V8_MODE
+	fetch 1,mem_adc_reference_mode
+	beq SADC_REFERENCE_INTER3V,p_enable_adc_reference_source_inter3V
+	beq SADC_REFERENCE_INTER1P8V_DIV2,p_enable_adc_reference_source_inter1p8V
+	branch p_enable_adc_reference_source_inter3V
+endif	
+
+p_enable_adc_reference_source_inter3V:
+	call p_enable_adc_init_config
+	call sadc_channel
+	fetch 1,mem_adc_clkdiv
+	store 1,core_sadc_clkdiv
+	call sadc_read
+	jam 0x60,core_vtest_ctrl0
+	jam 0x00,core_sadc_clkdiv	
+//	rtn
+	
+p_read_adc_inter1V:
+	call p_enable_adc_init_config
+	fetch 1,mem_adc_clkdiv
+	store 1,core_sadc_clkdiv
+	jam 0x50,core_gpadc_cfg3
+	jam 0xc0,core_vtest_ctrl1//select vref1v
+
+	arg 0xb,regext_index
+	fetchr regext, 2,mem_adc_current_value
+	
+	jam 0x03,core_sadc_ctrl	
+	call p_sar_adc_read_wait
+	fetcht 2,core_sadc_data
+	storet 2,mem_adc_reference3v_inter1v_now_data 
+	call sadc_read_wait+4
+	
+	arg 0xb,regext_index
+	storer regext,2,mem_adc_current_value
+
+	jam 0x60,core_vtest_ctrl0
+	jam 0x00,core_sadc_clkdiv
+	jam 0x00,core_sadc_ctrl
+	rtn
+	
+
+
+p_sar_adc_read_wait:
+	fetch 1,core_perf_status
+	bbit0 SARADC_DONE,p_sar_adc_read_wait
+	rtn
+
+
+
+ifdef  ADC_1121SB_1V8_MODE
+p_vdd_reference_inter1p8V_calculate:
+	fetch 1,mem_adc_config_flag
+	beq ADC_CONFIG_HVIN,p_vdd_reference_inter1p8V_calculate_by_mode_vdcdc
+	beq ADC_CONFIG_GPIO,p_vdd_reference_inter1p8V_div2_calculate_by_mode_gpio
+	rtn
+	
+p_vdd_reference_inter1p8V_calculate_by_mode_vdcdc:
+	setarg 2000
+	store 2,mem_reference_voltage
+	fetcht 2,mem_reference_inter1p8v_2p6v_adc_vdcdc_data
+	fetch 2,mem_reference_inter1p8v_4p6v_adc_vdcdc_data
+	arg 2600,regc
+	branch vdd_calculate
+
+p_vdd_reference_inter1p8V_div2_calculate_by_mode_gpio:
+	setarg 1000
+	store 2,mem_reference_voltage
+	fetcht 2,mem_reference_inter1p8v_2v_adc_io_data
+	fetch 2,mem_reference_inter1p8v_1v_adc_io_data
+	arg 2000,regc
+	branch p_vdd_calculate00
+	
+p_vdd_calculate00:
+	isub temp,rega
+	fetch 2,mem_adc_current_value
+	isub temp,pdata
+	nbranch p_vdd_calculate11,positive
+	fetcht 2,mem_reference_voltage
+	imul32 temp,regb
+	copy regc,pdata
+	imul32 rega,pdata
+	isub regb,pdata
+	nbranch set_pdata_0,positive
+	branch vdd_calculate2
+	
+p_vdd_calculate11:
+	copy temp,pdata
+	fetcht 2,mem_adc_current_value
+	isub temp,pdata
+	fetcht 2,mem_reference_voltage
+	imul32 temp,regb
+	copy regc,pdata
+	imul32 rega,pdata
+	iadd regb,pdata
+	branch vdd_calculate2
+
+
+p_enable_adc_reference_source_inter1p8V:	
+	fetch 1,mem_adc_config_flag
+	beq ADC_CONFIG_HVIN,p_enable_adc_reference_source_inter1p8V_vdcdc
+p_enable_adc_reference_source_inter1p8V_div2_gpio:	
+	call p_sadc_cal_write
+	fetch 1,core_gpadc_cfg1
+	set0 7,pdata
+	store 1,core_gpadc_cfg1
+	jam 0x77,core_gpadc_ctrl
+	jam 0x41,core_gpadc_cfg0
+	jam 0x14,0x8ac6			//div2
+	jam 0x00,core_gpadc_cfg3
+	call sadc_channel
+	fetch 1,mem_adc_clkdiv
+	store 1,core_sadc_clkdiv
+	call sadc_read
+
+	jam 0x00,core_sadc_clkdiv
+	jam 0x00,0x8ac6
+	rtn
+	
+p_enable_adc_reference_source_inter1p8V_vdcdc:
+	call p_sadc_cal_write
+	fetch 1,core_gpadc_cfg1
+	set0 7,pdata
+	store 1,core_gpadc_cfg1
+	jam 0x77,core_gpadc_ctrl
+	jam 0x41,core_gpadc_cfg0
+	jam 0x10,0x8ac6			//not div2
+	jam 0x00,core_gpadc_cfg3
+	call sadc_channel
+	fetch 1,mem_adc_clkdiv
+	store 1,core_sadc_clkdiv
+	call  sadc_read
+	
+	jam 0x00,core_sadc_clkdiv
+	jam 0x00,0x8ac6
+	rtn
+
+endif 	
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+// 
+
+p_my_feature:
+
+
+	branch  p_my_feature
+
+
+// ==========================================
+// 堆栈的基础功能函数
+// rega 指向堆栈顶，pdata 是要入栈或出栈的数据
+// ==========================================
+push_data:
+    // 把 pdata 存入 rega 指向的地址，然后 rega 指针加 1
+    istore 1, rega
+    increase 1, rega
+    rtn
+
+pop_data:
+    // rega 指针减 1，然后把指向的地址的数据读到 pdata 中
+    increase -1, rega
+    ifetch 1, rega
+    rtn

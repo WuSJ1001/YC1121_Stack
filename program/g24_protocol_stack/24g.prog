@@ -1,0 +1,566 @@
+
+
+g24_dispatch:
+	bpatchx patch2d_3,mem_patch2d
+	bmark1 mark_24g_rxmode,g24_receive_dispatch
+	branch g24_transmit_dispatch
+
+
+/****************************g24 base transceiver start********************************/
+
+g24_prep:
+	bpatchx patch2d_4,mem_patch2d
+	disable enable_crc
+	disable enable_white
+	setarg 0x555555
+	iforce crc24_init
+	fetch 1,mem_24g_ch
+	branch le_prep_next
+
+g24_receive_packet:
+	bpatchx patch2d_5,mem_patch2d
+	fetch 1,mem_24g_rx_phy
+	call le_enable_phy_by_pdata
+	fetch 4,mem_24g_addr
+	iforce access
+	call set_sync_on
+	fetcht 1,mem_24g_ch
+	call le_rf_rx_enable
+g24_receive_rxon:
+	call g24_prep
+	bmark0 mark_ble_lr,g24_receive_nolr
+	pulse dewhiten_code_calc
+	nop 30
+	call g24_prep
+g24_receive_nolr:
+	disable user3
+	enable decode_fec0
+	enable is_rx
+	disable is_tx
+	enable swfine
+	fetch 2,mem_24g_rx_window
+	iforce stop_watch
+	correlate null,timeout
+	nbranch g24_sync_timeout,sync
+	call rf_debug_rx_sync_line
+	bmark1 mark_ble_lr,g24_receive_skip_fec1
+	fetch 1,mem_24g_disable_fec1
+	nbranch g24_receive_skip_fec1,blank
+	disable decode_fec0	
+	enable decode_fec1	//lr do not use fec1
+g24_receive_skip_fec1:
+	enable enable_white
+	enable enable_crc
+	call g24_receive_byte
+	store 1,mem_24g_get_syncword_crc8
+	fetcht 1,mem_24g_syncword_crc8
+	isub temp,null
+	nbranch g24_hec_error,zero
+	bpatchx patch2d_6,mem_patch2d
+	disable user7
+	isolate1 mark_ble_lr,mark
+	call g24_lr_receive_pdu_len,true
+	branch g24_lr_len_error,user7
+	call g24_receive_byte
+	store 1,mem_24g_rxbuf	//device id
+	bmark1 mark_24g_rxmode,g24_receive_skip
+	fetch 1,mem_24g_rxbuf
+	fetcht 1,mem_24g_data_type
+	icompare bits_data,temp
+	nbranch g24_type_error,true
+g24_receive_skip:
+	call g24_receive_byte
+	isolate1 mark_ble_lr,mark
+	call g24_lr_receive_payload_len,true
+	istore 1,contw
+	rshift3 pdata,pdata
+	sub pdata,0x1f,null
+	nbranch g24_len_over_error,positive	//max payload: 32bytes
+	copy pdata,loopcnt
+	branch g24rx_nopayload,zero
+g24rx_loop:
+	call g24_receive_byte
+	istore 1,contw
+	loop g24rx_loop
+g24rx_nopayload:
+	bmark1 mark_24g_rxmode,g24_receive_skip_rssi
+	copy contw,rega
+	call g24_receive_byte
+	store 1,mem_rssi_hex_received	//receive rssi hex
+	copy rega,contw
+g24_receive_skip_rssi:
+	parse demod,bucket,24
+	rshift32 pdata,pdata
+	rshift16 pdata,pdata
+	istore 3,contw
+	fetch 1,mem_24g_disable_fec1
+	nbranch g24_receive_skip_disable_fec1,blank
+	disable decode_fec1
+g24_receive_skip_next:
+	isolate1 mark_24g_rxmode,mark
+	call save_rssi_dec,true
+	branch g24_crc_error,crc_failed
+	call rf_debug_rx_crc_line	//L
+	bpatchx patch2d_7,mem_patch2d
+	enable user3
+	call le_match_set_txfreq
+	rtnmark1 mark_24g_rxmode
+	fetch 1,mem_rssi_hex_received
+	fetcht 1,mem_rssi_hex_received_max_value
+	isub temp,null
+	call copy_temp2pdata,positive
+	branch rssi_signal
+
+g24_receive_skip_disable_fec1:
+	disable decode_fec0
+	branch g24_receive_skip_next
+	
+
+g24_lr_receive_pdu_len:
+	call g24_receive_byte
+	sub pdata,1,null
+	branch enable_user7,positive
+	increase -2,pdata	//minus hec and pdu length
+	bmark1 mark_24g_rxmode,g24_lr_receive_pdu_norssi
+	branch enable_user7,blank
+	increase -1,pdata	//minus rssi_hex length
+g24_lr_receive_pdu_norssi:
+	store 1,mem_temp	//payload length
+	rtn
+
+g24_lr_receive_payload_len:
+	and_into 0x07,pdata	//pdata[7:3]:length
+	fetcht 1,mem_temp	//payload length
+	lshift3 temp,temp
+	ior temp,pdata
+	rtn
+	
+g24_receive_byte:
+	parse demod,bucket,8
+	rshift3 pwindow,pdata
+	rtn
+
+g24_sync_timeout:
+	jam ERR_SYNC_TO,mem_24g_off_type
+	isolate1 mark_24g_rxmode,mark
+	call rssi_noise,true
+g24_end_of_packet:
+	bpatchx patch2e_0,mem_patch2e
+	call le_disable
+	disable encode_fec1
+	disable decode_fec1
+	branch end_of_packet
+
+g24_hec_error:
+	jam ERR_HEC,mem_24g_off_type
+	branch g24_end_of_packet
+
+g24_lr_len_error:
+	jam ERR_LR_LEN,mem_24g_off_type
+	branch g24_end_of_packet
+
+g24_type_error:
+	jam ERR_TYPE,mem_24g_off_type
+	branch g24_end_of_packet
+
+g24_len_over_error:
+	jam ERR_LEN_OVER,mem_24g_off_type
+	branch g24_end_of_packet
+
+g24_crc_error:
+	jam ERR_CRC,mem_24g_off_type
+	branch g24_end_of_packet
+
+g24_set_freq_tx:
+	call set_sync_on
+	fetcht 1,mem_24g_ch
+	branch set_freq_tx
+
+g24_transmit:
+	bpatchx patch2e_1,mem_patch2e
+	fetch 1,mem_24g_tx_phy
+	call le_enable_phy_by_pdata
+	fetch 4,mem_24g_addr
+	iforce access
+	call g24_prep
+	call g24_set_freq_tx
+	set1 TXGFSK,radio_ctrl
+	enable encode_fec0
+	enable is_tx
+	disable is_rx
+	call rf_debug_tx_on_line
+	disable lr_s2en
+	bmark1 mark_ble_lr,g24_transmit_lr
+	bmark1 mark_ble_2M,g24_transmit_2M
+	rshift16 access,pdata
+	rshift8 pdata,pdata
+	rshift4 pdata,pdata
+	inject mod,40
+g24_transmit_packet:
+	bpatchx patch2e_2,mem_patch2e
+	bmark1 mark_ble_lr,g24_transmit_nolr
+	fetch 1,mem_24g_disable_fec1
+	nbranch g24_transmit_nolr,blank
+	disable encode_fec0	
+	enable encode_fec1	////lr use encode_fec3
+g24_transmit_nolr:
+	enable enable_white
+	enable enable_crc
+	fetch 1,mem_24g_txlen
+	iforce loopcnt
+	arg mem_24g_txpayload,contr
+g24tr_loop:
+	ifetch 1,contr
+	inject mod,8
+	loop g24tr_loop
+	enable enable_parity
+	inject mod,24	//crc
+	disable enable_parity
+	bmark0 mark_ble_lr,g24_transmit_skip
+	disable enable_white
+	setarg 0
+	inject mod,3
+g24_transmit_skip:	
+	until null,tx_clear
+	nop 100
+	disable lr_s2en
+	disable encode_fec0
+	fetch 1,mem_24g_disable_fec1
+	nbranch g24_transmit_skip_disable_fec1,blank
+	disable encode_fec1
+g24_transmit_skip_disable_fec1:
+	disable encode_fec3
+	call set_sync_on
+	branch rf_debug_tx_off_line
+
+g24_transmit_lr:
+	arg 10,loopcnt
+g24_transmit_lr_preamble_loop:
+	setarg 0x3c
+	inject mod,8
+	loop g24_transmit_lr_preamble_loop
+	disable encode_fec0
+	enable encode_fec3
+	rshift16 access,pdata
+	rshift16 pdata,pdata
+	rshift4 pdata,pdata
+	inject mod,32
+	bmark1 mark_ble_lr_s8,g24_transmit_lr_s8
+g24_transmit_lr_s2:
+	setarg 1
+	inject mod,5
+	enable lr_s2en
+	branch g24_transmit_packet
+
+g24_transmit_lr_s8:
+	setarg 0
+	inject mod,5
+	branch g24_transmit_packet
+
+g24_transmit_2M:
+	fetch 1,mem_system_clk
+	rshift pdata,loopcnt
+g24_transmit_2M_dealy:
+	nop 2
+	loop g24_transmit_2M_dealy
+//	nop 36	//2M 前端发送比1M快3us左右
+	rshift16 access,pdata
+	rshift8 pdata,pdata
+	rshift4 pdata,temp
+	copy temp,pdata
+	inject mod,8
+	copy temp,pdata
+	inject mod,40
+	branch g24_transmit_packet
+
+/****************************g24 base transceiver end********************************/
+
+
+
+/****************************g24 general func start********************************/
+
+g24_transmit_prep:
+	bpatchx patch2e_3,mem_patch2e
+	fetch 1,mem_24g_tx_phy
+	bbit1 BIT_LE_CODED_PHY,g24_lr_transmit_prep
+// total length
+	fetch 1,mem_24g_datalen
+	increase 3,pdata	//hec/type/control
+	store 1,mem_24g_txlen
+//hec
+	fetch 1,mem_24g_syncword_crc8
+	store 1,mem_24g_txpayload
+// data type
+	fetch 1,mem_24g_data_type
+	istore 1,contw
+//prepare 5bit payload length, 2bit PID, 1bit NO_ACK
+	fetch 1,mem_24g_datalen
+g24_transmit_prep_pdu:
+	lshift3 pdata,pdata
+	fetcht 1,mem_24g_pid
+	and temp,0x03,temp
+	lshift temp,temp
+	ior temp,pdata
+	fetcht 1,mem_24g_no_ack
+	iadd temp,pdata
+	istore 1,contw
+//prepare payload data
+	fetch 1,mem_24g_datalen
+	iforce loopcnt
+	arg mem_24g_txbuf,contr
+	call memcpy
+	bpatchx patch2e_4,mem_patch2e
+//rssi hex	
+	rtnmark0 mark_24g_rxmode
+	fetch 1,mem_rssi_hex
+	istore 1,contw
+	fetch 1,mem_24g_tx_phy
+	rtnbit1 BIT_LE_CODED_PHY
+	fetch 1,mem_24g_txlen
+	increase 1,pdata	//plus rssi_hex length
+	store 1,mem_24g_txlen
+	rtn
+	
+g24_lr_transmit_prep:
+// total length
+	fetch 1,mem_24g_datalen
+	increase 4,pdata	//hec/pdu/type/control
+	bmark0 mark_24g_rxmode,g24_lr_transmit_prep_skip
+	increase 1,pdata	//mem_rssi_hex
+g24_lr_transmit_prep_skip:
+	store 1,mem_24g_txlen
+//hec
+	fetch 1,mem_24g_syncword_crc8
+	store 1,mem_24g_txpayload
+// pdu length
+	fetch 1,mem_24g_txlen
+	increase -2,pdata	//minus hec and pdu length
+	istore 1,contw
+// data type
+	fetch 1,mem_24g_data_type
+	istore 1,contw
+	setarg 0
+	branch g24_transmit_prep_pdu
+
+g24_read_len_pid_crc:
+	bpatchx patch2e_5,mem_patch2e
+//read control
+	fetch 1,mem_24g_rxbuf+1
+	rshift3 pdata,pdata
+	store 1,mem_24g_rxdata_length
+//get crc
+	increase 1,pdata
+	arg mem_24g_rxbuf+1,contr
+	iadd contr,contr
+	ifetch 3,contr
+	store 3,mem_24g_sta_crc
+//read pid
+	fetch 1,mem_24g_rxbuf+1
+	rshift pdata,pdata
+	and pdata,0x03,pdata
+	store 1,mem_24g_sta_pid
+	rtn
+
+	
+g24_ch:
+	bpatchx patch2e_6,mem_patch2e
+	fetcht 1,mem_24g_current_ch_number
+	call g24_ch_map_size
+	storet 1,mem_24g_current_ch_number
+	rtn
+
+g24_ch_map_size:
+	bpatchx patch2e_7,mem_patch2e
+	call g24_ch_calc
+	increase 1,temp
+	and_into 3,temp //map size =4
+	rtn
+	
+g24_ch_calc:
+	bpatchx patch2f_0,mem_patch2f
+	fetch 1,mem_24g_addr	
+	and_into 0x03,pdata
+	mul32 pdata,4,rega			//24addr low bit0 bit1 ,00-map1,01-map2,10-map3,11-map4
+	setarg mem_24g_ch_map1
+	iadd rega,pdata
+	iadd temp,contr
+	ifetch 1,contr
+	store 1,mem_24g_ch
+	rtn
+
+
+g24_update_addr_and_synccrc8:
+	store 4,mem_24g_addr
+//output: 1BYTE crc8
+	bpatchx patch2f_1,mem_patch2f
+g24_syncword_crc8:
+	arg 0,rega
+	arg 4,loopcnt
+	arg mem_24g_addr,contr
+g24_syncword_crc8_loop:
+	ifetch 1,contr
+	iadd rega,rega
+	loop g24_syncword_crc8_loop
+	copy rega,pdata
+	store 2,mem_24g_syncword
+	fetch 1,mem_24g_syncword
+	fetcht 1,mem_24g_syncword+1
+	iadd temp,pdata
+	store 1,mem_24g_syncword_crc8
+	rtn
+
+
+g24_timer_check:
+	bpatchx patch2f_2,mem_patch2f
+	call disable_user
+	fetcht 4,mem_24g_tx_btclk
+	copy clkn_bt,pdata
+	isub temp,null
+	ncall g24_timer_timeout,positive
+	copy pdata,regb
+	fetch 4,mem_24g_tx_btclk
+	fetcht 1,mem_24g_interval
+	iadd temp,temp
+	copy regb,pdata
+	isub temp,null
+	nrtn positive
+	set0 28,pdata
+	store 4,mem_24g_tx_btclk
+	branch enable_user
+	
+g24_timer_timeout:
+	rtn zero
+	set1 28,pdata
+	rtn
+	
+g24_timer_init:
+	setarg 0
+	store 4,mem_24g_tx_btclk
+	rtn
+
+
+
+//mem_24g_ch_map1:00 13 2c 42
+//mem_24g_ch_map2:06 15 36 48
+//mem_24g_ch_map3:0f 1a 3a 4c
+//mem_24g_ch_map4:11 23 31 4d
+g24_chmap_param_init:
+	bpatchx patch2f_3,mem_patch2f
+	setsect 0,0x1300
+	setsect 1,0x1908b
+	setsect 2,0x36150
+	setsect 3,0x3d20
+	store 9,mem_24g_ch_map1
+	setsect 0,0x3a1a
+	setsect 1,0xc453
+	setsect 2,0xd312
+	setsect 3,0x1
+	istore 7,contw
+	fetch 1,mem_24g_ch_map_update
+	rtn blank
+	arg mem_24g_ch_update_map1,contr
+	arg mem_24g_ch_map1,contw
+	branch memcpy16
+
+
+
+//mem_24g_ch_update_map1:00 1e 00 4e
+//mem_24g_ch_update_map2:03 23 03 42
+//mem_24g_ch_update_map3:06 25 06 4c
+//mem_24g_ch_update_map4:09 27 09 3c
+g24_chamap_param_update:
+	bpatchx patch2f_4,mem_patch2f
+	setarg 0x4e001e
+	store 3,mem_24g_ch_update_map1+1
+	setarg 0x032303
+	istore 3,contw
+	setarg 0x250642
+	istore 3,contw
+	setarg 0x094c06
+	istore 3,contw
+	setarg 0x3c0927
+	istore 3,contw
+	jam 1,mem_24g_ch_map_update
+	rtn
+
+
+g24_rx_window_init:
+	bpatchx patch2f_5,mem_patch2f
+	arg 0x6978,temp
+	bmark1 mark_24g_rxmode,g24_rx_window_store
+	arg 0x12c0,temp
+	fetch 1,mem_24g_rx_phy
+	bbit0 2,g24_rx_window_store	//uncoded phy
+	arg 0x2ee0,temp
+g24_rx_window_store:	
+	storet 2,mem_24g_rx_window
+	rtn
+
+g24_enable_1M:
+	jam 0x01,mem_24g_rx_phy
+	jam 0x01,mem_24g_tx_phy
+	rtn
+
+g24_enable_2M:
+	jam 0x02,mem_24g_rx_phy
+	jam 0x02,mem_24g_tx_phy
+	rtn
+	
+//g24_enable_coded_s2:
+//	jam 0x04,mem_24g_rx_phy
+//	jam 0x04,mem_24g_tx_phy
+//	rtn
+
+//g24_enable_coded_s8:
+//	jam 0x84,mem_24g_rx_phy
+//	jam 0x84,mem_24g_tx_phy
+//	rtn
+
+
+/****************************g24 general func end********************************/
+
+
+
+/****************************g24 sim start********************************/
+/*
+g24_sim_rx:
+	set1 mark_24g_rxmode,mark
+	jam 1,mem_24g_rx_phy	//0x01:1M/0x02:2M/0x04:S2/0x84:S8
+	fetch 1,mem_24g_rx_phy
+	call le_enable_phy_by_pdata
+	jam 0,mem_24g_ch
+	setarg 0x123456
+	store 3,mem_24g_addr
+	istore 1,contw
+	call g24_syncword_crc8
+	setarg 0x3000
+	store 2,mem_24g_rx_window
+g24_sim_rx_loop:
+	call g24_receive_packet
+	call g24_read_len_pid_crc
+	call g24_end_of_packet
+	branch g24_sim_rx_loop
+
+g24_sim_tx:
+	jam 1,mem_24g_tx_phy
+	fetch 1,mem_24g_tx_phy
+	call le_enable_phy_by_pdata
+	jam 0,mem_24g_ch
+	setarg 0x123456
+	store 3,mem_24g_addr
+	istore 1,contw
+	call g24_syncword_crc8
+	jam 1,mem_24g_datalen
+	jam 1,mem_24g_txbuf
+	jam 0x88,mem_rssi_hex
+	call g24_transmit_prep
+g24_sim_tx_loop:
+	call g24_transmit
+	call g24_end_of_packet
+	branch g24_sim_tx_loop
+
+*/
+
+/****************************g24 sim end********************************/
+
+	

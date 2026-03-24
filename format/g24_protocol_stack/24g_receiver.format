@@ -1,0 +1,50 @@
+
+
+xmemalloc g24_rx(
+2 mem_cb_24g_receive_process
+2 mem_cb_24g_ackpayload
+2 mem_cb_24g_data_device1
+2 mem_cb_24g_data_device2
+34 mem_24g_rxdata_temp
+1 mem_24g_abort_packet
+4 mem_24g_hop_btclk
+1 mem_24g_hop_interval
+1 mem_24g_pair_mode
+1 mem_24g_ackpayload_enable
+1 mem_24g_hop_packet
+1 mem_24g_mode_switch
+1 mem_24g_nodata_timer_enable
+
+1 mem_24g_mode_init
+1 mem_24g_work_mode
+1 mem_24g_time_slice
+1 mem_24g_self_last_ch
+1 mem_24g_self_ch_number
+1 mem_24g_self_config_ch_once
+1 mem_24g_device1_last_ch
+1 mem_24g_device1_ch_number
+1 mem_24g_device1_config_ch_once
+1 mem_24g_device2_last_ch
+1 mem_24g_device2_ch_number
+1 mem_24g_device2_config_ch_once
+1 mem_24g_led_status
+1 mem_24g_bind_mode_continue
+
+1 mem_tx_power_temp
+
+1 mem_24g_mode_B_S_switch
+1 mem_24g_mode_B_S_switch_init
+2 mem_24g_mode_B_S_switch_cnt
+1 mem_24g_mode_B_S_switch_exit
+1 mem_24g_B_S_time_slice
+1 mem_24g_B_S_mode_switch_disable
+
+1 mem_24g_bind_device_living
+)
+
+
+(
+0 bit_ack_24g
+)
+
+

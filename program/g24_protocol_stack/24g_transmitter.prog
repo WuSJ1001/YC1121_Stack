@@ -1,0 +1,398 @@
+
+
+g24_transmit_init:
+	fetch 4,mem_24g_lap		//need to roll this address
+	store 4,mem_24g_device_addr
+	branch rssi_transmitter_buff_init
+
+g24_interval_param_4ms:
+	setarg G24_4MS_INTERVAL_PARAM
+	store 3,mem_24g_short_sleep_set
+	setarg 0x100c0c
+	store 3,mem_24g_interval
+	setarg 0x00bb80
+	store 3,mem_24g_long_sleep_set
+	jam 5,mem_24g_fast_hop_count
+	rtn
+
+g24_interval_param_8ms:
+	setarg G24_8MS_INTERVAL_PARAM
+	store 3,mem_24g_short_sleep_set
+	setarg 0x1c1919
+	store 3,mem_24g_interval
+	setarg 0x017700
+	store 3,mem_24g_long_sleep_set
+	jam 11,mem_24g_fast_hop_count
+	rtn
+
+
+g24_transmit_dispatch:
+	rtnmark0 mark_24g
+	fetch 1,mem_24g_conn_sm
+	bbit1 STATE_24G_PAIR,g24_pair_dispatch
+	bbit1 STATE_24G_RECONN,g24_reconn_dispatch
+	fetch 1,mem_24g_transmit_by_interrupt
+	beq G24_TX_TIMER_INT_ENABLE,g24_transmit_by_interrupt
+g24_transmit_no_interrupt:
+	bpatchx patch32_5,mem_patch32
+	call g24_txdata_prep
+	nbranch g24_nodata_transmit,user
+g24_transmit_start:
+	call g24_transmit_process
+	call power_ctrl_start
+	fetch 1,mem_device_option
+	beq DVC_OP_MOUSE,mouse_24g_transmit_start
+g24_transmit_start_next:	
+	fetch 8,mem_24g_long_sleep_set
+	store 8,mem_24g_enter_hibernate
+	fetch 2,mem_24g_long_sleep_param_update_timer_init
+	store 2,mem_24g_long_sleep_param_update_timer
+	fetch 2,mem_cb_24g_transmit_short_sleep
+	branch callback_func
+
+g24_short_sleep:
+	bpatchx patch32_6,mem_patch32
+	call g24_lpm_wait
+	nrtn user
+	call g24_setgpio_lpm_before
+	call clear_wake
+	fetch 3,mem_24g_short_sleep_set
+	branch g24_long_seep2
+
+g24_long_sleep:
+	bpatchx patch32_7,mem_patch32
+	call g24_lpm_wait
+	nrtn user
+	call g24_setgpio_lpm_before
+	fetch 8,mem_24g_enter_hibernate
+g24_long_seep2:
+	call clk2lpo
+	storet 4,mem_sleep_counter
+	branch lpm_sleep
+	
+/****************************g24 transmitter data prep start********************************/
+
+g24_txdata_prep:
+	call g24_package_data
+	nrtn user
+	branch g24_transmit_prep
+
+
+g24_package_data:
+	fetch 2,mem_cb_24g_transmit_data
+	call callback_func
+	branch g24_accumulate_data,user
+	fetch 7,mem_24g_txbuf+1	//mouse data
+	rtn blank
+	branch enable_user	// retransmit
+	
+g24_accumulate_data:
+	jam 0,mem_24g_abort_pac
+	add rega,1,pdata
+	store 1,mem_24g_datalen
+	call g24_transmit_rf_ctrl_clear
+	store 1,mem_24g_txbuf
+	copy regb,contr
+	copy rega,loopcnt
+	branch memcpy
+
+g24_transmit_rf_ctrl_clear:	
+	fetch 1,mem_24g_data_type
+	and_into bits_data,pdata
+	store 1,mem_24g_data_type
+	rtn
+
+/****************************g24 transmitter data prep end********************************/
+
+
+
+
+/****************************g24 transmitter data transmit start********************************/
+
+g24_transmit_process:
+	setarg 0
+	store 1,mem_24g_retry
+	store 2,mem_24g_retransmit
+g24_transmit_loop:
+	call g24_transmit_receive_ack
+	fetch 1,mem_24g_no_ack	//tx noack
+	beq no_ack_24g,g24_transmit_no_ack
+	nbranch g24_retransmit,sync
+	nbranch g24_retransmit,user3
+	call g24_ackpayload_parse
+	fetch 1,mem_device_option
+	sub pdata,DVC_OP_MOUSE,null
+	call mouse_24g_transmit_callback,zero
+g24_transmit_no_ack:
+	call power_ctrl_pac_succ_incrs
+g24_transmit_next_packet:
+	call g24_txbuf_clear
+	fetch 1,mem_24g_pid
+	increase 1,pdata
+	store 1,mem_24g_pid
+	call g24_hop_enable_packet
+g24_transmit_abandon:
+	bpatchx patch33_0,mem_patch33
+	setarg 0
+	store 1,mem_24g_ensure
+	store 2,mem_24g_txfail_cnt
+	rtn
+
+g24_transmit_receive_ack:
+	bpatchx patch33_1,mem_patch33
+	disable user3
+	call g24_transmit
+	fetch 1,mem_24g_no_ack
+	beq no_ack_24g,g24_end_of_packet
+	force 0,radio_ctrl
+	fetch 4,mem_24g_addr
+	iforce access
+	fetcht 1,mem_last_freq
+	call set_freq_rx
+	call rf_rx_enable
+	call g24_receive_rxon
+	call g24_end_of_packet,user3
+	rtn
+
+g24_retransmit:
+	bpatchx patch33_2,mem_patch33
+	fetch 1,mem_device_option
+	beq DVC_OP_MOUSE,mouse_g24_retransmit
+g24_retransmit0:	
+	fetch 1,mem_24g_abort_pac
+	nrtn blank
+	fetch 2,mem_24g_txfail_cnt
+	increase 1,pdata
+	store 2,mem_24g_txfail_cnt	
+	fetch 1,mem_24g_txfail_cnt+1
+	bbit1 4,g24_tx_attempt_fail
+	call g24_transmit_hop_process
+	fetch 2,mem_24g_retransmit
+	increase 1,pdata
+	store 2,mem_24g_retransmit	
+	branch g24_transmit_loop
+
+g24_ackpayload_parse:
+	bpatchx patch33_3,mem_patch33
+	call g24_read_len_pid_crc
+	fetch 1,mem_24g_rxdata_length	//ack payload length 
+	rtn blank
+	iforce loopcnt
+	arg mem_24g_rxbuf+2,contr
+	arg mem_24g_rxpayload,contw	//ack payload buffer 
+	branch memcpy
+
+
+g24_tx_attempt_fail:
+	bpatchx patch33_4,mem_patch33
+	setarg 0
+	store 2,mem_24g_txfail_cnt
+	jam 1,mem_24g_attempt_fail_flag
+g24_stop_24g_mode:	
+	jam BT_EVT_24G_ATTEMPT_FAIL,mem_fifo_temp
+	branch ui_ipc_send_event
+
+/****************************g24 transmitter data transmit end********************************/
+
+
+
+
+
+/****************************g24 transmitter hop start********************************/
+
+g24_transmit_hop_process:
+	bpatchx patch33_5,mem_patch33
+	fetcht 1,mem_24g_retry
+	fetch 1,mem_24g_fast_hop_count			// 125Hz=11  250Hz=5
+	isub temp,null
+	nbranch g24_tx_fast_hop,positive		// >= (6+6)or(3+3) hop fast    fail packet count >= 2
+	increase 1,temp
+	storet 1,mem_24g_retry
+	fetch 1,mem_24g_fast_hop_count
+	beq 5,g24_transmit_hop_process_4ms
+	fetch 1,mem_24g_retry
+	beq 6,g24_hop_ch_disable
+	beq 12,g24_hop_ch_disable
+	rtn	
+
+
+g24_transmit_hop_process_4ms:
+	fetch 1,mem_24g_retry
+	beq 3,g24_hop_ch_disable
+	beq 6,g24_hop_ch_disable
+	rtn	
+
+
+
+g24_hop_ch_enable:
+	//fetch 1,mem_24g_data_type
+	//set1 bit_hop,pdata
+	//store 1,mem_24g_data_type
+	//update txpayload
+g24_txpayload_type_update:	
+	bmark1 mark_ble_lr,g24_lr_type_update
+	store 1,mem_24g_txpayload+OFFSET_DATA_TYPE
+	rtn
+g24_lr_type_update:
+	store 1,mem_24g_txpayload+OFFSET_LR_DATA_TYPE
+	rtn
+
+g24_hop_enable_packet:
+	fetch 1,mem_24g_data_type
+	rtnbit0 bit_hop
+g24_hop_ch_disable:
+	fetch 1,mem_24g_data_type
+	set0 bit_hop,pdata
+	store 1,mem_24g_data_type
+	call g24_txpayload_type_update
+	call power_ctrl_pac_succ_decrs
+	branch g24_ch
+
+g24_tx_fast_hop:
+	call power_ctrl_txpower_incrs
+	call power_ctrl_pac_succ_decrs
+	branch g24_ch
+	
+/****************************g24 transmitter hop end********************************/
+
+
+
+
+
+
+
+
+
+
+
+
+
+/****************************g24 transmitter long lpm prep start********************************/
+
+g24_search_receiver:
+	fetch 2,mem_cb_24g_search_receiver
+	branch callback_func
+
+g24_nodata_transmit:
+	fetch 1,mem_24g_abort_pac
+	call g24_send_abort_packet,blank
+	fetch 1,mem_24g_transmit_by_interrupt
+	rtneq G24_TX_TIMER_INT_ENABLE
+	call g24_search_receiver
+	fetch 2,mem_cb_24g_transmit_long_sleep
+	branch callback_func
+
+g24_send_abort_packet:
+	jam TYPE_MS,mem_24g_data_type
+	jam 1,mem_24g_abort_pac
+	call g24_transmit_rf_ctrl_clear
+	store 1,mem_24g_txbuf
+	setarg 0
+	store 7,mem_24g_txbuf+1
+	fetch 4,mem_24g_device_addr
+	store 4,mem_24g_txbuf+8
+	jam 12,mem_24g_datalen
+	fetch 1,mem_24g_data_type
+	set1 bit_abort,pdata
+	store 1,mem_24g_data_type
+	call g24_transmit_prep
+	branch g24_transmit_start
+	
+
+
+g24_lpm_wait:
+	bpatchx patch33_6,mem_patch33
+	enable user
+	call lpo_calibration
+	fetch 3,mem_clks_per_lpo
+	branch disable_user,blank
+	fetch 1,mem_lpm_mode
+	branch disable_user,blank
+	fetch 1,mem_24g_transmit_by_interrupt
+	beq G24_TX_TIMER_INT_ENABLE,disable_user
+	rtn
+
+g24_setgpio_lpm_before:
+	fetch 2,mem_cb_24g_lpm_before
+	branch callback_func
+
+
+/****************************g24 transmitter long lpm prep end********************************/
+
+
+
+
+
+
+
+/****************************g24 transmit by interrupt start********************************/
+
+g24_transmit_by_interrupt:
+	call g24_timer_check
+	nrtn user
+	call g24_interval_calibrate
+	fetch 2,mem_24g_transmit_by_interrupt_exit_count
+	increase 1,pdata
+	store 2,mem_24g_transmit_by_interrupt_exit_count
+	fetcht 2,mem_24g_transmit_by_interrupt_exit_count_init
+	isub temp,null
+	call g24_transmit_by_interrupt_exit,zero
+	branch g24_transmit_no_interrupt
+
+	
+g24_transmit_by_interrupt_exit:
+	jam G24_TX_TIMER_INT_DISABLE,mem_24g_transmit_by_interrupt
+	setarg 0
+	store 2,mem_24g_transmit_by_interrupt_exit_count
+	setarg 100
+	store 2,mem_24g_transmit_by_interrupt_exit_count_init
+g24_interval_min:
+	jam 0,mem_24g_pac_index
+	fetch 1,mem_24g_interval_min
+g24_interval_store:
+	store 1,mem_24g_interval
+	rtn
+g24_interval_max:
+	fetch 1,mem_24g_interval_max
+	branch g24_interval_store
+	
+g24_interval_calibrate:
+	fetch 1,mem_24g_pac_index
+	increase 1,pdata
+	store 1,mem_24g_pac_index
+	beq 4,g24_interval_max
+	beq 5,g24_interval_min
+	rtn
+
+g24_transmit_by_interrupt_enable:
+	jam G24_TX_TIMER_INT_ENABLE,mem_24g_transmit_by_interrupt
+	setarg 0
+	store 2,mem_24g_transmit_by_interrupt_exit_count
+	rtn
+
+
+/****************************g24 transmit by interrupt end********************************/
+
+
+
+
+/****************************g24 transmitter fac check start********************************/
+
+g24_factory_check:
+	arg 2,loopcnt
+	arg mem_24g_addr,contr
+pdata_0xff_check:
+	call enable_user
+	setarg 0xffff
+pdata_0xff_check_loop:
+	ifetcht 2,contr
+	isub temp,null
+	ncall disable_user,zero
+	loop pdata_0xff_check_loop
+	rtn
+
+/****************************g24 transmitter fac check end********************************/
+
+
+
+	

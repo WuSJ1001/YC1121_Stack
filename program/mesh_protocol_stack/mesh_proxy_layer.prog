@@ -1,0 +1,282 @@
+
+ali_mesh_ble_adv:
+	call le_set_config_more_data
+	fetch 1,mem_mesh_provisioned_flag
+	beq UNPROVISIONED_BEACON_STATUS,ali_mesh_ble_adv_mesh_beacon
+	beq PAIRED_STATUS,ali_mesh_ble_adv_network_id
+	beq WAIT_RECEIVE_APPKEY,ali_mesh_ble_adv_network_id
+	rtn
+
+ali_mesh_ble_adv_network_id:
+	//mesh network id proxy
+	/*
+	14
+	02 01 02
+	03 03 28 18
+	0c 16 28 18
+	00 
+	network id
+	*/
+	setsect 0,0x10214
+	setsect 1,0xc080
+	setsect 2,0x28030
+	setsect 3,0x3060
+	store 9,mem_le_adv_data_len
+	setarg 0x182816
+	istore 4,contw
+	fetch 8,mem_mesh_network_id
+	istore 8,contw
+	rtn
+
+ali_mesh_ble_adv_mesh_beacon:
+	call ali_mesh_config_device_uuid_by_three_tuple
+	//mesh beaon proxy
+	/*
+	1d
+	02 01 02
+	03 03 27 18
+	15 16 27 18
+	device uuid
+	oob info
+	*/	
+	setsect 0,0x1021d
+	setsect 1,0xc080
+	setsect 2,0x27030
+	setsect 3,0x5460
+	store 9,mem_le_adv_data_len
+	setarg 0x182716
+	istore 3,contw
+	arg mem_mesh_Device_UUID,contr
+	call memcpy16
+	fetch 2,mem_mesh_OOB_information
+	istore 2,contw
+	rtn
+
+
+//rega is le rx data address
+//regb is le rx data length
+//mem_le_att_handle is write handle
+mesh_le_receive_data:
+/*	call uartb_prepare_tx
+	setarg 0x5555
+	istore 2,contwu
+	fetch 2,mem_le_att_handle
+	istore 2,contwu
+	copy regb,pdata
+	istore 2,contwu
+	copy rega,contr
+	copy regb,loopcnt
+	call uart_copy_tx_bytes
+	call uartb_send
+*/
+	bpatchx patch36_2,mem_patch36
+	fetch 2,mem_le_att_handle
+	beq MESH_PROXY_DATA_IN_HANDLE,ali_mesh_receive_ble_data_proxy_data_in
+	beq MESH_PROVISIONING_DATA_IN_HANDLE,ali_mesh_receive_ble_data_provisioning_data_in
+	rtn
+
+ali_mesh_receive_ble_data_proxy_data_in:
+	copy regb,temp
+	ifetch 1,rega
+	beq MESH_PROXY_MESSAGE_TYPE_NETWORK_PDU,ali_mesh_network_layer_recevice_network_pdu_proxy_control
+	beq MESH_PROXY_MESSAGE_TYPE_PROXY_CONFIGURATION, ali_mesh_network_layer_recevice_proxy_configuration_messages
+	rtn
+ali_mesh_network_layer_recevice_proxy_configuration_messages:
+	//uint8_t SAR & Type
+	//uint8_t IVI & NID
+	//uint8_t CTL & TTL
+	//uint24_t SEQ
+	//uint16_t SRC
+	//uint64_t MIC
+//	call ice_break
+	call ali_mesh_network_store_in_mem
+	fetch 1, mem_mesh_message_Transport_NetMIC_length     //Only 4 bytes of MIC were subtracted in ali_mesh_network_store_in_mem 
+	pincrease -4
+	store 1, mem_mesh_message_Transport_NetMIC_length
+	call ali_mesh_network_layer_check_NID_IVI
+	nrtn user
+	call ali_mesh_encrypt_obfuscation_deceypt_recevie_message
+	fetch 1, mem_mesh_message_TTL
+	bbit1 BIT_CTL,ali_mesh_recevice_proxy_configuration_messages_decrypt
+	rtn
+
+/*
+If the CTL field is set to 1, the NetMIC is a 64-bit value and the Lower Transport PDU contains a Control 
+Message.
+*/
+ali_mesh_recevice_proxy_configuration_messages_decrypt:
+	call ali_mesh_network_load_proxy_nonce_and_EncryptionKey
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	arg mem_mesh_message_DST,temp
+	call ali_CCM_decrypt_64Bit
+	nrtn zero	//NetMIC error
+
+
+	call ali_mesh_white_filter_check
+	fetch 1, mem_mesh_message_Proxy_TransportPDU_opcode
+	beq PROXY_OPCODE_SET_FILTER_TYPE, ali_mesh_proxy_configuration_message_set_filter_type
+	beq PROXY_OPCODE_ADD_ADDR_TO_FILTER, ali_mesh_proxy_configuration_message_add_addr_to_filter
+	rtn
+
+ali_mesh_proxy_configuration_message_add_addr_to_filter:
+	fetchr loopcnt, 1, mem_mesh_message_Transport_NetMIC_length  //len of DST + Transport Pdu, without NetMIC
+	increase -3, loopcnt      //2bytes(DST)  + 1byte(Proxy Transport Pdu Opcode)
+	
+	rshift loopcnt, pdata
+	fetcht 2, mem_mesh_white_list_num
+	iadd temp, pdata
+	sub pdata, 8, null
+	nrtn positive          //If the Proxy Server runs out of space in the proxy filter list, the Proxy Server shall not add these addresses.
+	store 2, mem_mesh_white_list_num
+	arg mem_mesh_white_list, contw
+	lshift temp, pdata
+	iadd contw, contw
+	arg mem_mesh_message_Proxy_TransportPDU_Parameters, contr
+	call memcpy
+	fetch 1, mem_mesh_addressed_filter_type
+	branch ali_mesh_proxy_configuration_message_filter_status
+	
+/*
+Proxy TransportPDU field format:
+Opcode   parameters
+               FilterType     ListSize
+1byte           1byte           2bytes
+*/
+ali_mesh_proxy_configuration_message_set_filter_type:
+	ifetch 1, contr
+	store 1, mem_mesh_addressed_filter_type
+ali_mesh_proxy_configuration_message_filter_status:	
+	store 1, mem_mesh_filter_status_message_FilterType
+	fetch 2, mem_mesh_white_list_num
+	byteswap pdata, pdata
+	store 2, mem_mesh_filter_status_message_ListSize
+
+	jam PROXY_OPCODE_FILTER_STATUS, mem_mesh_filter_status_message_opcode
+	
+	fetch 9, mem_mesh_message_NID
+	store 9, mem_mesh_send_upper_layer_IVI_and_NID
+	fetch 2,mem_mesh_send_message_SRC
+	store 2,mem_mesh_send_upper_layer_SRC
+
+	call ali_mesh_upper_transport_layer_send_access_message_calc_SEQ
+	call ali_mesh_upper_transport_layer_send_access_message_add_SEQ
+
+	call ali_mesh_network_load_proxy_nonce_and_EncryptionKey
+	setarg 6    //encrypt len: DST + TransportPDU
+	arg mem_mesh_send_upper_layer_DST,temp
+	call ali_CCM_encrypt_64Bit
+	call ali_mesh_network_layer_send_access_message_encrypt_obfuscation
+
+	//len =1 + 7 + 2 + 4 + 8 
+	arg 22, rega
+	arg MESH_PROXY_DATA_OUT_HANDLE,temp
+	call le_att_malloc_tx_notify
+	setarg MESH_PROXY_MESSAGE_TYPE_PROXY_CONFIGURATION
+	istore 1,contw
+	arg mem_mesh_send_upper_layer_IVI_and_NID,contr
+	branch memcpy32
+
+ali_mesh_receive_ble_data_provisioning_data_in:
+	jam MESH_MESSAGE_PROXY,mem_mesh_fast_pair_packet_type
+	copy regb,temp
+	copy rega,contr
+	branch ali_mesh_receive_adtype_manufacturer_specific
+
+
+ali_mesh_network_load_proxy_nonce_and_EncryptionKey:
+	arg mem_mesh_Proxy_Nonce,contw
+	setarg PROXY_NONCE
+	istore 2,contw    //Nonce Type & pad(Note:pad = 0)
+	fetch 5,mem_mesh_message_SEQ
+	istore 7,contw   //SEQ & SRC & Pad(Note:pad = 0)
+	call  mesh_generate_nonce
+
+	branch ali_mesh_upper_transport_layer_load_EncryptionKey	
+	
+ali_mesh_network_layer_recevice_network_pdu_proxy_control:
+	jam MESH_MESSAGE_PROXY,mem_mesh_network_packet_type
+	branch ali_mesh_network_layer_recevice_network_pdu
+
+
+ali_mesh_proxy_process_bb_event:
+	copy regc,pdata
+	beq BT_EVT_LE_DISCONNECTED,mesh_ble_start_adv
+	beq BT_EVT_LE_CONNECTED,app_ble_conn_event
+	rtn
+
+app_ble_conn_event:
+	branch ali_mesh_proxy_white_list_clear
+
+
+	
+mesh_ble_start_adv:
+	setarg 0
+	store 2,mem_mesh_network_proxy_unicast_address	//clear proxy unicast address
+	branch app_ble_start_adv
+
+ali_mesh_proxy_white_list_clear:
+	setarg 0
+	store 2, mem_mesh_white_list_num
+	arg mem_mesh_white_list, contw
+	arg 16, loopcnt
+	branch memset0
+//	force 0,pdata
+//mesh_mem_set0:
+//	istore 8,contw
+//	loop mesh_mem_set0
+//	rtn	
+
+ali_mesh_send_ble_data:
+//	call ice_break
+	call le_fifo_check_nearly_full
+	nrtn blank
+//	call ice_break
+	fetch 1,mem_mesh_queue_ele_len
+	add pdata,-1,rega
+	arg MESH_PROXY_DATA_OUT_HANDLE,temp
+	call le_att_malloc_tx_notify
+	setarg MESH_PROXY_MESSAGE_TYPE_NETWORK_PDU
+	istore 1,contw
+	arg mem_mesh_queue_ele_payload+2,contr
+	branch memcpy32
+
+ali_mesh_send_pairing_data:
+ifdef LOG
+	call uarta_prepare_tx_register_push
+	setarg -2
+	istore 8,contwu
+	fetch 1,mem_le_adv_data_len
+	add pdata,-5,loopcnt
+	arg mem_le_adv_data+5,contr
+	call uart_copy_tx_bytes	
+	call uarta_send_register_pop
+endif
+	fetch 1,mem_mesh_fast_pair_packet_type
+	rtneq MESH_MESSAGE_TMALL
+	fetch 2,mem_ui_state_map
+	rtnbit0 UI_STATE_BLE_CONNECTED
+	call le_fifo_check_nearly_full
+	nrtn blank
+	fetch 1,mem_mesh_adv_data_len
+	add pdata,-5,rega
+	arg MESH_PROVISIONING_DATA_OUT_HANDLE,temp
+	call le_att_malloc_tx_notify
+	arg mem_mesh_adv_data+5,contr
+	branch memcpy32
+
+/*
+check and store the first addr of white list.
+If the proxy filter is a white list filter, upon receiving a valid Mesh message from the Proxy Client, the 
+Proxy Server shall add the unicast address contained in the SRC field of the message to the white list.
+*/
+ali_mesh_white_filter_check:
+	fetch 2, mem_mesh_white_list
+	nrtn blank
+	fetch 2, mem_mesh_message_SRC
+	store 2, mem_mesh_white_list
+ali_mesh_white_list_num_increase:
+	fetch 2, mem_mesh_white_list_num
+	pincrease 1
+	store 2, mem_mesh_white_list_num
+	rtn
+

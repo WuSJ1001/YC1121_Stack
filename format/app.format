@@ -1,0 +1,390 @@
+
+memalloc(
+
+/* load code */
+1 mem_ucode_status
+1 mem_spid_tbuf				/* spid buf: 03 addr[23:16] addr[15:8] addr[7:0] */
+0 mem_iicd_tbuf				/* iicd buf: iic_adr addr[15:8] addr[7:0] iic_adr */
+1 mem_addr_hi
+1 mem_addr_mi
+1 mem_addr_lo
+1 mem_iicd_addr
+4 mem_spid_rbuf
+2 mem_ucode_buf
+2 mem_ucode_len
+2 mem_sched_addr
+16 mem_ucode_keybuf
+
+32 mem_otp_temp
+
+1 mem_app_evt_timer_count
+)
+
+xmemalloc(
+2 mem_ucode_ptr
+1 mem_ucode_flag
+1 mem_device_option
+1 mem_peripheral_lock_flag
+6 mem_bistfix_val
+
+/*App Callback Functons*/
+2 mem_cb_check_wakelock
+2 mem_cb_before_hibernate
+2 mem_cb_before_lpm
+2 mem_cb_le_process
+2 mem_cb_idle_process
+2 mem_cb_bb_event_process
+2 mem_cb_att_write
+2 mem_cb_ble_transmit
+2 mem_cb_event_timer
+2 mem_cb_bt_set_mult
+2 mem_cb_spi_flash_write_complate
+2 mem_cb_before_lpm_sleep
+
+2 mem_eeprom_base
+
+//lpm mode
+1 mem_wake_up_delay_timer
+
+1 mem_app_connection_options
+
+//
+2 mem_app_disconn_reason
+2 mem_app_disconn_reason_flag
+1 mem_xrecord_mode
+
+1 mem_eeprom_block_size
+1 mem_spi_init_clk
+1 mem_spi_init_delay_time
+1 mem_spi_ncs_gpio
+
+2 mem_nv_data_ptr
+1 mem_nv_data_number
+
+2 mem_queue_ptr
+
+
+//adc
+0 mem_reference_inter1p8v_2v_adc_io_data
+0 mem_inter1v_adc_ft_data
+2 mem_3v_adc_io_data
+0 mem_reference_inter1p8v_2p6v_adc_vdcdc_data
+0 mem_inter1p2v_adc_ft_data
+2 mem_2v_adc_hvin_data
+0 mem_reference_inter1p8v_1v_adc_io_data
+0 mem_io1v_adc_ft_data
+2 mem_1v_adc_io_data
+0 mem_reference_inter1p8v_4p6v_adc_vdcdc_data
+0 mem_io2v_adc_ft_data
+2 mem_3v_adc_hvin_data
+0 mem_adc_ratio
+2 mem_reference_voltage
+1 mem_adc_config_flag
+1 mem_adc_channel
+1 mem_adc_clkdiv
+2 mem_adc_current_value
+1 mem_adc_power_flag	//bit0:low power falg ; bit1:no power flag
+2 mem_adc_saddr_ptr
+2 mem_adc_eaddr_ptr
+1 mem_adc_dma_enable
+1 mem_adc_cal_c0
+1 mem_adc_cal_c1
+1 mem_adc_cal_c2
+1 mem_adc_cal_c3
+1 mem_adc_cal_c4
+1 mem_adc_cal_c5
+1 mem_adc_cal_c6
+
+3 mem_spi_write_addr
+2 mem_spi_write_ptr
+2 mem_spi_write_len
+1 mem_spi_write_flash_sm
+
+
+1 mem_spi_cs_gpio
+1 mem_spi_si_gpio
+1 mem_spi_so_gpio
+1 mem_spi_sclk_gpio
+1 mem_spi_wp_gpio
+1 mem_spi_hold_gpio
+
+
+1 mem_eeprom_wp_gpio
+1 mem_eeprom_scl_gpio
+1 mem_eeprom_sda_gpio
+2 mem_kscan_ptr
+0 mem_key_num_ptr
+2 mem_keyscan_ptr
+2 mem_key_value_retention
+2 mem_power_param_ptr
+
+1 mem_seqi
+0 mem_adc_cal_c7
+1 mem_set_cdb_on
+1 mem_syn_cal_ctrl
+
+1 mem_nec_decode_error_value
+
+ifdef AC_50HZ
+1 mem_ac_detect_gpio
+0 mem_ac_detect_control
+1 mem_ac_detect_div
+1 mem_ac_detect_window
+endif
+
+1 mem_wdt_always_work
+
+1 mem_power_ctrl_disable
+
+1 mem_ring_ibias_trim
+2 mem_ring_ibias_vtune_low
+2 mem_ring_ibias_vtune_high
+1 mem_ring_ibias_calc_adc_gpio
+1 mem_ring_ibias_calc_adc_channel
+)
+
+
+(
+0 QUEUE_OFFSET_EACH_SIZE
+1 QUEUE_OFFSET_LENGTH
+2 QUEUE_OFFSET_CURR_NUM
+3 QUEUE_OFFSET_READ_PTR
+4 QUEUE_OFFSET_WRITE_PTR
+5 QUEUE_OFFSET_ELE_INIT_ADDR
+)
+(
+//Flash Register
+0x05 FLASH_READ_SATUS
+
+// Flash Status Register
+0x00 FLASH_STATUS_WIP
+0X01 FLASH_STATUS_WEL
+0X02 FLASH_STATUS_BP0
+0X03 FLASH_STATUS_BP1
+
+//Flash Write Sm
+0X00 FLASH_SM_NO_BUYS
+0X01 FLASH_SM_START
+0X02 FLASH_SM_ERASE_SECTOR
+0X03 FLASH_SM_WAIT_ERASE_SECTOR
+0X04 FLASH_SM_WRITE_DATA
+0X05 FLASH_SM_WAIT_WRITE_DATA
+
+
+//Flash Command
+0x02 FLASH_COMMAND_WRITE_DATA
+0x03 FLASH_COMMAND_READ_DATA
+0x06 FLASH_COMMAND_WRITE_ENABLE
+0x20 FLASH_COMMAND_SECTOR_ERASE
+0xAB FLASH_COMMAND_RELEASE_FROM_POWERDOWN
+0xB9 FLASH_COMMAND_POWERDOWN
+
+)
+
+
+(
+7 OTP_UFLAG_MEMFIX2
+6 OTP_UFLAG_MEMFIX1
+5 OTP_UFLAG_MEMFIX0
+4 OTP_UFLAG_BIST
+3 OTP_UFLAG_AES
+2 OTP_UFLAG_SKIP_EEP
+1 OTP_UFLAG_SKIP_FLASH
+0 OTP_UFLAG_HCI
+)
+
+amemalloc mem_otp_temp(
+	8 mem_otp_adc
+	1 mem_otp_adc_ratio
+	7 mem_otp_temp0
+	1 mem_otp_core_ldo
+	1 mem_otp_verf_bg
+	1 mem_otp_charge_pump
+	1 mem_otp_dpll_ibais
+	8 mem_otp_temp1
+	1 mem_otp_hv_sel
+	1 mem_otp_ldo_vsel
+	1 mem_otp_load_delay
+	1 mem_otp_load_check_sum
+)
+
+
+//OTP
+(
+0 OTP_OFFSET_PATCH_PTR //2 byte
+2 OTP_OFFSET_UCODE_FLAG
+3 OTP_OFFSET_DEVICE_OPTION
+4 OTP_OFFSET_PERIPHERALS_LOCK
+5 OTP_OFFSET_SCHED_BISTFIX 	//2 byte
+7 OTP_OFFSET_XRAM_BISTFIX	//2 byte
+9 OTP_OFFSET_PATCH_BISTFIX	//2 byte
+
+0xfc0 OTP_OFFSET_ADC_PARAM_L_C0
+
+0xfd0 OTP_OFFSET_ADC_PARAM_L
+0xff0 OTP_OFFSET_UCODE_KEY_L
+0x1000 OTP_OFFSET_H
+
+//0x1fd0 OTP_OFFSET_ADC_PARAM
+//0x1fec OTP_OFFSET_HV_SEL
+//0x1fed OTP_OFFSET_LDO_VSEL
+//0x1fee OTP_OFFSET_LOADCODE_DELAY
+//0x1fef OTP_OFFSET_LOADCODE_CHECKSUM
+0x1ff0 OTP_OFFSET_UCODE_KEY
+)
+
+
+
+/*mem_device_option*/
+(
+4 DVC_OP_DONGLE
+5 DVC_OP_TEST
+6 DVC_OP_SHUTTER_DY   
+8 DVC_OP_MOUSE
+9 DVC_OP_SHUTTER
+0X0A DVC_OP_MODULE
+0X0B DVC_OP_MESH
+0X0C DVC_OP_HCI_BOOT
+0X0D DVC_OP_REMOTE_CAR
+0X0E DVC_OP_CAR
+0X0F DVC_OP_KEYBOARD   
+)
+
+
+(
+7 GPIO_ACTIVE_BIT
+)
+
+(
+5 LPM_WAKE_UP_DELAY_TIMER
+)
+
+
+//mem_app_disconn_reason
+//mem_app_disconn_reason_flag
+//bit map
+(
+2 APP_DISC_RSN_SIZE
+)
+
+(
+0 APP_DISC_BY_BUTTON
+7 APP_DISC_BLE
+)
+
+//eeprom init flag
+(
+0xaa55 EEPROM_INIT_FLAG
+)
+
+(
+1 KEY_CONF_STRUCT_LEN
+0 KEY_PIN_OFFSET
+)
+
+(
+12000000 PWM_12MHZ
+24000000 PWM_24MHZ
+33000 PWM_33KHZ
+)
+(
+0 POWER_OFF
+1 POWER_STARTING
+2 POWER_STANDBY
+)
+//power parameter offset(8 byte)
+(
+0 power_state_offset
+1 power_timer_offset
+2 power_off_timeout_offset
+3 power_starting_timeout_offset
+4 power_off_cb_offset
+6 power_starting_cb_offset
+8 power_standby_cb_offset
+10 ui_butten_up_cb_offset
+)
+
+//auth rom address
+(
+0x9000 MOUSE_BLE_ATT_LIST_ADDR
+0x9272 USB_KBDATA_VENDOR_DEFINE_ADDR
+0x928d USB_KBDATA_ADDR
+0x92cd USB_MSDATA_ADDR
+0x9371 USB_DEVICEDATA_ADDR
+0x9384 USB_CONFDATA_ADDR
+0x93c0 BLE_SHUTTER_GATT_LIST_ADDR
+0x94f9 BLE_SHUTTER_KEY_VALUE_LIST_ADDR
+0x9521 BLE_CAR_ATT_LIST_ADDR
+0x95ed BLE_MESH_SHA256_ADDR
+0x97fc mem_sim_slave
+)
+
+(//NEC 61212
+9000 NEC61212_BOOT_CODE_START_TIME
+4500 NEC61212_BOOT_CODE_END_TIME
+
+9000 NEC61212_REPEAT_START_TIME
+2250 NEC61212_REPEAT_END_TIME
+
+560 NEC61212_DATA_BIT_1_START_TIME
+1690 NEC61212_DATA_BIT_1_END_TIME
+
+560 NEC61212_DATA_BIT_0_START_TIME
+560 NEC61212_DATA_BIT_0_END_TIME
+
+560 NEC61212_STOP_TIME
+
+42580 NEC61212_DATA2REPEAT_TIME
+98190 NEC61212_REPEAT2REPEAT_TIME
+
+0xffff NEC61212_TIMEOUT_TIME
+)
+
+//core_perf_status
+(
+1 CLK_CALIBRATION_DONE
+2 RC_CLK_CALIBRATION_DONE
+3 AES_DEC_KEY_INIT_DONE
+4 MEASURE_ADC_SUM_DONE
+5 SARADC_DONE
+)
+
+//ADC
+(
+1 ADC_CONFIG_HVIN
+2 ADC_CONFIG_GPIO
+)
+
+(
+0 ADC_CH_VBAT
+1 ADC_CH_VDCDC5V
+6 ADC_CH_GPIO_4
+7 ADC_CH_GPIO_2
+8 ADC_CH_GPIO_1
+9 ADC_CH_GPIO_3
+10 ADC_CH_GPIO_0
+11 ADC_CH_GPIO_5
+12 ADC_CH_GPIO_6
+13 ADC_CH_GPIO_7
+)
+
+//adc channel fixed
+(
+0x06 ADC_CH_GPIO18
+0x07 ADC_CH_GPIO10
+0x08 ADC_CH_GPIO9
+0x09 ADC_CH_GPIO12
+0x0a ADC_CH_GPIO6
+0x0b ADC_CH_GPIO20
+0x0c ADC_CH_GPIO21
+0x0d ADC_CH_GPIO22
+0x0e ADC_CH_GPIO13
+)
+
+//mem_adc_reference_mode 
+(
+1 SADC_REFERENCE_INTER3V
+2 SADC_REFERENCE_INTER1P8V_DIV2
+)
+
+

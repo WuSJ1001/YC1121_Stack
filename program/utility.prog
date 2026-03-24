@@ -1,0 +1,738 @@
+
+
+	
+push_stack:
+	storer contw,2, mem_contw
+	storet 8,mem_temp
+	storer timeup,4,mem_timeup
+	call push_stack_rega_b_c
+	storer contr,2, mem_contr
+	storer loopcnt,2, mem_loopcnt
+	storer queue,2,mem_queue
+	rtn
+
+push_stack_rega_b_c:
+	storer rega,4, mem_rega
+	storer regb,4, mem_regb
+	storer regc,3, mem_regc
+	rtn
+
+pop_stack:
+	bpatchx patch20_7,mem_patch20
+	fetch 2, mem_contw
+	iforce contw
+	fetcht 8,mem_temp
+	fetchr timeup,4,mem_timeup
+	call pop_stack_rega_b_c
+	fetchr loopcnt,2,mem_loopcnt
+	fetchr queue,2,mem_queue
+	fetch 2,mem_contr
+	iforce contr
+	rtn
+
+pop_stack_rega_b_c:
+	fetchr rega,4, mem_rega
+	fetchr regb,4, mem_regb
+	fetchr regc,3,mem_regc
+	rtn
+
+get_contw:
+	fetch 2,mem_contw
+	copy pdata,contw
+	rtn
+get_contr:
+	fetch 2,mem_contr
+	copy pdata,contr
+	rtn
+	
+store_contw:
+	copy contw,pdata
+	store 2,mem_contw
+	rtn
+store_contr:
+	copy contr,pdata
+	store 2,mem_contr
+	rtn	
+	
+
+//
+save_cont_pointers:
+	copy contw,pdata
+	store 2,mem_contw
+	copy contr,pdata
+	store 2,mem_contr
+	rtn
+	
+load_cont_pointers:
+	fetch 2,mem_contw
+	copy pdata,contw
+	fetch 2,mem_contr
+	copy pdata,contr
+	rtn
+
+
+//input pdata,temp 1byte
+//output rega:diff
+get_diff:
+	isub temp,rega
+	rtn positive
+	arg 0x100,rega
+	iadd rega,pdata
+	isub temp,rega
+	rtn	
+
+memcpy96:
+	call memcpy32
+memcpy64:
+	call memcpy32
+	branch memcpy32
+	
+
+memcpy12:
+	call memcpy8
+memcpy4:
+	ifetch 1,contr
+	istore 1,contw
+memcpy3:
+	ifetch 3,contr
+	istore 3,contw
+	rtn	
+memcpy8:
+	ifetch 8,contr
+	istore 8,contw
+	rtn	
+
+memcpy48:
+	call memcpy16
+memcpy32:
+	call memcpy8
+memcpy24:
+	call memcpy8
+memcpy16:
+	call memcpy8
+	branch memcpy8
+
+delay:
+	increase -1,pdata
+	nop 38
+	nbranch delay,blank
+	rtn
+
+
+delay_10ms:
+	arg 10,loopcnt
+delay_ms_wait:
+	nop 12000
+	loop delay_ms_wait
+	rtn
+
+
+memset0_16:
+	call memset0_8
+memset0_8:
+	call memset0_4
+memset0_4:
+	force 4,loopcnt
+	branch memset0
+	
+clear_mem_256:
+	force 32,loopcnt
+	branch memset0 
+clear_mem_512:
+	force 64,loopcnt
+	branch memset0 
+
+clear_mem:
+	deposit loopcnt
+	rtn blank
+memset0:
+	force 0,pdata
+	lstore  contw
+	rtn	
+
+clear_temp_block:
+	arg 32,loopcnt
+	arg mem_temp_block0,contw
+	branch clear_mem
+	
+xor_loop:
+	ifetch   4,regc
+	ifetcht 4,rega
+	ixor     temp,pdata
+	istore   4,contw	
+	increase 4,rega
+	increase 4,regc
+	loop  xor_loop
+	rtn
+	
+// 11 22 -> 22 11; 11 22 33 -> 33 22 11 
+// rega:data addr ;loopnct:length
+inverse_data:
+	bpatchx patch21_0,mem_patch21
+	copy loopcnt,pdata
+	sub pdata,1,null
+	rtn positive
+	iadd rega,regb	
+	increase -1,regb
+	rshift loopcnt,loopcnt
+inverse_loop:
+	ifetcht 1,rega
+	ifetch 1,regb
+	istore 1,rega
+	istoret 1,regb
+	increase -1,regb
+	increase 1,rega
+	loop inverse_loop
+	rtn
+
+/*
+	function name:inverse_data_6Byte or le2be_6Byte
+	input: pdata is data that want change
+	output:pdata is Converted data
+	used Resources:temp,contr
+*/
+le2be_6Byte:
+inverse_data_6Byte:
+	rshift32 pdata,temp
+	call inverse_data_4Byte
+	byteswap temp,temp
+	lshift16 pdata,pdata
+	ior temp,pdata
+	rtn
+
+
+/*
+	function name:inverse_data_4Byte or le2be_4Byte
+	input: pdata is data that want change
+	output:pdata is Converted data
+	used Resources:contr
+*/
+le2be_4Byte:
+inverse_data_4Byte:
+	rshift16 pdata,contr
+	byteswap contr,contr
+	byteswap pdata,pdata
+	lshift16 pdata,pdata
+	ior contr,pdata
+	rtn
+
+
+memcpy_fast:
+	bpatchx patch21_1,mem_patch21
+	deposit loopcnt
+	rtn blank
+memcpy_fast_loop:
+	increase -8,loopcnt
+	call memcpy8,positive
+	rtn zero
+	branch memcpy_fast_loop,positive
+	increase 8,loopcnt
+memcpy_fast_loop_four:
+	increase -4,loopcnt
+	call memcpy4,positive
+	rtn zero
+	branch memcpy_fast_loop_four,positive
+	increase 4,loopcnt
+	branch memcpy
+ 
+memcpy:
+	deposit loopcnt
+	rtn blank
+memcpy_loop:
+	ifetch 1,contr
+	istore 1,contw
+	loop memcpy_loop
+	rtn
+
+timer_stop:
+	setarg 0
+timer_init:
+//	rshift clkn_bt,temp
+//	storet 4,mem_last_clkn
+	store 2,mem_pdatatemp
+	bpatchx patch21_2,mem_patch21
+	call timer_check
+	fetcht 2,mem_pdatatemp
+	arg mem_timers,contw
+//	iforce temp
+	lshift queue,pdata
+	iadd contw,contw
+	istoret 2,contw
+	rtn
+
+timer_check_timeout:
+	arg 0x800,timeup
+	lshift16 timeup,timeup
+	iadd timeup,pdata
+	rtn
+
+
+timer_reinit:
+	arg 0,queue
+timer_check:
+	bpatchx patch21_3,mem_patch21
+	fetcht 4,mem_last_clkn
+	rshift clkn_bt,pdata
+	store 4,mem_last_clkn	
+	isub temp,null
+	ncall timer_check_timeout,positive	
+	isub temp,timeup
+	copy timeup,temp
+	arg mem_timers,contr
+	copy contr,contw
+	arg 16,loopcnt
+timer_loop:
+	ifetch 2,contr
+	isub temp,pdata
+	branch timer_counting,positive
+	force 0,pdata
+timer_counting:
+	istore 2,contw
+	loop timer_loop	
+	arg mem_timers,contr
+	lshift queue,pdata
+	iadd contr,contr
+	ifetch 2,contr
+	rtn
+
+
+
+	/* pdata 28+16 bit add temp 26+16 bit, result in temp */
+clk_add:
+	iadd temp,temp
+	copy temp, loopcnt
+	fetch 2,mem_param_rt_rthalfslot
+	isub loopcnt,pdata
+	rtn positive
+	sub pdata,0,pdata
+	rshift16 temp,temp
+	increase 1,temp
+	lshift16 temp,temp
+	ior temp,temp
+	rtn
+
+clk_diff_rt:
+	call clk_diff
+	branch clk2rt
+
+/* pdata -temp -> pdata, all are 28+16 bits, set user if negative */
+clk_diff:
+	disable user
+	isub temp,pdata
+	branch clk_diff_pos,positive
+	enable user
+	sub pdata,0,pdata
+clk_diff_pos:
+	rtnbit0 15
+	copy pdata,regab
+	arg 0x10000,temp
+	fetch 2,mem_param_rt_rthalfslot
+	isub temp,pdata
+	iadd regab,pdata
+	set0 64,pdata
+	rtn
+
+	
+
+clk2rt:
+	fetcht 2,mem_param_rt_rthalfslot
+	iforce contr
+	rshift16 pdata,pdata
+	imul32 temp,pdata
+	iadd contr,pdata
+	rtn
+
+	/* pdata = clks in, temp = lpo out */
+clk2lpo:
+	lshift8 pdata,pdata
+	lshift4 pdata,pdata
+	fetcht 3,mem_clks_per_lpo
+	idiv temp
+	call wait_div_end
+	quotient temp
+	rtn
+
+	/* rt clk -> bt+rt clk */
+clk2bt:
+	fetcht 2,mem_param_rt_rthalfslot
+	idiv temp
+	call get_div_result
+	lshift16 pdata,pdata
+	remainder temp
+	ior temp,temp
+	rtn
+
+
+
+//input:contu 
+//output:temp
+//used register: temp regab
+string2dec_from_uart:
+	arg 0,temp
+string2dec_from_uart_done:
+         copy temp,regab
+	ifetch 1,contu
+	call uchar2dialog	
+	copy regab,temp
+	call swap
+	arg 10,regb
+	imul32 regb,pdata
+	iadd temp,pdata
+	copy pdata,temp
+	loop string2dec_from_uart_done
+	rtn
+	
+
+
+uchar2dialog:
+	arg 0x3a,temp
+	isub temp,null
+	nbranch uchar2dialog_number,positive
+	arg 0x61,temp
+	isub temp,null
+	branch uchar2dialog_a2f,positive
+	arg 0x37,temp
+	isub temp,pdata
+	rtn
+uchar2dialog_number:
+	arg 0x30,temp
+	isub temp,pdata
+	rtn
+uchar2dialog_a2f:
+	arg 0x57,temp
+	isub temp,pdata
+	rtn
+
+
+right_shift_n: //rshiftN pdata,pdata
+	sub loopcnt,0,null
+	rtn zero
+right_shift_n_loop: 
+	rshift pdata,pdata
+	loop right_shift_n_loop
+	rtn
+
+//lshift. 0:1 byte; 1:2byte; 2:4byte; 3:8byte; 4:16byte//
+left_shift_n:
+	force 1,pdata
+	sub loopcnt,0,null
+	rtn zero
+left_shift_n_loop:
+	lshift pdata,pdata
+	loop left_shift_n_loop
+	rtn
+	
+
+	// contr: rxdata, loopcnt is count. result in quotient
+calc_average:
+	setarg 0
+	copy loopcnt,rega
+calc_average_loop:
+	ifetcht 2,contr
+	iadd temp,pdata
+	loop calc_average_loop
+	idiv rega
+get_div_result:
+	call wait_div_end
+	quotient pdata
+	rtn
+
+wait_div_end:	
+	rtn modone
+	branch wait_div_end
+
+
+
+//input:
+//	count:loopcnt str1:rega str2:regb
+//output:
+//	same:set flag zero ,diff not set flag zero
+// using:
+//	reg:temp null flag:zero
+compare_loop:
+string_compare:
+	ifetch 1,rega
+	ifetcht 1,regb
+	isub temp,null
+	nrtn zero
+	increase 1,rega
+	increase 1,regb
+	loop string_compare
+	branch enable_zero
+
+
+	/* pdata = temp if pdata > temp */
+ceiling:
+	isub temp,null
+	nrtn positive
+	deposit temp
+	rtn
+	
+swap:
+	iadd temp,pdata
+	isub temp,temp
+	isub temp,pdata
+	rtn
+
+clean_smem:
+	arg 0,contw
+	branch clean_mem
+
+clean_xmem:
+	arg 0x4000,contw
+clean_mem:
+	arg 0x1000,loopcnt
+	branch memset0				// clear xram at boot
+
+	//cb function ptr in pdata
+callback_func:
+	rtn blank
+	copy pdata,pc	//rtn through cb functon.
+	//branch assert
+/*
+wait_uarttx:
+	fetch 2,core_uart_txitems
+	nbranch wait_uarttx,blank
+	rtn
+*/
+
+ice_break_disable_wdt:
+	call wdt_set_disable
+
+ice_break:
+	jam 0x1,core_ice_ctrl
+	rtn
+
+ice_setbp:
+	store 2,core_ice_break0
+	fetch 1,core_ice_ctrl
+	set1 4,pdata
+	store 1,core_ice_ctrl
+	rtn
+ice_setbp2:
+	store 2,core_ice_break1
+	fetch 1,core_ice_ctrl
+	set1 6,pdata
+	store 1,core_ice_ctrl
+	rtn
+	
+ice_set_write_bp:
+	store 2,core_ice_break0
+	jam 0x30,core_ice_ctrl
+	rtn
+	
+
+
+	//fuction fifo_in
+	//rega pointer to fifo memory , *(rega+len) is the end of fifo
+	//mem_fifo_temp data into fifo
+	//assert if fifo was full
+fifo_in:
+	bpatchx patch21_4,mem_patch21
+	ifetcht UTIL_FIFO_LEN,rega
+	and temp,0xff,pdata
+	nbranch fifo_in_push,blank
+	rshift8 temp,pdata
+	istore UTIL_FIFO_LEN,rega
+fifo_in_push:
+	increase UTIL_FIFO_LEN+UTIL_FIFO_OFFSET,rega
+	ifetch 1,rega
+	nbranch assert,blank //fifo full
+	fetch 1,mem_fifo_temp
+	istore 1,rega
+	rtn
+	
+	//fuction fifo_out
+	//rega pointer to fifo memory
+	//pdata  data from fifo, blank mains fifo empty
+fifo_out:
+	bpatchx patch21_5,mem_patch21
+	arg UTIL_FIFO_LEN,loopcnt
+	ifetch UTIL_FIFO_LEN,rega
+	rtn blank
+fifo_out_loop:
+	ifetch 1,rega
+	nbranch fifo_out_end,blank
+	increase 1,rega
+	loop fifo_out_loop
+	branch assert
+fifo_out_end:
+	arg 0,temp
+	istoret 1,rega
+	rtn
+
+	//fuction fifo_is_empty
+	//rega pointer to fifo memory
+	//blank--- fifo is empty
+fifo_is_empty:
+	ifetch UTIL_FIFO_LEN,rega
+	rtn
+
+	//fuction fifo_is_full
+	//rega pointer to fifo memory
+	//blank--- fifo is NOT full
+fifo_is_full:
+	ifetch 1,rega
+	rtn
+	//rega pointer to fifo memory
+	//blank--- fifo is NOT near full
+fifo_is_near_full:
+	ifetch 2,rega
+	rtn
+
+	//rega pointer to fifo memory
+	//count output via pdata
+fifo_content_count:
+	arg 0,temp
+fifo_content_count_loop:
+	fetch 1,contr
+	loop fifo_content_count_loop,blank
+	increase 1,temp
+	loop fifo_content_count_loop
+	copy temp,pdata
+	rtn
+
+//input pdata, temp, return small in pdata	
+not_greater_than:
+	isub temp,null
+	nrtn positive
+copy_temp2pdata:
+	copy temp,pdata
+	rtn
+
+
+disable_positive:
+	force -1,null
+	rtn
+enable_positive:
+disable_zero:
+	force 1,null
+	rtn
+enable_zero:
+	force 0,null
+	rtn
+
+enable_user:
+	enable user
+	rtn
+	
+disable_user:
+	disable user
+	rtn
+	
+enable_user2:
+	enable user2
+	rtn
+	
+disable_user2:
+	disable user2
+	rtn
+
+enable_user7:
+	enable user7
+	rtn
+
+disable_true:
+	disable  true
+	rtn
+
+enable_true:
+	enable  true
+	rtn
+
+disable_blank:
+	setarg 1
+	rtn
+
+enable_blank:
+set_pdata_0:
+	setarg 0
+	rtn
+
+//input pdata :sum
+//output pdata :sum
+cal_sum:
+	sub loopcnt,0,null
+	rtn zero
+cal_sum_loop:
+	ifetcht 1,contr
+	iadd temp,pdata
+	loop cal_sum_loop
+	rtn
+
+	
+reverse_byte:
+	copy loopcnt,pdata
+	rtn blank
+	copy contr,pdata
+	iadd loopcnt,pdata
+	increase -1,pdata
+	copy pdata,contr	
+reverse_loop:
+	ifetch 1,contr
+	increase -2,contr
+	istore 1,contw
+	loop reverse_loop
+	rtn
+
+
+lshift14:
+	lshift16 pdata,pdata
+rshift2:
+	rshift2 pdata,pdata
+	rtn
+
+lshift6:
+	lshift8 pdata,pdata
+	branch rshift2
+
+/*	
+savelist:		
+	store 8,mem_pdatatemp
+savelist_1:
+	fetch 1,mem_seqi
+	rtneq 0x7f
+	lshift3 pdata,pdata
+	arg mem_savelist,contw
+	iadd contw,contw
+	fetch 8,mem_pdatatemp
+	istore 8,contw
+	fetch 1,mem_seqi
+	increase 1,pdata
+	and_into 0x7f,pdata
+	store 1,mem_seqi
+	fetch 8,mem_pdatatemp
+	rtn	
+
+le_savelist:
+	fetch 5,mem_sync_clke
+	store 5,mem_pdatatemp
+	fetch 1,mem_le_ch_mapped
+	istore 1,contw
+	fetch 2,mem_le_event_count
+	arg 0x0fff,contr
+	iand contr,pdata
+	setflag match,15,pdata
+	setflag wake,14,pdata
+	setflag sync,13,pdata
+	setflag attempt,12,pdata
+	istore 2,contw
+	branch savelist_1
+*/
+
+clear_wake:
+	setarg 0
+	store 8,mem_gpio_wakeup_cfg
+	set1 25,pdata	//gpio22(ice) enable wakeup
+	istore 4,contw
+	rtn
+
+
+generate_random:
+	arg 16,loopcnt
+generate_random_loop:
+	random pdata
+	istore 1,contw
+	loop generate_random_loop
+	rtn
+

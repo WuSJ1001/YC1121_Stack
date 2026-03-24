@@ -1,0 +1,359 @@
+xmemalloc g24_tx_hid_keyboard(
+1 mem_power_on_flag
+6 mem_mouse_factory_addr
+8 mem_keyboard_flag
+
+10 mem_keyboard_tx_data
+1 mem_keyboard_data_send_flag
+
+//le conn param update
+1 mem_keyboard_le_send_conn_param_update
+1 mem_keyboard_le_send_conn_param_update_timer
+1 mem_le_start_auto_reco_timer
+
+1 mem_mcu_stb_gpio
+1 mem_mcu_clk_gpio
+1 mem_mcu_rstb_gpio
+1 mem_keyboard_caps_led_gpio
+1 mem_keyboard_num_led_gpio
+1 mem_keyboard_power_led_gpio
+2 mem_keyboard_caps_led_on_timer
+
+
+1 mem_keyboard_led_r_gpio
+1 mem_keyboard_led_g_gpio
+1 mem_keyboard_led_b_gpio
+
+8 mem_key_row_gpio
+20 mem_key_col_gpio
+12 mem_key_excol_gpio
+2 mem_kb_row_ptr
+2 mem_kb_col_ptr
+2 mem_kb_excol_ptr
+
+20 mem_keyscan_value_current
+20 mem_keyscan_value_check
+20 mem_keyscan_value_old
+11 mem_keyscan_exmcu_value
+2 mem_keyscan_value_ptr
+2 mem_keyscan_exmcu_value_ptr
+1 mem_keyscan_value_temp
+1 mem_keyscan_col_loop_count
+2 mem_keyscan_exmcu_wait_wake_count
+
+1 mem_same_keyvalue_timerout_flag
+2 mem_same_keyvalue_timer_init
+2 mem_same_keyvalue_timer
+
+1 mem_keyboard_current_col_press_key_count
+1 mem_keyboard_all_press_key_count
+1 mem_keyboard_same_row_press_key_count
+1 mem_keyboard_ghost_flag
+1 mem_keyboard_data_change_flag
+1 mem_keyboard_keyvalue_temp
+1 mem_keyboard_press_flag_temp
+1 mem_keyboard_keyvalue_bit_loop_count
+9 mem_keyboard_keyvalue_buffer
+160 mem_keyboard_keyvalue_map
+
+1 mem_keyboard_fn_flag
+1 mem_keyboard_control_key_flag
+1 mem_keyboard_bt_button_flag
+1 mem_keyboard_pairing_type
+2 mem_keyboard_commbination_key_bt
+2 mem_keyboard_commbination_key_24g
+1 mem_24g_repeat_send_flag
+1 mem_keyboard_led_status
+1 mem_keyboard_led_status_get
+1 mem_keyboard_led_status_get_timer
+1 mem_keyboard_led_status_get_timer_last
+
+0 mem_keyboard_fn_esc_f1_f12
+1 mem_keyboard_fn_first
+1 mem_keyboard_fn_esc
+1 mem_keyboard_fn_f1
+1 mem_keyboard_fn_f2
+1 mem_keyboard_fn_f3
+1 mem_keyboard_fn_f4
+1 mem_keyboard_fn_f5
+1 mem_keyboard_fn_f6
+1 mem_keyboard_fn_f7
+1 mem_keyboard_fn_f8
+1 mem_keyboard_fn_f9
+1 mem_keyboard_fn_f10
+1 mem_keyboard_fn_f11
+1 mem_keyboard_fn_f12
+1 mem_keyboard_fn_del
+
+1 mem_keyboard_fn_arrow_enable_flag
+1 mem_keyboard_fn_left_ctrl_enable_flag
+1 mem_keyboard_fn_space_enable_flag
+1 mem_keyboard_fn_system_switch_enable_flag
+
+1 mem_keyboard_commbination_key_step
+1 mem_keyboard_commbination_control_key_value
+1 mem_keyboard_commbination_standard_key_value
+1 mem_keyboard_commbination_control_key_delay_release_timer
+
+1 mem_keyboard_consumer_key_status
+
+
+
+
+
+
+1 mem_kb_computer_system
+24 mem_otp_read_retention_memory
+2 mem_otp_read_retention_offset
+16 mem_le_search_service_uuid
+1 mem_le_connect_ios_mac_flag
+2 mem_le_search_mac_uuid
+9 mem_le_search_mac_manu_name
+2 mem_keybord_appearance
+2 mem_keyboard_commbination_fast_conn_bt
+
+
+)
+(
+0x00 DONGLE_KB_BIND_EEPROM_OFFECT
+)
+(
+0x01 DEVICE_DATA_TPYE_MOUSE
+0x02 DEVICE_DATA_TPYE_STANDARD_KEYBOARD
+0x03 DEVICE_DATA_TPYE_NONSTARNDARD_KEYBOARD
+0x04 DEVICE_DATA_TPYE_CONSUMER
+0x05 DEVICE_DATA_TPYE_SYSTEM_CONCTOL
+)
+
+(
+0x00 HID_REPORTID_KEY_STANDARD
+0x01 HID_REPORTID_MOUSE
+0x02 HID_REPORTID_SYSTEM_CTRL
+0x03 HID_REPORTID_CONSUMER_KEY
+)
+
+(
+0x04	 HID_KEY_A 	 
+0x05        HID_KEY_B 	 
+0x06        HID_KEY_C 	 
+0x07        HID_KEY_D 	 
+0x08        HID_KEY_E 	 
+0x09        HID_KEY_F 	 
+0x0a        HID_KEY_G 	 
+0x0b        HID_KEY_H 	 
+0x0c        HID_KEY_I  	 
+0x0d        HID_KEY_J 	 
+0x0e        HID_KEY_K 	 
+0x0f        HID_KEY_L 	 
+0x10        HID_KEY_M 	 
+0x11        HID_KEY_N 	 
+0x12        HID_KEY_O	 
+0x13        HID_KEY_P	 
+0x14        HID_KEY_Q	 
+0x15        HID_KEY_R	 
+0x16        HID_KEY_S	 
+0x17        HID_KEY_T	 
+0x18        HID_KEY_U	 
+0x19        HID_KEY_V	 
+0x1a        HID_KEY_W 	 
+0x1b        HID_KEY_X	 
+0x1c        HID_KEY_Y	 
+0x1d        HID_KEY_Z	 
+    
+0x1e        HID_KEY_1	 
+0x1f        HID_KEY_2	 
+0x20        HID_KEY_3	 
+0x21        HID_KEY_4	 
+0x22        HID_KEY_5	 
+0x23        HID_KEY_6	 
+0x24        HID_KEY_7	 
+0x25        HID_KEY_8	 
+0x26        HID_KEY_9	 
+0x27        HID_KEY_0	 
+    
+0x28        HID_KEY_ENTER 				 
+0x29        HID_KEY_ESC				 
+0x2a        HID_KEY_BACKSPACE		 
+0x2b        HID_KEY_TAB				 
+0x2c        HID_KEY_SPACE 				 
+0x2d        HID_KEY_MINUS				 		// -_
+0x2e        HID_KEY_EQUAL				 		// =+
+0x2f        HID_KEY_LEFT_BRACKET 		 	// [{
+0x30        HID_KEY_RIGHT_BRACKET 	 		// ]}
+0x31        HID_KEY_BACK_SLASH 		 		// \|
+    
+0x32        HID_KEY_K42				 
+0x33        HID_KEY_SEMICOLON			 	// ;:
+0x34        HID_KEY_QUOTE				 		// ' "
+0x35        HID_KEY_TILDE				 		// `~
+0x36        HID_KEY_LESS_THAN			 		// ,<
+0x37        HID_KEY_GREAT_THAN		 		// .>
+0x38        HID_KEY_SLASH				 		// /?
+0x39        HID_KEY_CAPS_LOCK			 
+
+0x3a        HID_KEY_F1		 
+0x3b        HID_KEY_F2		 
+0x3c        HID_KEY_F3		 
+0x3d        HID_KEY_F4		 
+0x3e        HID_KEY_F5		 
+0x3f        HID_KEY_F6		 
+0x40        HID_KEY_F7		 
+0x41        HID_KEY_F8		 
+0x42        HID_KEY_F9		 
+0x43        HID_KEY_F10	 
+0x44        HID_KEY_F11	 
+0x45        HID_KEY_F12	 
+    
+0x46        HID_KEY_PRINT_SCREEN	 
+0x47        HID_KEY_SCROLL_LOCK	 
+0x48        HID_KEY_PAUSE			 
+0x49        HID_KEY_INSERT			 
+0x4a        HID_KEY_HOME			 
+0x4b        HID_KEY_PAGE_UP		 
+0x4c        HID_KEY_DELETE		 
+0x4d        HID_KEY_END			 
+0x4e        HID_KEY_PAGE_DOWN	 
+        
+0x4f        HID_KEY_RIGHT_ARROW	 
+0x50        HID_KEY_LEFT_ARROW	 
+0x51        HID_KEY_DOWN_ARROW	 
+0x52        HID_KEY_UP_ARROW		 
+        
+0x53        HID_KEY_NUM_LOCK		 
+0x54        HID_KEY_KP_SLASH		 
+0x55        HID_KEY_KP_ASTERISK	 
+0x56        HID_KEY_KP_MINUS		 
+0x57        HID_KEY_KP_PLUS		 
+0x58        HID_KEY_KP_ENTER		 
+0x59        HID_KEY_KP_1			 
+0x5a        HID_KEY_KP_2			 
+0x5b        HID_KEY_KP_3			 
+0x5c        HID_KEY_KP_4			 
+0x5d        HID_KEY_KP_5			 
+0x5e        HID_KEY_KP_6			 
+0x5f        HID_KEY_KP_7			 
+0x60        HID_KEY_KP_8			 
+0x61        HID_KEY_KP_9			 
+0x62        HID_KEY_KP_0			 
+0x63        HID_KEY_KP_DEL		 
+  
+0x64        HID_KEY_K45			 
+0x65        HID_KEY_APP			 
+0x66        HID_KEY_POWER			 
+0x67        HID_KEY_KP_EQUAL		 
+        
+       
+0x87        HID_KEY_K56				 
+0x88        HID_KEY_K133  				 
+0x89        HID_KEY_K14  				 
+0x8a        HID_KEY_K132  				 
+0x8b        HID_KEY_K131 				 
+    
+0x90        HID_KEY_KR_R  				 
+0x91        HID_KEY_KR_L  				 
+        
+0xe0        HID_KEY_LEFT_CTRL			 
+0xe1        HID_KEY_LEFT_SHIFT			 
+0xe2        HID_KEY_LEFT_ALT 			 
+0xe3        HID_KEY_LEFT_GUI 			 
+0xe4        HID_KEY_RIGHT_CTRL			 
+0xe5        HID_KEY_RIGHT_SHIFT		 
+0xe6        HID_KEY_RIGHT_ALT			 
+0xe7        HID_KEY_RIGHT_GUI			 
+
+0xe8 	HID_KEY_MULTIKEY_MEDIA
+0xe9 	HID_KEY_MULTIKEY_PALY
+0xea 	HID_KEY_MULTIKEY_STOP
+0xeb 	HID_KEY_MULTIKEY_PRE_TRACK
+0xec 	HID_KEY_MULTIKEY_NEXT_TRACK
+0xed 	HID_KEY_MULTIKEY_VOL_DOWN
+0xee 	HID_KEY_MULTIKEY_VOL_UP
+0xef 	HID_KEY_MULTIKEY_MUTE
+0xf0 	HID_KEY_MY_COMPUTER
+0xf1 	HID_KEY_MAIL
+0xf2 	HID_KEY_CALCULATOR
+0xf3 	HID_KEY_LIGHT_DOWN
+0xf4 	HID_KEY_LIGHT_UP
+0xf5 	HID_KEY_AC_FAVORITES
+0xf6 	HID_KEY_AC_FORWARD
+0xf7 	HID_KEY_AC_BACK
+0xf8 	HID_KEY_AC_STOP
+0xf9 	HID_KEY_AC_REFRESH
+0xfa 	HID_KEY_AC_SEARCH
+0xfb 	HID_KEY_AC_HOME
+0xfc 	HID_KEY_IOS_ANDROID_OS_LOCK
+0xfd 	HID_KEY_OS_SOFT_KB
+0xfe 	HID_KEY_OS_LANGUAGE
+0xff 	HID_KEY_SYSTEM_SLEEP
+        // 0xe8~0xff reserved
+0xa5	HID_KEY_SELECT_ALL
+0xa6 	HID_KEY_COPY
+0xa7	HID_KEY_PASTE
+0xa8	HID_KEY_CUT
+0xa9	HID_KEY_ALL_OS_LOCK
+0xaa	HID_KEY_OSK
+0xab	HID_KEY_LANGUAGE
+0xac 	HID_KEY_APP_TILING
+	 // 0xa5~0xaf reserved
+0x7f     	HID_KEY_FN 					 
+0xde     	HID_KEY_PB
+0x00     	HID_KEY_NULL 				 
+)
+
+(
+0x01 LEFT_CONTROL
+0x02 LEFT_SHIFT
+0x04 LEFT_ALT
+0x08 LEFT_GUI
+0x10 RIGHT_CONTROL
+0x20 RIGHT_SHIFT
+0x40 RIGHT_ALT
+0x80 RIGHT_GUI
+0x09 LEFT_GUI_CONTROL
+0x0a LEFT_SHIFT_GUI
+)
+
+
+(
+0x00 KB_PC_KEYSEL_NUMLOCK
+0x01 KB_PC_KEYSEL_CAPSLOCK
+0x02 KB_PC_KEYSEL_SCROLLLOCK
+)
+
+(
+8 KEYSCAN_COL_NUM
+20 KEYSCAN_ROW_NUM
+)
+
+(
+0 CAMMBINATION_KEY_FREE
+1 CAMMBINATION_KEY_PRESS
+2 CAMMBINATION_KEY_HOLD
+3 CAMMBINATION_KEY_COMPLETE
+4 CAMMBINATION_KEY_WAIT_RELEASE
+5 CAMMBINATION_KEY_RELEASE
+6 CAMMBINATION_KEY_NULL
+)
+
+
+(
+
+0x600 PNP_MICROSOFT
+0x4c00 PNP_IOS
+0x1208 PNP_MAC
+
+
+0 SYSTEM_OS_WINDOWS
+1 SYSTEM_OS_ANDRIOD
+2 SYSTEM_OS_IOS
+3 SYSTEM_OS_MAC
+
+)
+
+(
+0 KEYBOARD_CONSUMER_KEY_STANDBY
+1 KEYBOARD_CONSUMER_KEY_PRESS
+2 KEYBOARD_CONSUMER_KEY_RELEASE
+)
+
+

@@ -1,0 +1,112 @@
+
+/****************************g24 rssi general start********************************/
+
+rssi_store:
+	bpatchx patch32_3,mem_patch32
+	copy rega,pdata
+	iadd temp,contw
+	fetch 1,mem_rssi
+	istore 1,contw
+	increase 1,temp
+	fetch 1,mem_rssi_buff_index	//buff len minus 1
+	iand temp,temp
+	rtn
+	
+rssi_average:
+	bpatchx patch32_4,mem_patch32
+	fetch 1,mem_rssi_buff_index
+	increase 1,pdata
+	store 2,mem_loopcnt
+	copy pdata,loopcnt
+	copy rega,contr
+	arg 0,pdata
+rssi_average_loop:
+	ifetcht 1,contr
+	iadd temp,pdata
+	loop rssi_average_loop
+	fetcht 2,mem_loopcnt
+	idiv temp
+	call wait_div_end
+	quotient temp
+	rtnmark1 mark_24g_rxmode
+	copy temp,pdata
+	rtnmark0 mark_24g
+	call bcd
+	copy pdata,temp
+	rtn
+
+save_rssi_dec:
+	branch save_rssi
+//	branch rssi_hex2dec
+
+/****************************g24 rssi general end********************************/
+
+
+
+
+
+/****************************g24 transmitter rssi start********************************/
+rssi_transmitter_buff_init:
+	fetch 2,mem_rssi_signal_buf_ptr
+	branch rssi_buff_clear
+
+rssi_signal:
+	copy pdata,rega
+	fetcht 1,mem_rssi_signal_index
+	fetch 2,mem_rssi_signal_buf_ptr
+	iadd temp,contw
+	copy rega,pdata
+	istore 1,contw
+	increase 1,temp
+	fetch 1,mem_rssi_buff_index	//buff len minus 1
+	iand temp,temp
+	storet 1,mem_rssi_signal_index
+	rtn
+
+/****************************g24 transmitter rssi end********************************/
+
+
+
+
+
+/****************************g24 receiver rssi start********************************/
+
+rssi_receiver_buff_init:
+	fetch 2,mem_rssi_noise_buffer_ptr
+	call rssi_buff_clear
+	fetch 2,mem_rssi_noise_self_buffer_ptr
+	call rssi_buff_clear
+	fetch 2,mem_rssi_noise_device1_buffer_ptr
+	call rssi_buff_clear
+	fetch 2,mem_rssi_noise_device2_buffer_ptr
+rssi_buff_clear:
+	rtn blank
+	copy pdata,contw
+	fetch 1,mem_rssi_buff_index
+	increase 1,pdata
+	copy pdata,loopcnt
+	branch clear_mem
+
+
+rssi_noise:
+	call save_rssi_dec
+	rtn blank
+	fetcht 1,mem_rssi_noise_index
+	fetchr rega,2,mem_rssi_noise_buffer_ptr
+	call rssi_store
+	storet 1,mem_rssi_noise_index
+	rtn
+
+
+rssi_noise_monitor:
+	fetchr rega,2,mem_rssi_noise_buffer_ptr
+	call rssi_average
+	storet 1,mem_rssi_noise_avg
+	sub temp,RSSI_THRESH_NOISE,null
+	nrtn positive
+	branch g24_ch
+
+
+/****************************g24 receiver rssi end********************************/
+
+	

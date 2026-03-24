@@ -1,0 +1,136 @@
+
+
+/*
+	mesh model层指令解析总函数
+*/
+
+ali_mesh_model_layer_check_model_message_opcode:
+	fetch 1,mem_mesh_module_message_opcode
+ali_mesh_model_layer_check_generic_OnOff_message_opcde:
+	beq MESH_MODULE_MESSAGE_OPCODE_GENERIC_ONOFF_GET_NO_HEAD,ali_mesh_model_layer_message_opcode_generic_onoff_get
+	beq MESH_MODULE_MESSAGE_OPCODE_GENERIC_ONOFF_SET_NO_HEAD,ali_mesh_model_layer_message_opcde_generic_onoff_set
+	beq MESH_MODULE_MESSAGE_OPCODE_SCENE_RECALL_NO_HEAD,ali_mesh_model_layer_message_opcde_scene_recall
+	beq MESH_MODULE_MESSAGE_OPCODE_LIGHT_LIGHTNESS_SET_NO_HEAD,ali_mesh_model_layer_message_opcde_light_lightness_set
+	beq MESH_MODULE_MESSAGE_OPCODE_LIGHT_CTL_SET_NO_HEAD,ali_mesh_model_layer_message_opcde_light_ctl_set
+	rtn
+
+
+ali_mesh_model_layer_message_opcode_generic_onoff_get:
+	arg ali_mesh_model_layer_message_opcode_generic_onoff_get_cb,regc
+	branch ali_mesh_more_element_check_element_address
+ali_mesh_model_layer_message_opcode_generic_onoff_get_cb:
+	//input queue is element number
+	//output pdata is element generic OnOff status
+	fetch 2,mem_mesh_cb_generic_onoff_get
+	call callback_func
+	store 1,mem_mesh_generic_onoff_set_payload_OnOff
+	branch ali_mesh_access_layer_send_generic_onoff_status
+
+
+ali_mesh_model_layer_message_opcde_generic_onoff_set:
+	arg ali_mesh_model_layer_message_opcde_generic_onoff_set_cb,regc
+	branch ali_mesh_more_element_check_element_address
+ali_mesh_model_layer_message_opcde_generic_onoff_set_cb:
+	call ali_mesh_access_layer_send_generic_onoff_status
+	fetch 2,mem_mesh_cb_generic_onoff_set
+	branch callback_func
+
+
+//模式设置
+ali_mesh_model_layer_message_opcde_scene_recall:
+	call ali_mesh_access_layer_send_scene_status
+	fetch 2,mem_mesh_cb_scene_recall
+	branch callback_func
+
+
+ali_mesh_model_layer_message_opcde_light_lightness_set:
+	fetch 2,mem_mesh_light_lightness_set_payload_lightness
+	call ali_mesh_model_layer_message_calc_lightness
+	store 1,mem_mesh_light_lightness_calc_lightness
+	call ali_mesh_access_layer_send_light_lightness_status
+	fetch 2,mem_mesh_cb_light_lightness_set
+	branch callback_func
+
+
+ali_mesh_model_layer_message_opcde_light_ctl_set:
+	fetch 2,mem_mesh_last_CTL_Temperature
+	fetcht 2,mem_mesh_CTL_Temperature
+	isub temp,null
+	rtn zero
+
+	fetch 2,mem_mesh_CTL_Temperature
+	call ali_mesh_model_layer_message_calc_temperature
+	store 1,mem_mesh_CTL_calc_temperature
+
+	fetch 2,mem_mesh_CTL_Temperature
+	store 2,mem_mesh_last_CTL_Temperature
+	fetch 2,mem_mesh_cb_light_lightness_get
+	call callback_func
+	storet 2,mem_mesh_CTL_Lightness
+	call ali_mesh_access_layer_send_light_ctl_stauts
+	fetch 2,mem_mesh_cb_light_ctl_set
+	branch callback_func
+
+
+//input: pdata is lightness set by ali
+//output: pdata is lightness 0-100
+ali_mesh_model_layer_message_calc_lightness:
+	rtn blank
+	mul32 pdata,ALI_MESH_LIGHTNESS_LEVEL,pdata
+	arg ALI_MESH_LIGHTNESS_MAX,temp
+	idiv temp
+	call wait_div_end
+	remainder temp
+	rshift8 temp,temp
+	quotient pdata
+	sub temp,0xff,null
+	nrtn zero
+	pincrease 1
+	rtn
+
+
+//input: temp is lightness 0-100
+//output: temp is lightness set by ali
+ali_mesh_model_layer_message_calc_actual_lightness:
+	arg ALI_MESH_LIGHTNESS_MAX,pdata
+	imul32 temp,pdata
+	div pdata,ALI_MESH_LIGHTNESS_LEVEL
+	call wait_div_end
+	quotient temp
+	rtn
+
+//input: pdata is temperature set by ali
+//output: pdata is temperature 0-100
+ali_mesh_model_layer_message_calc_temperature:
+	arg ALI_MESH_TEMPERATURE_MIN,temp
+	isub temp,rega
+	call ali_mesh_model_layer_message_calc_temperature_k
+	copy rega,pdata
+	idiv temp
+	call wait_div_end
+	quotient pdata
+	rtn
+
+
+//input: temp is temperature 0-100
+//output: temp is temperature set by ali
+ali_mesh_model_layer_message_calc_actual_temperature:
+	copy temp,rega
+	call ali_mesh_model_layer_message_calc_temperature_k
+	copy rega,pdata
+	imul32 temp,pdata
+	arg ALI_MESH_TEMPERATURE_MIN,temp
+	iadd temp,temp
+	rtn
+
+ali_mesh_model_layer_message_calc_temperature_k:
+	setarg ALI_MESH_TEMPERATURE_MAX
+	arg ALI_MESH_TEMPERATURE_MIN,temp
+	isub temp,pdata
+	div pdata,ALI_MESH_TEMPERATURE_LEVEL
+	call wait_div_end
+	quotient temp
+	rtn
+
+
+

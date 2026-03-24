@@ -1,0 +1,46 @@
+
+mem_device_option:0d
+mem_ui_button_gpio:ff
+
+mem_remote_style_struct_led_gpio:06
+mem_remote_car_led_num:01
+mem_remote_car_led_map:
+06
+ff
+ff
+ff
+ff
+ff
+ff
+ff
+
+
+mem_remote_car_key_num:04
+mem_remote_car_key_conf0:
+#0
+03
+#1
+04
+#2
+05
+#3
+07
+#4
+02
+#5
+0a
+#6
+17
+
+mem_24g_tx_phy:84#0x01:1M/0x02:2M/0x04:S2/0x84:S8
+mem_24g_rx_phy:84#0x01:1M/0x02:2M/0x04:S2/0x84:S8
+mem_24g_pair_tx_power:85 #-5dBm
+
+
+mem_24g_lap:01 02 03 04 05 06
+mem_24g_pair_addr:56 34 02 01
+mem_eeprom_base:80 1f		//2keeprom:f0 00
+mem_24g_pair_ch:4e
+
+mem_remote_save_addr_flag: 01
+

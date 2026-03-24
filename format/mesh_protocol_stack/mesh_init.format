@@ -1,0 +1,203 @@
+memalloc ali_mesh(
+	2 mem_mesh_mic_cache_ptr
+	2 mem_adv_CRC_False_initValue
+	2 mem_CRC16_polynomial
+)
+
+
+xmemalloc ali_mesh(
+	4 mem_mesh_three_tuple_ProductID
+	6 mem_mesh_three_tuple_MAC
+	16 mem_mesh_three_tuple_secret
+
+
+	2 mem_mesh_cb_receive_advertising
+
+
+	2 mem_mesh_cb_receive_access_message
+
+
+	2 mem_mesh_cb_receive_config_appkey_add
+
+
+	2 mem_mesh_cb_pairing_fail
+
+	//ali vendor message cb
+	2 mem_mesh_cb_recv_vendor
+
+	2 mem_mesh_scan_selete_next_ch
+	
+	2 mem_mesh_cb_generic_onoff_get
+	2 mem_mesh_cb_generic_onoff_set
+	2 mem_mesh_cb_scene_recall
+	2 mem_mesh_cb_light_lightness_set
+	2 mem_mesh_cb_light_lightness_get
+	2 mem_mesh_cb_light_ctl_set
+
+	2 mem_mesh_cb_main_light_onoff_set
+	2 mem_mesh_cb_background_onoff_set
+	2 mem_mesh_cb_color_set
+
+
+	2 mem_mesh_cb_network_relay
+
+
+	2 mem_mesh_cb_receive_node_reset
+
+
+	2 mem_mesh_cb_seq_changed
+
+	2 mem_mesh_cb_subscriptuion_list_changed
+
+
+	2 mem_mesh_cb_vendor_timing_changed
+	
+
+	2 mem_mesh_core_feature
+
+	1 mem_mesh_element_number
+	2 mem_mesh_element_device_ptr
+	2 mem_mesh_element_device_length
+
+	2 mem_mesh_clear_provisioning_data
+
+	2 mem_mesh_app_deport_device_state
+
+	1 mem_mesh_chip_select
+
+
+)
+amemalloc mem_mesh_sha256_chunk_start(
+	0 mem_chip_clear_paired_info
+)
+
+(//typedef struct of mem_mesh_element_device
+0 ELEMENT_DEVICE_GROUP_ADDR
+2 ELEMENT_DEVICE_QUEUE_BUFFER_PTR
+4 ELEMENT_DEVICE_VENDOR_TIME_PTR
+6 ELEMENT_DEVICE_SUBSCRIPTION_LABEL
+22 ELEMENT_DEVICE_UPPER_ADV_FLAG
+23 ELEMENT_DEVICE_UPPER_QUEUE_PTR
+25 ELEMENT_DEVICE_TRAN_PACKAGE_TID
+26 ELEMENT_DEVICE_TRAN_PACKAGE_TYPE
+27 SIZEOF_ELEMENT_DEVICE
+
+)
+
+
+xmemalloc ali_mesh_element(
+	0 mem_mesh_element_device
+	2 mem_mesh_element_device_group_addr
+	2 mem_mesh_element_device_queue_buffer_ptr
+	2 mem_mesh_element_device_timing_ptr
+	16 mem_mesh_element_device_element_subscription_label
+	1 mem_mesh_element_upper_adv_flag
+	2 mem_mesh_element_upper_queue_buffer_ptr
+	1 mem_mesh_element_tran_package_tid
+	1 mem_mesh_element_tran_package_type
+
+	SIZEOF_ELEMENT_DEVICE mem_mesh_element_device1
+	SIZEOF_ELEMENT_DEVICE mem_mesh_element_device2
+)
+
+(
+36 MESH_SEGMENT_SIZE
+)
+
+xmemalloc ali_mesh_element(
+	MESH_SEGMENT_SIZE mem_mesh_segmented_access_message_Segment
+)
+
+
+
+(
+320 MESH_TIMER_BUFFER_SIZE
+)
+
+/*
+xmemalloc ali_mesh_element_timer(
+	MESH_TIMER_BUFFER_SIZE mem_mesh_element_timing
+	MESH_TIMER_BUFFER_SIZE mem_mesh_element_timing1
+	MESH_TIMER_BUFFER_SIZE mem_mesh_element_timing2
+)
+*/
+
+(//bit map of mem_mesh_core_feature
+0 MESH_FEATURE_DISABLE_LOG
+1 MESH_FEATURE_DISABLE_RELAY
+2 MESH_FEATURE_DISABLE_SUBSCRIPTION
+3 MESH_FEATURE_DISABLE_APP_PAIRING
+)
+
+(//taobao id
+0x01a8	COMPANY_IDENTIFIERS_ALIBABA
+0x0d	ALI_MESH_VID_NUMBER
+0x0da801 COMPANY_ID_ALIBABA_AND_VID
+0x0ea801 COMPANY_ID_ALIBABA_AND_VID_GATT
+)
+
+
+(
+0x00 MESH_CODE_INIT
+0x01 MESH_RECEIVE_PROVISIONING_PACKET
+0x02 MESH_RECEIVE_PROVISIONING_RANDOM_PACKET
+0x03 MESH_SEND_PROVISIONING_CONFIRMATION_PACKET
+0x04 MESH_RECEIVE_PROVISIONING_DATA_PACKET
+0x05 MESH_SEND_PROVISIONING_COMPLETE_PACKET
+0x06 MESH_RECEIVE_PROVISIONING_FAILED_PACKET
+0x07 MESH_RECEIVE_PROVISIONING_ADD_APPKEY_PACKET
+0x08 MESH_SEND_PROVISIONING_ADD_APPKEY_ACK_PACKET
+
+0x10 MESH_ENCRYPT_SHA256_FUNCTION_INPUT
+0x11 MESH_ENCRYPT_SHA256_FUNCTION_RESULT
+0x12 MESH_ENCRYPT_AES_CMAC_FUNCTION_INPUT_M
+0x13 MESH_ENCRYPT_AES_CMAC_FUNCTION_INPUT_K
+0x14 MESH_ENCRYPT_AES_CMAC_FUNCTION_RESULT
+
+0x20 MESH_NETWORK_RECEIVE_PACKET
+0x21 MESH_NETWORK_RELAY_PACKET
+
+0x30 MESH_LOWER_RECEIVE_PACKET
+0x40 MESH_UPPER_RECEIVE_PACKET
+0x41 MESH_UPPER_SEND_PACKET
+
+0x50 MESH_ACCESS_RECEIVE_MESSAGE
+
+0x60 MESH_PROXY_RECEIVE_MESSAGE_HANDLE
+0x61 MESH_PROXY_RECEIVE_MESSAGE
+
+0xF0 MESH_MESSAGE_GENERIC_ONOFF_SET
+0xF1 MESH_MESSAGE_SET_LIGHT_LIGHTNESS
+0xF2 MESH_MESSAGE_SET_CTL
+)
+
+(//LUA LOG 
+0xAA LUA_LOG_PACKET_HEADER
+0x03 LUA_LOG_PAKCET_TYPE
+0xBB LUA_LOG_PACKET_TRAIL
+)
+
+(//logging level
+0 LOGGING_DEBUG
+1 LOGGING_INFO
+2 LOGGING_WARNING
+3 LOGGING_ERROR
+4 LOGGING_CRITICAL
+)
+
+(
+0x1c00 mem_mesh_uart_log_rx_buff
+0x1c01 mem_mesh_uart_log_rx_buff_end
+0x1c02 mem_mesh_uart_log_tx_buff
+0x1fff mem_mesh_uart_log_tx_buff_end
+)
+
+(
+0x77 MESH_PAIRED_INFO_LENGTH
+)
+
+(
+0x01 MESH_CHIP_FROM_EEPROM
+0x02 MESH_CHIP_FROM_FLASH
+)
+

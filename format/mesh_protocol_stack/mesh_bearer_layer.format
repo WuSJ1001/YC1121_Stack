@@ -1,0 +1,10 @@
+
+memalloc ali_mesh(
+	0 mem_mesh_queue_ele_temp
+	1 mem_mesh_queue_ele_duration
+	1 mem_mesh_queue_ele_gatt_msg_id
+	1 mem_mesh_queue_ele_len
+	31 mem_mesh_queue_ele_payload
+	1 mem_mesh_queue_ele_padding
+)
+

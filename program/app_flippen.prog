@@ -1,0 +1,631 @@
+
+
+ifdef COMPILE_PEN
+
+//flippen_init:
+//	branch flippen_cb_function
+
+
+flippen_cb_function:
+	setarg flippen_24g_package_data
+	store 2,mem_cb_24g_transmit_data
+	setarg flippen_bb_event_timer
+	store 2,mem_cb_event_timer
+	rtn
+
+flippen_24g_package_data:
+	call flippen_txpayload_config
+	nrtn user
+	copy regb,contr
+	arg mem_24g_txpayload_buf,contw
+	call memcpy8
+	ifetch 1,contr
+	istore 1,contw
+	fetch 4,mem_24g_receiver_addr
+	istore 4,contw
+	fetch 1,mem_release_data_from_receiver_enable
+	store 1,mem_24g_txpayload_buf+7
+flippen_24g_package_data_filling:
+	jam TYPE_KB,mem_24g_data_type
+	arg 13,rega	//length
+	arg mem_24g_txpayload_buf,regb	//regb: the pointer of txbuff
+	rtn
+
+flippen_txpayload_config:
+	disable user
+	call flippen_keyscan_key_process
+	nbranch flippen_24g_poweron_first_blank_data_enable,user
+	//jam 1,mem_ssp_enable		//need check
+	//jam SP_KEY_VALID,mem_sp_local_key_invalid
+	fetch 1,mem_customer_key
+	nbranch flippen_24g_keyboard_package_data,blank
+	rtn
+
+flippen_24g_keyboard_package_data:
+	call flippen_g24_txbuf_clear
+	fetch 1,mem_customer_data_trigger
+	nbranch flippen_key_press_judge,blank
+	jam 0,mem_key_state
+	fetch 1,mem_release_data_from_receiver_enable
+	nrtn blank
+flippen_24g_key_release:
+	jam 1,mem_release_data_from_transmiter_enable
+flippen_24g_key_release_filling:
+	arg mem_customer_key_release,regb	//tx buff
+	rtn
+
+flippen_24g_poweron_first_blank_data_enable:
+	fetch 1,mem_poweron_first_blank_data_enable
+	rtnne 1
+	jam 2,mem_poweron_first_blank_data_enable
+	enable user
+	call flippen_24g_release_data_from_receiver_enable
+	branch flippen_24g_key_release_filling
+
+flippen_key_press_judge:
+	bpatch patch07_7,mem_patch07
+	fetch 1,mem_customer_key
+	copy pdata,regc
+	jam 1,mem_send_package_before_check
+	call flippen_key_check_once	
+	nbranch flippen_combination_key_down_check,blank
+flippen_key_press_judge_next:
+	jam 0,mem_send_package_before_check
+	fetch 1,mem_combination_key_down_flag
+	nbranch flippen_key_function_disable,blank
+	jam 1,mem_key_state
+	copy regc,pdata
+	bbit1 0,flippen_key0_data_store
+	bbit1 1,flippen_key1_data_store
+	rtn
+	
+flippen_commbination_key_press_process:
+	setarg 0
+	store 2,mem_key0_long_press_flag
+	store 2,mem_key0_press_timer_count
+	store 1,mem_send_package_before_check
+	jam 1,mem_combination_key_down_flag
+	branch disable_user
+
+flippen_key_function_disable:
+	setarg 0
+	store 2,mem_key0_long_press_flag
+	store 2,mem_key0_press_timer_count
+	fetch 1,mem_key_disable_timer
+	nrtn blank
+	jam 3,mem_key_disable_timer
+	branch disable_user
+
+flippen_g24_txbuf_clear:
+	arg mem_24g_txbuf,contw 
+	call memset0_16
+	branch memset0_16
+	
+flippen_24g_release_data_from_receiver_enable:
+	jam 1,mem_release_data_from_receiver_enable
+	jam 0,mem_release_data_from_transmiter_enable
+	rtn
+
+flippen_24g_release_data_from_receiver_disable:
+	jam 0,mem_release_data_from_receiver_enable
+	jam 1,mem_release_data_from_transmiter_enable
+	rtn
+
+
+flippen_key0_data_store:
+	fetch 1,mem_key0_long_press_flag
+	nbranch flippen_key0_longpress_data_store,blank
+flippen_key0_shortpress_data_store:
+	call flippen_24g_release_data_from_receiver_enable
+	arg mem_key_pageup_data,regb
+	rtn	
+flippen_key0_longpress_data_store:
+	fetch 1,mem_key0_long_press_flag
+	nrtn blank
+	jam 1,mem_key0_long_press_flag
+	call flippen_24g_release_data_from_receiver_enable
+	fetch 1,mem_key0_long_press_event
+	beq 0,flippen_shift_f5_data_store
+	beq 1,flippen_esc_data_store
+	rtn
+
+flippen_shift_f5_data_store:
+	jam 1,mem_key0_long_press_event
+	arg mem_key_shift_f5_data,regb
+	rtn
+flippen_esc_data_store:
+	jam 0,mem_key0_long_press_event
+	arg mem_key_esc_data,regb
+	rtn
+
+flippen_key1_data_store:
+	fetch 1,mem_key1_long_press_flag
+	nbranch flippen_key1_longpress_data_store,blank
+flippen_key1_shortpress_data_store:	
+	call flippen_24g_release_data_from_receiver_enable
+	arg mem_key_pagedown_data,regb
+	rtn
+flippen_key1_longpress_data_store:
+	fetch 1,mem_key1_long_press_flag
+	nrtn blank
+	call flippen_24g_release_data_from_receiver_enable	
+	jam 1,mem_key1_long_press_flag
+	arg mem_key_b_data,regb
+	rtn
+
+flippen_key_check_once:
+	jam 0,mem_customer_key
+	arg 0,rega
+	fetcht 1,mem_flippen_key0_gpio
+	call gpio_get_bit
+	setflag true,0,rega
+	fetcht 1,mem_flippen_key1_gpio
+	call gpio_get_bit
+	setflag true,1,rega
+	fetcht 1,mem_flippen_key2_gpio
+	call gpio_get_bit
+	setflag true,2,rega
+	fetcht 1,mem_flippen_key3_gpio
+	call gpio_get_bit
+	setflag true,3,rega
+	fetcht 1,mem_flippen_key4_gpio
+	call gpio_get_bit
+	setflag true,4,rega
+	fetcht 1,mem_flippen_key5_gpio
+	call gpio_get_bit
+	setflag true,5,rega
+	fetcht 1,mem_flippen_key6_gpio
+	call gpio_get_bit
+	setflag true,6,rega
+	fetcht 1,mem_flippen_key7_gpio
+	call gpio_get_bit
+	setflag true,7,rega
+	copy rega,pdata
+	call flippen_key_long_press_flag_clear,blank
+	copy rega,pdata
+	rtn
+flippen_key_long_press_flag_clear:
+	fetch 2,mem_key0_long_press_flag
+	rtn blank
+	setarg 0
+	store 2,mem_key0_long_press_flag
+	store 1,mem_24g_calculate_package_id_disable
+	rtn
+
+
+flippen_keyscan_key_process:
+	arg key_scan_timer,queue
+	call timer_check
+	nrtn blank
+	call flippen_key_check
+	setarg 0x10//10ms
+	arg key_scan_timer,queue
+	branch timer_init
+
+flippen_key_check:
+	disable user
+	call flippen_check_key_gpio
+	call flippen_24g_user_check
+	branch flippen_no_data_timer_init,user
+	rtn
+
+flippen_24g_user_check:
+	rtnmark0 mark_24g
+	copy rega,pdata
+	rtn blank
+	branch enable_user
+
+flippen_no_data_timer_init:
+	fetch 2,mem_flippen_no_data_timeout
+	store 2,mem_mouse_no_data_timer
+	rtn
+
+flippen_start_pair_no_data_timer_init:
+	fetch 2,mem_flippen_start_pair_no_data_timeout
+	store 2,mem_mouse_no_data_timer
+	rtn
+
+flippen_check_key_gpio:
+	bpatch patch08_0,mem_patch08
+	fetch 1,mem_customer_key
+	copy pdata,rega
+	call flippen_check_key0_gpio	//pageup
+	call flippen_check_key1_gpio	//pagedown
+	copy rega,pdata
+	store 1,mem_customer_key
+	rtn
+
+flippen_check_key0_gpio:
+	jam PEN_KEY0,mem_mouse_key_temp
+	fetcht 1,mem_flippen_key0_gpio
+	fetch 1,mem_flippen_key0_press_status
+	call flippen_check_key_connect_gnd
+	copy regc,pdata
+	store 1,mem_flippen_key0_press_status
+	copy rega,pdata
+	bbit1 PEN_KEY0,flippen_key_press_setting
+	call flippen_key_release_setting
+	branch mouse_check_customerkey_gpio_exit
+
+flippen_check_key1_gpio:
+	jam PEN_KEY1,mem_mouse_key_temp
+	fetcht 1,mem_flippen_key1_gpio
+	fetch 1,mem_flippen_key1_press_status
+	call flippen_check_key_connect_gnd
+	copy regc,pdata
+	store 1,mem_flippen_key1_press_status
+	copy rega,pdata
+	bbit1 PEN_KEY1,flippen_key_press_setting
+	call flippen_key_release_setting
+	branch mouse_check_customerkey_gpio_exit
+
+flippen_check_key_connect_gnd:	
+	lshift pdata,pdata
+	copy pdata,regb
+	call gpio_get_bit
+	setflag true,0,regb
+	and regb,KEY_PRESS_COUNT,pdata
+	copy pdata,regc
+	fetcht 1,mem_mouse_key_temp
+	copy temp,queue
+	beq KEY_PRESS_COUNT,flippen_key_press_check		
+	beq KEY_PRESS_NONE,flippen_key_release_check
+	rtn	
+
+flippen_key_press_check:
+	fetch 1,mem_mouse_key_temp
+	beq PEN_KEY0,flippen_key0_press_timer_count
+	beq PEN_KEY1,flippen_key1_press_timer_count
+	rtn
+
+flippen_key0_press_timer_count:
+	fetcht 1,mem_key0_press_timer_count
+	increase 1,temp
+	storet 1,mem_key0_press_timer_count
+	arg 60,pdata		// about 600ms
+	isub temp,null
+	nbranch flippen_key0_long_press,positive
+	jam 1,mem_key0_short_press_flag
+	rtn
+
+flippen_key1_press_timer_count:
+	fetcht 1,mem_key1_press_timer_count
+	increase 1,temp
+	storet 1,mem_key1_press_timer_count
+	arg 60,pdata		// about 600ms
+	isub temp,null
+	nbranch flippen_key1_long_press,positive
+	jam 1,mem_key1_short_press_flag
+	rtn
+
+flippen_key0_long_press:
+	fetch 1,mem_key0_long_press_flag
+	nbranch flippen_24g_calculate_package_id_disable,blank	
+	jam 1,mem_key0_long_press_flag	
+	branch mouse_key_press
+
+flippen_key1_long_press:
+	fetch 1,mem_key1_long_press_flag
+	nbranch flippen_24g_calculate_package_id_disable,blank	
+	jam 1,mem_key1_long_press_flag	
+	branch mouse_key_press
+
+flippen_24g_calculate_package_id_disable:
+	jam 1,mem_24g_calculate_package_id_disable
+	rtn
+
+
+flippen_key_release_check:
+	fetch 1,mem_mouse_key_temp
+	beq PEN_KEY0,flippen_key0_release
+	beq PEN_KEY1,flippen_key1_release
+	rtn
+
+flippen_key0_release:
+	arg 0,regc
+	jam 0,mem_key0_long_press_flag
+	fetch 1,mem_key0_press_timer_count
+	branch flippen_key0_release_set,blank
+	jam 0,mem_key0_press_timer_count	
+	fetch 1,mem_key0_long_press_flag
+	nbranch flippen_key0_release_set,blank
+	jam 0,mem_key0_short_press_flag
+	branch mouse_key_press	
+
+flippen_key0_release_set:	
+	jam 0,mem_key0_long_press_flag
+	branch mouse_key_release
+
+flippen_key1_release:
+	arg 0,regc
+	jam 0,mem_key1_long_press_flag
+	fetch 1,mem_key1_press_timer_count
+	branch mouse_key_release,blank
+	jam 0,mem_key1_press_timer_count
+	fetch 1,mem_key1_long_press_flag
+	nbranch flippen_key1_release_set,blank
+	branch mouse_key_press
+
+flippen_key1_release_set:	
+	jam 0,mem_key1_long_press_flag
+	branch mouse_key_release
+
+
+flippen_key_press_setting:
+	fetch 1,mem_customer_data_trigger
+	qset1 pdata
+	store 1,mem_customer_data_trigger
+	call flippen_key_data_need_send
+	branch mouse_check_customerkey_gpio_exit
+
+flippen_key_release_setting:
+	fetch 1,mem_customer_data_trigger
+	qset0 pdata
+	store 1,mem_customer_data_trigger
+
+	fetch 1,mem_customer_data_trigger_last
+	qisolate1 pdata
+	nrtn true
+	jam 0,mem_24g_calculate_package_id_disable
+	call mouse_key_press 
+flippen_key_data_need_send:
+	fetch 1,mem_customer_key
+	qset1 pdata
+	store 1,mem_customer_key
+flippen_calculate_package_id:
+	fetch 1,mem_24g_calculate_package_id_disable
+	nrtn blank
+	jam 0,mem_24g_package_id_abandon_flag
+	fetch 1,mem_24g_package_id
+	increase 1,pdata
+	store 1,mem_24g_package_id
+	rtn
+
+
+flippen_bb_event_timer:
+	call mouse_adc_read
+	//call flippen_low_voltage_led_timer
+	//call flippen_low_voltage_led_blink_start_timer
+	call mouse_led_multi_timer	
+	call flippen_g24_pair_timeout_timer
+	call g24_reconn_timeout_timer
+	call flippen_commbination_key_process
+	call flippen_key_longpress_enter_hibernatet_timer
+	call flippen_key_disable_timer
+	call mouse_store_information_delay_timer
+	branch flippen_check_no_data_timeout_timer
+
+flippen_g24_pair_timeout_timer:
+	arg mem_24g_pair_timeout,regc
+	arg flippen_g24_stop_24g_mode,regb
+	branch timer_single_step_2B
+flippen_g24_stop_24g_mode:
+	call g24_pair_exit
+	branch g24_stop_24g_mode
+
+flippen_commbination_key_process:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_COMMBINATION_KEY_BY_24G_PAIRING
+	fetcht 1,mem_mouse_commbination_key_24g
+flippen_commbination_key_start:
+	storet 1,mem_mouse_commbination_key
+	call flippen_key_check_once
+	fetcht 1,mem_mouse_commbination_key
+	isub temp,null
+	branch flippen_commbination_key_down,zero
+flippen_commbination_key_up:
+	call flippen_key0_press_count_clear,blank
+	branch mouse_commbination_key_up
+flippen_key0_press_count_clear:
+	fetch 1,mem_key0_short_press_flag
+	nrtn blank
+	jam 0,mem_key0_press_timer_count
+	rtn
+
+flippen_commbination_key_down:
+	call flippen_combination_ui_timer
+	branch mouse_commbination_key_down+1
+
+flippen_combination_ui_timer:
+	arg flippen_24g_start_pair_mode_before,regb
+	branch mouse_combination_ui_timer+1
+
+flippen_24g_start_pair_mode_before:
+	jam 1,mem_combination_key_longpress_flag
+	call flippen_start_pair_no_data_timer_init
+flippen_24g_start_pair_mode:
+	jam 1,mem_24g_pair_enable_flag
+	jam 0,mem_24g_no_ack
+	jam 0,mem_24g_reconn_type
+	fetch 1,mem_24g_ch
+	store 1,mem_24g_ch_work
+	branch mouse_24g_start_pair_mode
+
+flippen_key_longpress_enter_hibernatet_timer:
+	call flippen_key_check_once
+	store 1,mem_key_press_state
+	nbranch flippen_combination_key_down_check,blank
+flippen_combination_key_up:
+flippen_combination_key_init:
+	fetch 1,mem_send_package_before_check
+	nbranch flippen_commbination_key_press_process,blank
+	fetch 2,mem_key_longpress_timer_init
+	store 2,mem_key_longpress_timer
+	rtn
+
+flippen_combination_key_down_check:
+	bne 0x01,flippen_check_next_key1
+	branch flippen_key_down_timer_check
+	
+flippen_check_next_key1:
+	bne 0x02,flippen_check_next_key2
+	branch flippen_key_down_timer_check
+	
+flippen_check_next_key2:
+	bne 0x04,flippen_check_next_key3
+	branch flippen_key_down_timer_check
+	
+flippen_check_next_key3:
+	bne 0x08,flippen_check_next_key4
+	branch flippen_key_down_timer_check
+	
+flippen_check_next_key4:
+	bne 0x10,flippen_check_next_key5
+	branch flippen_key_down_timer_check
+	
+flippen_check_next_key5:
+	bne 0x20,flippen_check_next_key6
+	branch flippen_key_down_timer_check
+	
+flippen_check_next_key6:
+	bne 0x40,flippen_check_next_key7
+	branch flippen_key_down_timer_check
+	
+flippen_check_next_key7:
+	bne 0x80,flippen_combination_key_init
+flippen_key_down_timer_check:
+	fetch 1,mem_send_package_before_check
+	nbranch flippen_key_press_judge_next,blank
+	arg mem_key_longpress_timer,regc
+	arg flippen_24g_hibernate_set_before,regb
+	branch timer_single_step_2B
+	
+flippen_24g_hibernate_set_before:
+	jam 1,mem_longpress_24g_enter_hibernate_flag
+	setarg 0
+	store 2,mem_key0_press_timer_count
+flippen_24g_hibernate_set:
+	jam 0,mem_24g_pair_enable_flag
+	jam 0,mem_g24_connected_state
+	jam 0,mem_g24_pairing_stop_flag
+	jam 0,mem_24g_attempt_fail_flag
+	call g24_transmit_next_packet
+	setarg -1
+	store 8,mem_24g_enter_hibernate	
+	call mouse_setgpio_hibernate
+	call twspi_disable
+	branch g24_long_sleep	
+	
+
+flippen_key_disable_timer:
+	arg mem_key_disable_timer,regc
+	arg flippen_key_enable_timer,regb
+	branch timer_single_step
+
+flippen_key_enable_timer:
+	jam 0,mem_combination_key_down_flag
+	jam 0,mem_24g_pair_key_down_flag
+	jam 1,mem_24g_pairing_stop_flag
+	rtn
+
+flippen_check_no_data_timeout_timer:
+	arg mem_mouse_no_data_timer,regc
+	arg flippen_24g_hibernate_set,regb
+	branch timer_single_step_2B
+
+/*
+/////////////////////////////////////////////////////led start//////////////////////////////////////////////////////////
+flippen_low_voltage_led_timer:
+	call flippen_key_check_once
+	rtn blank
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_LOW_VOLTAGE_FLAG
+	jam 1,mem_low_voltage_led_blink_flag
+	rtn
+
+flippen_low_voltage_led_blink_start_timer:
+	arg mem_low_voltage_led_blink_start_timer,regc
+	arg flippen_low_voltage_blink_enable,regb
+	branch timer_single_step
+
+flippen_low_voltage_blink_enable:
+	jam 1,mem_multi_led_blink_count_limited
+	jam 6,mem_multi_led_blink_count//blink 3 timers
+	jam 2,mem_multi_led_blink_timer_init
+	jam 1,mem_low_voltage_led_blink_flag
+flippen_led_blink_enable:
+	jam 1,mem_multi_led_blink_timer
+	jam ON,mem_multi_led_blink_enable
+	jam MULTI_LED_BLINK,mem_multi_led_type
+	rtn
+	
+flippen_multi_led_blink_timer:
+	fetch 1,mem_multi_led_blink_enable
+	rtn blank
+	fetch 1,mem_multi_led_type
+	beq MULTI_LED_BLINK,flippen_multi_led_type_blink
+flippen_multi_led_type_on:
+	call flippen_multi_led_on
+	fetch 1,mem_multi_led_on_timer
+	increase 1,pdata
+	store 1,mem_multi_led_on_timer
+	fetcht 1,mem_multi_led_on_timer_init
+	isub temp,null
+	call flippen_multi_led_off,zero
+	rtn
+
+flippen_multi_led_type_blink:
+	fetch 1,mem_low_voltage_led_blink_flag
+	branch flippen_multi_led_type_blink_timer,blank
+	fetch 1,mem_low_voltage_led_blink_start_timer
+	nrtn blank
+flippen_multi_led_type_blink_timer:
+	arg mem_multi_led_blink_timer,regc
+	arg flippen_multi_led_type_blink_timeout,regb
+	branch timer_single_step
+flippen_multi_led_type_blink_timeout:
+	fetch 1,mem_multi_led_blink_timer_init
+	store 1,mem_multi_led_blink_timer
+	fetch 1,mem_multi_led_blink_count_limited
+	branch flippen_multi_led_blink_count_no_limited,blank
+	fetch 1,mem_multi_led_blink_count
+	branch flippen_multi_led_blink_off,blank
+	increase -1,pdata
+	store 1,mem_multi_led_blink_count
+flippen_multi_led_blink_count_no_limited:
+	fetch 1,mem_mouse_multi_led_state
+	beq ON,flippen_multi_led_off
+flippen_multi_led_on:
+	jam ON,mem_mouse_multi_led_state	
+	fetcht 1,mem_multi_led_gpio
+	branch gpio_out_inactive
+
+
+flippen_discovery_multi_led_blink:
+	jam 0,mem_poweron_led_blink_flag
+	jam 5,mem_multi_led_blink_timer_init	//500ms
+flippen_discovery_multi_led_blink1:	
+	jam 0,mem_multi_led_blink_count_limited
+	jam 1,mem_multi_led_blink_count
+flippen_multi_led_blink_enable:
+	jam 5,mem_multi_led_blink_timer
+	jam ON,mem_multi_led_blink_enable
+	jam MULTI_LED_BLINK,mem_multi_led_type
+	rtn
+
+flippen_discovey_led_blink_off:
+	fetch 1,mem_multi_led_on_timer
+	nrtn blank
+flippen_multi_led_blink_off:
+	setarg 0
+	store 3,mem_multi_led_blink_timer
+	store 1,mem_low_voltage_led_blink_flag
+	call flippen_no_data_timer_init
+flippen_multi_led_off:
+	fetch 1,mem_multi_led_blink_count
+	nbranch flippen_multi_led_off_wait_blink_over,blank
+	jam 0,mem_multi_led_blink_enable
+	jam 0,mem_multi_led_type
+	jam 0,mem_poweron_led_blink_flag
+flippen_multi_led_off_wait_blink_over:
+	jam 0,mem_multi_led_on_timer
+	jam OFF,mem_multi_led_state
+flippen_multi_led_off_end:
+	jam OFF,mem_multi_led_state
+	fetcht 1,mem_multi_led_gpio
+	branch gpio_out_active
+
+/////////////////////////////////////////////////////led end//////////////////////////////////////////////////////////
+*/	
+endif
+

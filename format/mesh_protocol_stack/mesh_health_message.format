@@ -1,0 +1,27 @@
+
+amemalloc mem_mesh_receive_model_message_payload(
+	1 mem_mesh_configuration_health_message_opcode
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	1 mem_mesh_configuration_health_message_opcode_config_model_subscription
+	2 mem_mesh_subscription_element_address
+	2 mem_mesh_subscription_value_address
+	2 mem_mesh_subscription_model_identifier
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	1 mem_mesh_configuration_health_message_opcode_config_model_subscription_ow  //overwrite
+	2 mem_mesh_subscription_element_address_ow
+	1 mem_mesh_subscription_list_num_ow
+	2 mem_mesh_subscription_value_address_start_ow
+)
+
+(
+8 SUBSCRIPTION_MAX_COUNT
+)
+
+(
+20 HEALTH_NODE_RESET_TIMEOUT
+)
+

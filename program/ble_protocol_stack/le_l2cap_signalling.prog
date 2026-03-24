@@ -1,0 +1,54 @@
+
+
+le_parse_signaling:
+	ifetch 1,contr
+	ifetcht 1,contr //id
+	ifetcht 2,contr //length
+	beq L2CAP_CONNECTION_PARAMETER_UPDATE_RESPONSE,le_l2cap_parse_conn_parameter_update_rsp
+	rtn
+le_l2cap_parse_conn_parameter_update_rsp:
+	ifetch 2,contr	//result
+	store 2,mem_le_l2cap_signaling_conn_param_update_rsp_result
+	jam BT_EVT_LE_PARSE_CONN_PAPA_UPDATE_RSP,mem_fifo_temp
+	branch ui_ipc_send_event
+
+
+//mem_le_interval_min:the ptr that connection parameter,
+//include 	ConnIntervalMin,ConnIntervalMax,
+//		ConnSlaveLatency,ConnSupervisionTimeout
+le_l2cap_tx_update_req:
+	arg 0x0c,rega
+	arg L2CAP_CONNECTION_PARAMETER_UPDATE_REQUEST,regc
+	call le_fifo_malloc_tx_l2cap_signaling
+	setarg 0x08
+	istore 2,contw
+	fetch 8,mem_le_interval_min
+	istore 8,contw
+	rtn
+
+
+//rega:len regc:signaling opcode
+le_fifo_malloc_tx_l2cap_signaling:
+	call le_l2cap_update_signaling_identifier
+	arg LE_L2CAP_CID_SIGNAL,regb
+	call le_fifo_malloc_tx_l2cap
+	copy regc,pdata
+	istore 1,contw
+	fetch 1,mem_le_signaling_identifier
+	istore 1,contw
+	rtn
+
+
+le_l2cap_update_signaling_identifier:
+	fetch 1,mem_le_signaling_identifier
+	//beq 0xff,le_l2cap_signaling_identifier_set_1
+	pincrease 1
+	store 1,mem_le_signaling_identifier
+	rtnne 0
+	
+le_l2cap_reset_signaling_identifier:
+	jam 1,mem_le_signaling_identifier
+	rtn
+
+
+

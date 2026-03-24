@@ -1,0 +1,80 @@
+
+xmemalloc g24(
+6 mem_24g_lap
+34 mem_24g_rxbuf
+32 mem_24g_txbuf
+36 mem_24g_txpayload
+32 mem_24g_rxpayload
+1 mem_24g_rxdata_length
+1 mem_24g_pid
+1 mem_24g_no_ack
+3 mem_24g_sta_crc
+3 mem_24g_last_crc
+1 mem_24g_sta_pid
+1 mem_24g_last_pid
+1 mem_24g_datalen
+1 mem_24g_data_type
+1 mem_24g_txlen
+2 mem_24g_rx_window
+1 mem_24g_ch
+1 mem_24g_current_ch_number
+4 mem_24g_addr
+4 mem_24g_ch_map1
+4 mem_24g_ch_map2
+4 mem_24g_ch_map3
+4 mem_24g_ch_map4
+4 mem_24g_tx_btclk
+1 mem_24g_interval
+1 mem_24g_interval_min
+1 mem_24g_interval_max
+2 mem_24g_syncword
+1 mem_24g_syncword_crc8
+1 mem_24g_get_syncword_crc8
+1 mem_24g_pair_switch
+8 mem_24g_enter_hibernate
+
+1 mem_24g_rx_phy
+1 mem_24g_tx_phy
+
+1 mem_24g_ch_map_update
+4 mem_24g_ch_update_map1
+4 mem_24g_ch_update_map2
+4 mem_24g_ch_update_map3
+4 mem_24g_ch_update_map4
+
+1 mem_24g_disable_fec1
+1 mem_24g_off_type
+)
+
+
+xmemalloc g24_tx(
+1 mem_rssi_hex_received
+
+)
+
+
+
+(//mem_24g_data_type
+1 TYPE_MS
+2 TYPE_KB
+0x07 bits_data
+//0-2 data type
+3 bit_abort
+4 bit_hop
+5 bit_sync
+//6-7 channel offset
+)
+
+
+(
+0 ERR_NULL
+1 ERR_SYNC_TO
+2 ERR_HEC
+3 ERR_LR_LEN
+4 ERR_TYPE
+5 ERR_LEN_OVER
+6 ERR_CRC
+)
+
+
+

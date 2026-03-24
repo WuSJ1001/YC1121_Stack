@@ -1,0 +1,549 @@
+(
+	0x8000 core_chipid
+	0x8001 core_revid
+	0x8003 core_kick
+	0x8004 core_write_wdt
+	0x8005 core_lpm_wr
+	0x8006 core_misc_ctrl
+	0x8007 core_otp_rdata
+	0x8007 core_efuse_rdata
+	0x800a core_ccm_ctrl
+	0x800b core_write_wdt2
+	0x8010 core_reset
+	0x8011 core_encrypt
+	0x8012 core_lpm_wr2
+	0x8020 core_set_bistfix
+	0x8022 core_ucode_hi
+	0x8023 core_ucode_ctrl
+	0x8024 core_ucode_low
+	0x8025 core_ucode_data
+
+	0x8040 core_halfslot
+	0x8042 core_clksel
+	0x8043 core_uart_clksel
+	0x8043 core_config
+	0x8044 core_otp_addr
+	0x8046 core_otp_din
+	0x8046 core_otp_ctrl2
+	0x8047 core_otp_ctrl
+	0x8047 core_otp_pab
+	0x8048 core_xtal_stable_time
+	0x8049 core_gpio_ds
+	0x804c core_lpm_reg
+	0x8050 core_clkoff
+	0x8052 core_uart_baud
+	0x8054 core_uart_rsaddr
+	0x8056 core_uart_readdr
+	0x8058 core_uart_rrptr
+	0x805a core_uart_tsaddr
+	0x805c core_uart_teaddr
+	0x805e core_uart_twptr
+	0x8060 core_uart_ctrl
+	0x8061 core_nec_ctrl
+	0x8062 core_nec_start_addr
+	0x8064 core_nec_end_addr
+	0x8066 core_nec_rptr
+	0x8068 core_ccm_input_playload_addr
+	0x806a core_ccm_output_playload_addr
+	0x806c core_ccm_aad0
+	0x806d core_ccm_aad1
+	0x806e core_ccm_aad2
+	0x806f  core_bist_ctrl
+	0x8070 core_gpio_conf
+	0x8080 core_spid_ctrl
+	0x8081 core_spid_delay
+	0x8082 core_spid_txlen
+	0x8084 core_spid_txaddr
+	0x8086 core_spid_rxaddr
+	0x8088 core_spid_rxlen
+	0x808a core_iicd_ctrl
+	0x808b core_iicd_scl_low
+	0x808c core_iicd_scl_high
+	0x808d core_iicd_start_setup
+	0x808e core_iicd_start_hold
+	0x808f core_iicd_stop_setup
+	0x8090 core_iicd_data_setup
+	0x8091 core_iicd_data_hold
+	0x8092 core_iicd_txlen
+	0x8094 core_iicd_txaddr
+	0x8096 core_iicd_rxaddr
+	0x8098 core_iicd_rxlen
+	0x809a core_pwm_en
+	0x809b core_pwm_init
+	0x809c core_pwm_pcnt0
+	0x809e core_pwm_ncnt0
+	0x80a0 core_pwm_pcnt1
+	0x80a2 core_pwm_ncnt1
+	0x80a4 core_pwm_pcnt2
+	0x80a6 core_pwm_ncnt2
+	0x80a8 core_pwm_pcnt3
+	0x80aa core_pwm_ncnt3
+	0x80ac core_pwm_pcnt4
+	0x80ae core_pwm_ncnt4
+	0x80b0 core_pwm_pcnt5
+	0x80b2 core_pwm_ncnt5
+	0x80b4 core_pwm_pcnt6
+	0x80b6 core_pwm_ncnt6
+	0x80b8 core_pwm_pcnt7
+	0x80ba core_pwm_ncnt7
+	0x80bc core_pwm_sync
+	0x80bd core_pwm_timermode
+	0x80be core_pwm_autoload
+	0x80bf core_sum_ctrl
+	0x80c0 core_ccm_inptr
+	0x80c2 core_dac_ctrl	
+	0x80c3 core_dac_vol
+	0x80c4 core_dac_saddr
+	0x80c6 core_dac_len
+	0x80c8 core_dac_coef
+	0x80cb core_ccnt_bit
+	0x80cc core_sadc_ctrl
+	0x80cd core_sadc_clkdiv
+	0x80ce core_sadc_saddr
+	0x80d0 core_sadc_eaddr
+	0x80d2 core_keybuf_saddr
+	0x80d4 core_gpio_conf_hi
+	
+	0x8108 core_misc_status
+	0x8109 core_qdec_cntx
+	0x810a core_watchdog_cnt
+	0x810b core_uart_status
+	0x810c core_uart_rbaud
+	0x810e core_uart_txitems
+	0x8110 core_uart_trptr
+	0x8112 core_uart_rxitems
+	0x8114 core_uart_rdptr
+	0x8116 core_uart_rwptr
+	0x8118 core_debug_baud
+	0x811a core_ccm_outptr
+	0x811c core_gpio_in
+	0x811d core_gpio_in1
+	0x811e core_adc_sum
+	0x8120 core_nec_wptr
+	0x8122 core_current_otp_addr
+	0x8124 core_spid_remain
+	0x8126 core_iicd_remain
+	0x8128 core_dma_status
+	0x8129 core_perf_status
+	0x812a core_adc_in
+	0x812c core_nec_rxitem
+	0x812e core_otpd_remain
+	0x8130 core_lpm_ctrl
+	0x8132 core_lpm_isogate
+	0x8133 core_lpm_ldosel
+	0x8134 core_io_vsel
+	0x8135 core_io_doze_en
+	0x813a core_xtal_cap
+	0x813d core_xtal_ib
+	0x813e core_lpm_xtalcnt
+	0x813f core_lpm_buckcnt
+	0x8140 core_lpm_ldocnt
+	0x8141 core_puwakeup
+	0x8142 core_lpm_sysctl
+	0x8143 core_ucode_flag
+	0x8144 core_peripheral_lock
+	0x8145 core_mpu_s0_saddr
+	0x8147 core_mpu_s0_eaddr
+	0x8149 core_mpu_s1_saddr
+	0x814b core_mpu_s1_eaddr
+	0x814d core_gpio_wakeup_cfg
+	0x8155 core_aes_decode_key_init
+	0x815b core_clk_counter
+	0x815e core_bist_done
+	0x8160 core_bist_fail
+	0x8162 core_dac_rptr	
+	0x8164 core_sadc_data	
+	0x8166 core_rccnt_counter
+		
+	0x8203 core_ice_ctrl
+	0x8204 core_ice_status
+	0x8205 core_ice_break0
+	0x8207 core_ice_break1
+  
+
+	0x8900 modem_en
+	0x8960 core_rf_rx_agc_ctrl
+	0x8961 core_rf_rx_gain_fix
+	0x8968 core_agc_wb_sat_th
+	0x8969 core_agc_nb_sat_th
+	0x89a0 modem_rssi
+	0x89a1 modem_wb_pow
+	0x89a2 modem_nb_pow
+	0x89a3 modem_gain
+	0x89a4 modem_status
+
+	0x8a00 core_bbpll_ctrl0              
+	0x8a01 core_bbpll_ctrl1              
+	0x8a02 core_bbpll_cfg0               
+	0x8a03 core_bbpll_cfg1               
+	0x8a04 core_bbpll_cfg2               
+	0x8a05 core_bbpll_cfg3               
+	0x8a06 core_bbpll_cfg4               
+	0x8a07 core_gpadc_ctrl
+	0x8a08 core_gpadc_cfg0
+	0x8a09 core_gpadc_cfg1
+	0x8a0a core_gpadc_cfg2
+	0x8a0b core_gpadc_cfg3
+	0x8a0c core_gpadc_status
+	0x8a0d core_vtest_ctrl0
+	0x8a0e core_vtest_ctrl1
+	0x8a0f core_ldo_trx_ctrl0
+	0x8a10 core_ldo_trx_ctrl1
+	0x8a11 core_ldo_trx_ctrl2
+	0x8a12 core_ldo_rfpll_ctrl
+    0x8a13 core_ldo_trx_cfg0
+    0x8a14 core_ldo_trx_cfg1
+    0x8a15 core_ldo_trx_cfg2
+    0x8a16 core_ldo_rfpll_mnc_cfg2
+
+    0x8a20 core_rfpll_afc_ctrl0
+    0x8a21 core_rfpll_afc_ctrl1
+    0x8a22 core_rfpll_afc_ctrl2
+    0x8a23 core_rfpll_en_ctrl0
+    0x8a24 core_rfpll_en_ctrl1
+    0x8a25 core_rf_en_ctrl0
+    0x8a26 core_rf_en_ctrl1
+
+	0x8a30 core_rx_force_en_ctrl
+	0x8a31 core_rx_gc_force_val
+	0x8a32 core_rx_lna_isel_force_val
+
+	0x8a40 core_rx_lna_hg_isel_gc7        
+	0x8a41 core_rx_lna_hg_isel_gc6        
+	0x8a42 core_rx_lna_hg_isel_gc5        
+	0x8a43 core_rx_lna_lg_isel_gc4        
+	0x8a44 core_rx_lna_lg_isel_gc3        
+	0x8a45 core_rx_lna_lg_isel_gc2        
+	0x8a46 core_rx_lna_lg_isel_gc1        
+	0x8a47 core_rx_lna_lg_isel_gc0        
+	0x8a48 core_rx_abb_gc_gc8              
+	0x8a49 core_rx_abb_gc_gc7              
+	0x8a4a core_rx_abb_gc_gc6              
+	0x8a4b core_rx_abb_gc_gc5              
+	0x8a4c core_rx_abb_gc_gc4              
+	0x8a4d core_rx_abb_gc_gc3              
+	0x8a4e core_rx_abb_gc_gc2              
+	0x8a4f core_rx_abb_gc_gc1              
+	0x8a50 core_rx_abb_gc_gc0              
+
+	0x8a60 core_tx_ctrl0
+	0x8a61 core_tx_ctrl1
+	0x8a62 core_tx_ctrl2
+	0x8a63 core_tx_ctrl3
+
+	0x8a70 core_rfpll_cal_ctrl0
+	0x8a71 core_rfpll_cal_ctrl1
+	0x8a72 core_rfpll_cal_ctrl2
+	0x8a73 core_rfpll_cal_ctrl3
+	0x8a74 core_rfpll_cal_ctrl4
+	0x8a75 core_rfpll_cal_ctrl5
+	0x8a76 core_rfpll_cal_ctrl6
+	0x8a77 core_rfpll_cal_ctrl7
+	0x8a78 core_rfpll_cal_ctrl8
+	0x8a79 core_rfpll_cal_ctrl9
+	0x8a7a core_rfpll_cal_ctrl10
+	0x8a7b core_rfpll_cal_ctrl11
+	0x8a7c core_rfpll_cal_result0
+	0x8a7d core_rfpll_cal_result1
+	0x8a7e core_rfpll_cal_result2
+
+    0x8a80 core_rfpll_cfg0
+    0x8a81 core_rfpll_cfg1
+    0x8a82 core_rfpll_cfg2
+    0x8a83 core_rfpll_cfg3
+    0x8a84 core_rfpll_cfg4
+    0x8a85 core_rfpll_cfg5
+    0x8a86 core_rfpll_cfg6
+    0x8a87 core_rfpll_cfg7
+
+    0x8a88 core_rx_cfg0
+    0x8a89 core_rx_cfg1
+    0x8a8a core_rx_cfg2
+    0x8a8b core_rx_cfg3
+    0x8a8c core_rx_cfg4
+    0x8a8d core_rx_cfg5
+    0x8a8e core_rx_cfg6
+    0x8a8f core_rx_cfg7
+    0x8a90 core_rx_cfg8
+
+	0x8aa0 core_rx_tiai_dcoc_gc0          
+	0x8aa1 core_rx_tiaq_dcoc_gc0          
+	0x8aa2 core_rx_tiai_dcoc_gc1          
+	0x8aa3 core_rx_tiaq_dcoc_gc1          
+	0x8aa4 core_rx_tiai_dcoc_gc2          
+	0x8aa5 core_rx_tiaq_dcoc_gc2          
+	0x8aa6 core_rx_tiai_dcoc_gc3          
+	0x8aa7 core_rx_tiaq_dcoc_gc3          
+	0x8aa8 core_rx_tiai_dcoc_gc4          
+	0x8aa9 core_rx_tiaq_dcoc_gc4          
+	0x8aaa core_rx_tiai_dcoc_gc5          
+	0x8aab core_rx_tiaq_dcoc_gc5          
+	0x8aac core_rx_tiai_dcoc_gc6          
+	0x8aad core_rx_tiaq_dcoc_gc6          
+	0x8aae core_rx_tiai_dcoc_gc7          
+	0x8aaf core_rx_tiaq_dcoc_gc7          
+	0x8ab0 core_rx_abbi_dcoc_gc0
+	0x8ab1 core_rx_abbq_dcoc_gc0
+	0x8ab2 core_rx_abbi_dcoc_gc1
+	0x8ab3 core_rx_abbq_dcoc_gc1           
+	0x8ab4 core_rx_abbi_dcoc_gc2
+	0x8ab5 core_rx_abbq_dcoc_gc2
+	0x8ab6 core_rx_abbi_dcoc_gc3
+	0x8ab7 core_rx_abbq_dcoc_gc3
+	0x8ab8 core_rx_abbi_dcoc_gc4
+	0x8ab9 core_rx_abbq_dcoc_gc4
+	0x8aba core_rx_abbi_dcoc_gc5
+	0x8abb core_rx_abbq_dcoc_gc5
+	0x8abc core_rx_abbi_dcoc_gc6
+	0x8abd core_rx_abbq_dcoc_gc6
+	0x8abe core_rx_abbi_dcoc_gc7
+	0x8abf core_rx_abbq_dcoc_gc7
+	0x8ac0 core_rx_abbi_dcoc_gc8
+	0x8ac1 core_rx_abbq_dcoc_gc8
+	0x8ac2 core_rx_tiai_dcoc_force
+	0x8ac3 core_rx_tiaq_dcoc_force
+	0x8ac4 core_rx_abbi_dcoc_force
+	0x8ac5 core_rx_abbq_dcoc_force
+	0x8ac8 core_chgpump_ctrl
+
+	0x8c00 core_usb_config
+	0x8c01 core_usb_addr
+	0x8c02 core_usb_rx_saddr
+	0x8c04 core_usb_rx_eaddr
+	0x8c06 core_usb_rxptr
+	0x8c08 core_usb_tx_saddr0
+	0x8c0a core_usb_tx_saddr1
+	0x8c0c core_usb_tx_saddr2
+	0x8c0e core_usb_tx_saddr3
+	0x8c10 core_usb_epmap
+	0x8c11 core_usb_pupd
+	0x8c12 core_usb_hmode
+	0x8c13 core_usb_int_mask
+	0x8c18 core_usb_trig
+	0x8c19 core_usb_stall
+	0x8c1a core_usb_toggle
+	0x8c1b core_usb_clear_nak
+	0x8c20 core_usb_rx_wptr
+	0x8c22 core_usb_status
+	0x8c24 core_usb_stall_status
+	0x8c25 core_usb_txbusy
+	0x8c26 core_usb_sof_cnt
+	0x8c28 core_usb_rxcnt
+
+	
+
+
+
+    
+    
+)
+
+(
+7 AES_EN
+)
+
+(
+4 rx_freq_offset
+2 tx_freq_offset
+)
+
+(
+/* bit difinitions */
+  4 whiteoff_bit
+  6 clksel_rc
+  1 clksel_dpll_24M
+  5 clksel_dpll
+  4 clksel_xtal
+  5 adc_rccal
+  0 bpf_rccal
+  1 demod_clkoff
+)
+
+// retention mem ctrl
+(
+  4 cold_wake
+  5 gpio_latch
+  6 retmem_cs
+  7 isogate
+)
+
+// sys ctrl
+(
+  2 fast_wake
+  3 ice_mode
+  4 reload_code
+)
+
+// lpm_write
+(
+1 lpmreg_sel_counter
+2 lpmreg_sel_scanmode
+)
+
+// lock bits
+(
+0 SPI_LOCK_BIT
+1 PWM_LOCK_BIT
+2 UART_LOCK_BIT
+3 IIC_LOCK_BIT
+4 ADPCM_LOCK_BIT
+5 ROM_LOCK_BIT
+6 OPTION_LOCK
+6 OTP_NOT_LIMIT
+7 OTP_LIMIT
+)
+
+(
+4 LPM_DOZE_EN_BIT	
+)
+
+// misc ctrl
+(
+  0x01 RCCNT_START
+  0x02 SPID_START
+  0x04 IICD_START
+  0x08 OTP_KEY_LOCK
+  0x10 INIT_KEY
+  0x20 SHIFT_KEY
+  0X80 CCNT_START
+)
+// DMA STATUS BIT
+(
+  0 OTPD_CRCOK
+  1 OTPD_DONE
+  2 SPID_CRCOK
+  3 SPID_DONE
+  4 IICD_CRCOK
+  5 IICD_DONE
+  6 IICD_ACK
+)
+
+//bit map of core_uart_status
+(
+1 UART_STATUS_TX_BUSY
+2 UART_STATUS_RX_FIFO_EMPTY
+3 UART_STATUS_RX_FIFO_FULL
+4 UARTB_STATUS_TX_BUSY
+5 UARTB_STATUS_RX_FIFO_EMPTY
+6 UARTB_STATUS_RX_FIFO_FULL
+)
+
+(//core_uart_clksel
+0 UART_CLOCK_SELECT_BIT
+0xFE UART_CLOCK_SELECT_CRYSTAL
+0x01 UART_CLOCK_SELECT_DPLL
+
+24000000 uart_clock_freq_24M
+48000000 uart_clock_freq_48M
+)
+
+
+(//bit map of core_uart_ctrl
+0 BIT_UART_CONTROL_ENABLE
+1 BIT_UART_CONTROL_PARITY
+2 BIT_UART_CONTROL_DATA_LENGTH
+3 BIT_UART_CONTROL_STOP_BIT_SIZE
+4 BIT_UART_CONTROL_FLOW_CONTROL
+5 BIT_UART_CONTROL_7816_SMART_CARD_PROTOCOL
+6 BIT_UART_CONTROL_HALF_DUPLEX_SINGLE_LINE_UART
+7 BIT_UART_CONTROL_RATE_BAUD_SETTING
+)
+(//FUN of core_uart_ctrl
+0x01 FUN_UART_CONTROL_ENABLE
+0x06 FUN_UART_CONTROL_PARITY_ODD
+0x04 FUN_UART_CONTROL_PARITY_EVEN
+0x08 FUN_UART_CONTROL_STOP_2BIT
+0x00 FUN_UART_CONTROL_STOP_1BIT
+0x10 FUN_UART_CONTROL_FLOW_CONTROL_ENABLE
+0x20 FUN_UART_CONTROL_7816_SMART_CARD_PROTOCOL
+0x40 FUN_UART_CONTROL_HALF_DUPLEX_SINGLE_LINE_UART
+0x80 FUN_UART_CONTROL_SETTING_RATE_BAUD
+)
+
+(//bit map of core_nec_control
+0x00 BIT_NEC_ENABLE
+0x01 BIT_NEC_CLK_DIVIDE_NUM
+)
+
+(//FUN  of core_nec_control
+0x01 FUN_NEC_ENABLE
+0x30 FUN_NEC_CLK_DIVIDE_24	//24M , 
+)
+
+0x8b uart_ctrl_default //BCSP
+0x81 uart_ctrl_h4 //H4
+0x81 uart_ctrl_normal
+0x91 uart_ctrl_5line
+0x81 uart_ctrl_57600
+2 uart_baud_len
+0x00 uartclk_crystal
+0x01 uartclk_dpll
+0x1a0 uart_baud_115200
+0xbb uart_baud_256000
+0x340 uart_baud_57600
+0x34 uart_baud_921600
+0x9c4 uart_baud_9600
+
+//core_clkoff
+(
+	0 CLOCK_OFF_AUTH_ROM
+	1 CLOCK_OFF_UC_ROM
+	2 CLOCK_OFF_DEBUG_UART
+	3 CLOCK_OFF_SCHED_RAM
+	4 CLOCK_OFF_TRANCE_FIFO
+	5 CLOCK_OFF_CORDIC
+	6 CLOCK_OFF_OTPD
+	7 CLOCK_OFF_I2C
+	8 CLICK_OFF_SARADC_DMA
+	9 CLOCK_OFF_KEYSCAN
+	0x0a CLOCK_OFF_USB
+	0x0b CLOCK_OFF_QDECODER
+	0x0c CLOCK_OFF_SPI
+	0x0d CLOCK_OFF_PWM
+	0x0e CLOCK_OFF_UARTB
+	0x0f CLOCK_OFF_UART
+)
+
+// gpio config types
+(
+  0 gpcfg_input
+  6 gpcfg_dac_p  
+  7 gpcfg_dac_n
+  8 gpcfg_uart_txd
+  9 gpcfg_uart_rxd
+  10 gpcfg_uart_rts
+  11 gpcfg_uart_cts
+  
+  16 gpcfg_pwm_out0
+  17 gpcfg_pwm_out1
+  18 gpcfg_pwm_out2
+  19 gpcfg_pwm_out3
+  20 gpcfg_pwm_out4
+  21 gpcfg_pwm_out5
+  22 gpcfg_pwm_out6
+  23 gpcfg_pwm_out7
+  24 gpcfg_nec_input
+  
+  31 gpcfg_spid_miso
+  32 gpcfg_spid_ncs
+  33 gpcfg_spid_sck
+  34 gpcfg_spid_mosi
+  35 gpcfg_spid_sdio
+  
+  44 gpcfg_iic_scl
+  45 gpcfg_iic_sda
+  
+  62 gpcfg_output_low
+  63 gpcfg_output_high
+  
+  0x00 gpcfg_high_impedance
+  0x40 gpcfg_pullup
+  0x80 gpcfg_pulldown
+  0xc0 gpcfg_no_ie
+)
+
+(
+16	GPIO_NUMBER
+8	GPIO_NUMBER_EXT
+)
+

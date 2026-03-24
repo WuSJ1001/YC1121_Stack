@@ -1,0 +1,61 @@
+memalloc ali_mesh(
+	1 mem_mesh_lower_transport_layer_payload_len
+
+)
+
+
+
+xmemalloc ali_mesh(
+	//current segmented access message head
+	1 mem_mesh_segmented_access_message_SZMIC
+	2 mem_mesh_segmented_access_message_SeqZero
+	1 mem_mesh_segmented_access_message_SegO
+	1 mem_mesh_segmented_access_message_SegN
+
+	4 mem_mesh_segmented_access_message_BlockAck
+	1 mem_mesh_segmented_access_message_receive_finish
+	1 mem_mesh_segmented_access_message_current_length
+
+	1 mem_mesh_segmented_access_message_SegN_upper_limit
+	2 mem_mesh_segmented_access_message_Segment_ptr
+)
+
+amemalloc mem_mesh_send_access_lower_transport_layer(
+	//proxy configuration messages -----Filter Status message format
+	1 mem_mesh_filter_status_message_opcode
+	1 mem_mesh_filter_status_message_FilterType
+	2 mem_mesh_filter_status_message_ListSize
+	8 mem_mesh_filter_status_message_MIC
+)
+
+amemalloc mem_mesh_send_access_lower_transport_layer(
+	//bit7 is SEQ 0=Unsegment Message
+	//bit6 is AKF
+	//bit5-bit0 is AID
+	1 mem_mesh_unsegmented_access_lower_transport_layer_head
+	11 mem_mesh_unsegmented_access_lower_transport_layer_parameters
+	4 mem_mesh_unsegmented_access_lower_transport_layer_mic
+)
+
+amemalloc mem_mesh_send_access_lower_transport_layer(
+	//bit7 is SEQ 1=segment Message
+	//bit6 is AKF
+	//bit5-bit0 is AID
+	1 mem_mesh_segmented_access_lower_transport_layer_head
+	//bit23 is SZMIC size of transMIC
+	//bit22-bit10 is SeqZero Least significant bits of SeqAuth
+	//bit9-bit5 is SegO Segment offset number
+	//bit4-bit0 is SegN Last Segment number
+	3 mem_mesh_segmented_access_lower_transport_layer_SZMIC_SeqZero_SegO_SegN
+	8 mem_mesh_segmented_access_lower_transport_layer_parameters
+	4 mem_mesh_segmented_access_lower_transport_layer_mic
+)
+
+(
+7 TRANSPORT_HEAD_BIT_SEG
+6 TRANSPORT_HEAD_BIT_AKF
+05 TRANSPORT_HEAD_BIT_AID
+7 BIT_CTL
+)
+
+

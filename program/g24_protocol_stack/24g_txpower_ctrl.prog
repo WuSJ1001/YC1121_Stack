@@ -1,0 +1,97 @@
+
+/****************************g24 transmitter tx power start********************************/
+
+power_ctrl_start:
+	bpatchx patch33_7,mem_patch33
+	fetch 1,mem_power_ctrl_disable
+	nrtn blank
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_ADV
+//	rtnbit1 UI_STATE_BT_RECONNECT
+//	rtnbit1 UI_STATE_BT_DISCOVERY
+	fetchr rega,2,mem_rssi_signal_buf_ptr
+	call rssi_average
+	storet 1,mem_rssi_avg_received
+	fetch 1,mem_rssi_dis_max_24g
+	bmark1 mark_24g,power_ctrl_start_next
+	fetch 1,mem_rssi_dis_max_ble
+power_ctrl_start_next:
+	isub temp,null
+	nbranch power_ctrl_txpower_incrs_force,positive
+	fetch 1,mem_power_ctrl_pac_succ_cnt
+	sub pdata,2,null
+	nbranch power_ctrl_txpower_decrs_check,positive
+	fetch 1,mem_power_ctrl_pac_succ_cnt
+	beq 0,power_ctrl_txpower_incrs
+	rtn
+
+power_ctrl_txpower_decrs_check:
+	fetch 1,mem_power_ctrl_pac_succ_cnt
+	fetcht 1,mem_power_ctrl_pac_succ_cnt_init
+	isub temp,null
+	nrtn zero
+	jam 0,mem_power_ctrl_pac_succ_cnt
+power_ctrl_txpower_decrs:
+	fetcht 1,mem_rssi_avg_received
+	fetch 1,mem_rssi_dis_min_24g
+	bmark1 mark_24g,power_ctrl_txpower_decrs_next
+	fetch 1,mem_rssi_dis_min_ble
+power_ctrl_txpower_decrs_next:	
+	isub temp,null
+	nrtn positive
+	fetch 1,mem_power_ctrl_level
+	beq 0,power_ctrl_decrs_level0
+	increase -1,pdata
+	store 1,mem_power_ctrl_level
+	beq 0,power_ctrl_decrs_level0
+power_ctrl_decrs_level1:
+power_ctrl_incrs_level1:	//0dBm
+	jam TX_POWER_0DB,mem_tx_power
+	rtn
+
+power_ctrl_txpower_incrs_force:
+	jam 0,mem_power_ctrl_pac_succ_cnt
+power_ctrl_txpower_incrs:
+	fetch 1,mem_power_ctrl_level
+	beq 2,power_ctrl_incrs_level2
+	increase 1,pdata
+	store 1,mem_power_ctrl_level
+	beq 1,power_ctrl_incrs_level1
+power_ctrl_incrs_level2:	//+6dBm
+	jam TX_POWER_6DB,mem_tx_power
+	rtn
+	
+power_ctrl_decrs_level0: //-5dBm
+	jam TX_POWER_f5DB,mem_tx_power
+	rtn
+
+power_ctrl_pac_succ_cnt_init:
+	jam 1,mem_power_ctrl_level
+	jam 0,mem_power_ctrl_pac_succ_cnt
+	rtn
+
+power_ctrl_pac_succ_incrs:
+	fetch 1,mem_power_ctrl_pac_succ_cnt
+	increase 1,pdata
+	store 1,mem_power_ctrl_pac_succ_cnt
+	rtn
+
+power_ctrl_pac_succ_decrs:
+	fetch 1,mem_power_ctrl_pac_succ_cnt
+	sub pdata,2,null
+	ncall power_ctrl_pac_succ_cnt_reinit,positive
+	fetch 1,mem_power_ctrl_pac_succ_cnt
+	rtneq 0
+	increase -1,pdata
+	store 1,mem_power_ctrl_pac_succ_cnt
+	rtn
+
+power_ctrl_pac_succ_cnt_reinit:
+	jam 3,mem_power_ctrl_pac_succ_cnt
+	rtn
+
+/****************************g24 transmitter tx power end********************************/
+
+
+
+

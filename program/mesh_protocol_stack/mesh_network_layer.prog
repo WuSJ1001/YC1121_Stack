@@ -1,0 +1,406 @@
+
+/*
+	mesh协议中network layer
+	主要是负责mesh中Network PDU内容合法性和解密
+*/
+
+ali_mesh_receive_adtype_mesh_message:
+	jam MESH_MESSAGE_TMALL,mem_mesh_network_packet_type
+/*
+	mesh中接收到network包处理函数
+*/
+//contr is read ptr
+//input:temp is len
+ali_mesh_network_layer_recevice_network_pdu:
+	sub temp,MESH_NETWORK_PACKET_MIN_LENGTH,null
+	rtn positive	
+	sub temp,MESH_NETWORK_PACKET_MAX_LENGTH,null
+	nrtn positive	
+	bpatchx patch35_7,mem_patch35
+	call ali_mesh_network_store_in_mem
+	call ali_mesh_network_layer_check_dup
+	nrtn user
+	call ali_mesh_network_layer_check_NID_IVI
+	nrtn user
+	call ali_mesh_encrypt_obfuscation_deceypt_recevie_message
+	call ali_mesh_network_layer_check_msg
+	nrtn user
+	call ali_mesh_network_layer_store_proxy_unicast_address
+
+	branch ali_mesh_network_layer_recevice_network_pdu_decrypt_NetMIC32
+
+ali_mesh_network_layer_check_dup:
+	call enable_user
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	arg mem_mesh_message_NID+3,contr
+	iadd contr,contr
+	ifetch 4,contr
+	ifetcht 4,contr
+	ixor temp,temp
+	arg 16,loopcnt
+	arg mem_mesh_network_dup_cache,contr
+ali_mesh_network_layer_check_dup_loop:
+	ifetch 4,contr
+	isub temp,null
+	branch disable_user,zero
+	loop ali_mesh_network_layer_check_dup_loop
+	fetch 1,mem_mesh_network_dup_cache_next
+	pincrease 4
+	arg mem_mesh_network_dup_cache,contw
+	iadd contw,contw
+	istoret 4,contw
+	and pdata,0x3f,pdata
+	store 1,mem_mesh_network_dup_cache_next
+	rtn
+
+ali_mesh_network_layer_check_msg:
+	call enable_user
+	fetcht 5,mem_mesh_message_SEQ
+	arg 16,loopcnt
+	arg mem_mesh_network_msg_cache,contr
+ali_mesh_network_layer_check_msg_loop:
+	ifetch 5,contr
+	isub temp,null
+	branch disable_user,zero
+	loop ali_mesh_network_layer_check_msg_loop
+	fetch 1,mem_mesh_network_msg_cache_next
+	pincrease 1
+	and pdata,0x0f,pdata
+	store 1,mem_mesh_network_msg_cache_next
+	mul32 pdata,5,pdata
+	arg mem_mesh_network_msg_cache,contw
+	iadd contw,contw
+	istoret 5,contw
+	rtn
+
+ali_mesh_network_layer_store_proxy_unicast_address:
+	fetch 1,mem_mesh_network_packet_type
+	rtneq MESH_MESSAGE_TMALL
+	fetch 2,mem_mesh_message_SRC
+	store 2,mem_mesh_network_proxy_unicast_address
+	rtn
+
+	
+//ali_mesh_network_layer_recevice_network_pdu_check_NID:
+//	call ali_mesh_network_layer_check_NID_IVI
+//	nrtn user
+//ali_mesh_network_layer_recevice_network_pdu_deceypt_obfuscation:
+//	call ali_mesh_encrypt_obfuscation_deceypt_recevie_message
+//	//fetch 1,mem_mesh_message_TTL
+//	//rtnbit1 BIT_CTL
+//	fetch 1,mem_mesh_message_TTL
+//	nrtn blank
+ali_mesh_network_layer_recevice_network_pdu_decrypt_NetMIC32:
+	call ali_mesh_network_load_network_nonce_and_EncryptionKey
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	arg mem_mesh_message_DST,temp
+	call ali_CCM_decrypt
+	nrtn zero	//NetMIC error
+
+
+ali_mesh_network_layer_recevice_network_pdu_check_DST:
+	bpatchx patch36_0,mem_patch36
+	fetch 1, mem_mesh_network_packet_type
+	sub pdata, MESH_MESSAGE_PROXY, null
+	call ali_mesh_white_filter_check, zero
+	fetcht 2,mem_mesh_message_DST
+	call ali_mesh_more_element_check_unicast_address		//检查所有子元素的单播地址
+	call ali_mesh_more_found_unicast_address_element,user
+	branch ali_mesh_network_layer_recevice_network_pdu_check_SRC_and_SEQ,user
+	arg 29,loopcnt
+	arg mem_mesh_message_NID_temp,contw
+	arg mem_mesh_message_NID,contr
+	call memcpy
+	call ali_mesh_network_layer_recevice_network_pdu_check_DST_group_address
+	arg 29,loopcnt
+	arg mem_mesh_message_NID_temp,contr
+	arg mem_mesh_message_NID,contw
+	call memcpy
+	fetch 2,mem_mesh_cb_network_relay
+	branch callback_func
+
+ali_mesh_more_found_unicast_address_element:
+	jam 1,mem_mesh_receive_message_count
+	fetch 2,mem_mesh_send_message_SRC
+	store 2,mem_mesh_receive_message_first_unicast_address
+	rtn
+
+ali_mesh_network_layer_recevice_network_pdu_check_DST_group_address:
+	call ali_mesh_more_element_check_group_address		//检查所有子元素的组播地址
+	branch ali_mesh_network_layer_recevice_network_pdu_check_SRC_and_SEQ,user
+	jam 0xff,mem_mesh_receive_group_address
+	setarg GROUP_ADDRESS_0XCFFF_little_endian
+	isub temp,null		//DST==0xCFFF Tmall规定的灯model的组播地址2
+	branch ali_mesh_network_layer_recevice_network_pdu_check_SRC_and_SEQ,zero
+	setarg GROUP_ADDRESS_0XFFFF_little_endian
+	isub temp,null	//DST==0xCFFF Tmall规定的82 01指令的组播地址，在线检测
+	branch ali_mesh_network_layer_recevice_network_pdu_check_SRC_and_SEQ,zero
+	rtn
+
+
+ali_mesh_network_layer_check_NID_IVI:
+	call disable_user
+	fetcht 1,mem_mesh_message_NID
+	rshift4 temp,pdata
+	rshift3 pdata,pdata
+	fetchr rega,1,mem_mesh_IV_Index+3
+	and rega,0x01,rega
+	isub rega,null
+	nrtn zero
+	and temp,0x7f,temp
+	fetch 1,mem_k2_NID
+	isub temp,null
+	nrtn zero		//判断NID是否相等;相等说明是同一个网络的包
+	branch enable_user
+
+
+//检查SRC和SEQ存储cache，是否有当前SRC设备信息
+ali_mesh_network_layer_recevice_network_pdu_check_SRC_and_SEQ:
+	arg mem_mesh_TMALL_cache_start,rega
+	arg CACHE_SPACE_NUM,loopcnt
+ali_mesh_network_layer_raverse_SRC_SEQ_cache:
+	fetcht 2,mem_mesh_message_SRC
+	ifetch 2,rega
+//cache存在空的空间,将SRC、SEQ存储到这个空间
+	branch ali_mesh_network_layer_find_empty_space,blank
+	
+	isub temp,null
+//cache已经存有该SRC的信息，导出SEQ信息
+	branch ali_mesh_network_layer_find_SRC_space,zero
+	increase CACHE_SPACE_SIZE,rega
+	loop ali_mesh_network_layer_raverse_SRC_SEQ_cache
+	arg mem_mesh_TMALL_cache_start,rega
+
+ali_mesh_network_layer_find_empty_space:
+	istoret 2,rega
+ali_mesh_network_layer_find_SRC_space:
+	storet 2,mem_mesh_send_message_DST
+//接收时的SRC是发送时候的DST	
+	add rega,2,regc
+	ifetch 3,regc
+	store 3,mem_mesh_last_message_SEQ
+	branch ali_mesh_network_layer_recevice_network_pdu_check_SEQ_legal
+
+
+//检查SEQ的合法性，过滤重复包
+ali_mesh_network_layer_recevice_network_pdu_check_SEQ_legal:
+//check SEQ
+	call ali_mesh_inverse_SEQ			//高低位交换
+
+	fetch 3,mem_mesh_last_message_SEQ
+	fetcht 3,mem_mesh_message_SEQ
+	isub temp,null
+	rtn positive	//lastMessageSEQ-currMessageSEQ>=0,返回
+	istoret 3,regc	
+	call ali_mesh_inverse_SEQ		//application nonce和Device nonce都需要用到SEQ
+ifdef mesh_debug_log
+	call logging_tx_debug_network_receive_packet
+endif
+	branch ali_mesh_lower_transport_layer_receive_lower_transport_PDU
+
+ali_mesh_inverse_SEQ:
+	arg mem_mesh_message_SEQ,rega
+	arg 3,loopcnt
+	branch inverse_data
+
+
+
+ali_mesh_network_load_network_nonce_and_EncryptionKey:
+	call ali_mesh_network_layer_load_network_nonce
+ali_mesh_upper_transport_layer_load_EncryptionKey:
+	arg mem_k2_EncryptionKey,contr
+	branch load_key
+ali_mesh_network_layer_load_network_nonce:
+	arg mem_mesh_Network_Nonce,contw
+	setarg NETWORK_NONCE
+	istore 1,contw
+	fetch 6,mem_mesh_message_TTL
+	istore 8,contw
+	branch mesh_generate_nonce
+
+
+ali_mesh_network_store_in_mem:
+	add temp,-12,pdata
+	//长度-12的原因
+	//uint8_t AD type:GAP_ADTYPE_MESH_MESSAGE
+	//uint8_t IVI & NID
+	//uint8_t CTL & TTL
+	//uint24_t SEQ
+	//uint16_t SRC
+	//uint32_t MIC
+	//AD_len减去上面内容，是实际DST & Transport PDU的长度
+	//问题:没有考虑MIC长度是64bit 的情况，目前不支持，后期支持需要修改
+	store 1,mem_mesh_message_Transport_NetMIC_length	//len of DST + Transport Pdu, without NetMIC
+	arg 29,loopcnt
+	arg mem_mesh_message_NID,contw
+	call clear_mem
+	add temp,-1,loopcnt
+	arg mem_mesh_message_NID,contw
+	branch memcpy_fast	//mem_le_rxbuf统一copy到mem_mesh_message_NID
+
+ali_mesh_network_layer_relay_access_message: 
+	call ali_mesh_network_layer_init_queue_param
+	call ali_mesh_network_layer_check_relay_states
+	nrtn user
+	call ali_mesh_network_layer_encrypt_relay_package
+	jam ADV_RELAY_MESH_MESSAGE_DURATION,mem_mesh_queue_ele_duration
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	add pdata,13,temp
+	storet 1,mem_mesh_queue_ele_len
+	increase -1,temp
+	istoret 1,contw
+	setarg GAP_ADTYPE_MESH_MESSAGE
+	istore 1,contw
+	add temp,-1,loopcnt
+	fetch 7,mem_mesh_message_NID
+	arg mem_mesh_message_NID,contr
+	call memcpy
+	arg mem_mesh_queue_ele_temp,rega
+	call queue_push
+	call ali_mesh_network_layer_white_list_fliter
+	nrtn user
+	branch ali_mesh_bearer_layer_gatt_send_packet_by_network_layer
+
+/*
+output:
+user = 1, it means white list is matched.The GATT bearer is used to relay. 
+*/
+ali_mesh_network_layer_white_list_fliter:
+	fetcht 2, mem_mesh_message_DST_temp
+ali_mesh_network_layer_white_list_fliter_check:
+	call disable_user
+	fetch 1, mem_mesh_white_list_num
+	rtn blank
+	iforce loopcnt
+	arg mem_mesh_white_list, contr
+ali_mesh_network_layer_white_list_fliter_check_loop:
+	ifetch 2, contr
+	isub temp, null
+	branch enable_user, zero
+	loop ali_mesh_network_layer_white_list_fliter_check_loop
+	rtn	
+
+//output:enable user is mean can relay packet
+ali_mesh_network_layer_check_relay_states:
+	call disable_user
+	fetch 1,mem_mesh_network_packet_type
+	rtneq MESH_MESSAGE_APP	//不relay APP的控制包
+	fetch 2,mem_mesh_core_feature
+	rtnbit1 MESH_FEATURE_DISABLE_RELAY
+	fetch 1,mem_mesh_provisioned_flag
+	rtnne PAIRED_STATUS	
+	fetcht 2,mem_mesh_message_SRC
+	call ali_mesh_more_element_check_unicast_address
+	branch disable_user,user
+	call ali_mesh_network_layer_check_network_mic_cache
+	nrtn user
+	fetch 1,mem_mesh_message_TTL
+	branch disable_user, blank
+	pincrease -1
+	branch disable_user, blank
+	store 1,mem_mesh_message_TTL   //+17
+	setarg mem_mesh_network_relay_queue
+	store 2,mem_queue_ptr
+	branch enable_user
+
+ali_mesh_network_layer_encrypt_relay_package:
+ 	call ali_mesh_network_load_network_nonce_and_EncryptionKey
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	arg mem_mesh_message_DST,temp
+	call ali_CCM_encrypt
+	branch ali_mesh_encrypt_obfuscation_deceypt_recevie_message
+
+
+//user is enable ,mean new packet
+ali_mesh_network_layer_check_network_mic_cache:
+	setarg mem_mesh_transport_message_mic_cache
+	store 2,mem_mesh_mic_cache_ptr
+	branch ali_mesh_base_adt_cache
+
+ifdef mesh_debug_log
+ali_mesh_network_layer_logging_tx_relay_info:
+	arg 2,loopcnt
+	arg mem_mesh_message_DST,rega
+	arg MESH_NETWORK_RELAY_PACKET,regb
+	call logging_tx_info
+	fetchr loopcnt,1,mem_ccm_data_len
+	fetchr rega,2,mem_ccm_data_ptr
+	arg MESH_NETWORK_RELAY_PACKET,regb
+	branch logging_tx_debug
+endif
+
+/*
+	mesh中发送到network layer处理函数
+	不区分Unsegmented access message和Segmented access message
+	统一处理函数接口
+*/
+
+ali_mesh_network_layer_send_access_message:
+	bpatchx patch36_1,mem_patch36
+	call ali_mesh_network_layer_send_access_message_encrypt_NetMIC
+	call ali_mesh_network_layer_send_access_message_encrypt_obfuscation
+	branch ali_mesh_bearer_layer_send_packet_by_network_layer
+
+
+//DST在接收包时，已经写入mem_mesh_unsegmented_lower_transport_layer_DST
+//计算Netwrork MIC的值
+ali_mesh_network_layer_send_access_message_encrypt_NetMIC:
+	fetch 1,mem_mesh_lower_transport_layer_payload_len
+	add pdata,2,rega	//DST size
+	pincrease 4
+	store 1,mem_mesh_lower_transport_layer_payload_len
+	arg mem_mesh_send_upper_layer_DST,temp
+	branch ali_mesh_network_layer_encrypt_by_network_nonce
+
+//********* generate network nonce *********//
+//input:temp is encrypt ptr
+//rega is encrypt length
+ali_mesh_network_layer_encrypt_by_network_nonce:
+	call ali_mesh_network_load_network_nonce_and_EncryptionKey
+	copy rega,pdata
+	branch ali_CCM_encrypt
+
+
+ali_mesh_network_layer_send_access_message_encrypt_obfuscation:
+	branch ali_mesh_encrypt_obfuscation_deceypt_send_message
+
+
+ali_mesh_network_layer_check_gatt_relay_packet:
+	call ali_mesh_network_layer_init_gatt_queue_param
+	call queue_empty
+	rtn blank
+	call le_fifo_check_nearly_full
+	nrtn blank
+	arg mem_mesh_queue_ele_temp,rega
+	call queue_pop
+	nrtn user
+	branch ali_mesh_send_ble_data
+
+
+
+mesh_generate_nonce:
+	fetch 4,mem_mesh_IV_Index
+	istore 4,contw
+	add contw,-13,pdata
+	store 2,mem_nonce_ptr
+	rtn
+
+
+ifdef mesh_debug_log
+logging_tx_debug_network_receive_packet:
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	add pdata,11,loopcnt
+	arg mem_mesh_message_NID,rega
+	arg MESH_NETWORK_RECEIVE_PACKET,regb
+	branch logging_tx_debug
+endif
+
+ali_mesh_network_layer_init_queue_param:
+	setarg mem_mesh_network_relay_queue_each_size
+	store 2,mem_queue_ptr
+	rtn
+
+ali_mesh_network_layer_queue_init:
+	call ali_mesh_network_layer_init_queue_param
+	branch queue_init
+

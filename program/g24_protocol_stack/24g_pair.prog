@@ -1,0 +1,423 @@
+
+
+g24_pair_param_init:
+	bpatchx patch2f_6,mem_patch2f
+	jam 0x4e,mem_24g_pair_ch
+	setarg 0x101520
+	store 3,mem_24g_pair_addr
+	setarg 0x05
+	istore 1,contw
+	rtn
+
+
+
+/****************************g24 pair transmitter start********************************/
+
+g24_pair_timeout_timer:
+	arg mem_24g_pair_timeout,regc
+	arg g24_stop_24g_mode,regb
+	branch timer_single_step_2B
+
+g24_pair_start:
+	set1 mark_24g,mark
+	fetch 1,mem_24g_conn_sm
+	set0 STATE_24G_RECONN,pdata
+	set1 STATE_24G_PAIR,pdata
+	store 1,mem_24g_conn_sm
+	setarg 0
+	store 2,mem_24g_reconn_timeout
+	fetch 2,mem_24g_pair_timeout_init
+	store 2,mem_24g_pair_timeout
+	jam 0,mem_24g_pair_no_ack
+	call g24_pair_sm_reinit
+g24_pair_init_param:
+	jam 0,mem_24g_pid
+	fetch 1,mem_24g_pair_ch
+	store 1,mem_24g_ch
+	fetch 1,mem_24g_pair_tx_power
+	store 1,mem_tx_power
+	fetch 4,mem_24g_pair_addr
+	branch g24_update_addr_and_synccrc8
+
+
+g24_pair_dispatch:
+	bpatchx patch2f_7,mem_patch2f
+	jam DEFAULT_24G_DEVICE,mem_24g_reconn_type
+	fetch 2,mem_24g_pair_count
+	increase 1,pdata
+	store 2,mem_24g_pair_count
+	fetch 1,mem_24g_pair_count
+	and pdata,0xff,pdata
+	nrtn blank
+	fetch 1,mem_24g_pair_sm
+	beq STATE_24G_PAIRING_SUCCESS,g24_pair_exit
+	beq STATE_24G_PAIRING_1,g24_pair_sm_1
+	beq STATE_24G_PAIRING_2,g24_pair_sm_2
+	beq STATE_24G_PAIRING_3,g24_pair_sm_3
+	beq STATE_24G_PAIRING_4,g24_pair_sm_4
+	rtn
+
+g24_pair_sm_1:
+	jam DATATYPE_ATTEMP,mem_24g_txbuf
+	branch g24_pair_sm_prep
+
+g24_pair_sm_2:
+	fetch 1,mem_24g_pair_switch
+	branch g24_pair_sm_2_skip,blank
+	fetch 4,mem_24g_device_addr
+	call g24_update_addr_and_synccrc8	//use transmitter addr
+g24_pair_sm_2_skip:
+	jam DATATYPE_BIND,mem_24g_txbuf	
+	branch g24_pair_sm_prep
+
+g24_pair_sm_3:
+	jam DATATYPE_CONFIG,mem_24g_txbuf	
+	fetch 1,mem_24g_pair_switch
+	branch g24_pair_sm_prep,blank
+	fetch 4,mem_24g_receiver_addr		//prep receiver addr
+	store 4,mem_24g_txbuf+2
+	branch g24_pair_sm_common
+
+g24_pair_sm_4:
+	jam DATATYPE_OK,mem_24g_txbuf
+g24_pair_sm_prep:
+	fetch 4,mem_24g_device_addr
+	store 4,mem_24g_txbuf+2
+g24_pair_sm_common:
+	fetch 1,mem_24g_data_type
+	and_into bits_data,pdata
+	store 1,mem_24g_txbuf+1
+	jam 0,mem_24g_txbuf+6
+	jam 7,mem_24g_datalen
+	call g24_transmit_prep
+	call g24_transmit_receive_ack
+	nrtn sync
+	nrtn user3
+	call g24_txbuf_clear
+	call g24_ackpayload_parse
+	bpatchx patch30_0,mem_patch30
+	fetch 1,mem_24g_pair_sm
+	rtneq STATE_24G_PAIRING_SUCCESS
+	beq STATE_24G_PAIRING_1,g24_pair_sm_1_waiting_ack
+	beq STATE_24G_PAIRING_2,g24_pair_sm_2_waiting_ack
+	beq STATE_24G_PAIRING_3,g24_pair_sm_3_waiting_ack
+	beq STATE_24G_PAIRING_4,g24_pair_sm_4_waiting_ack
+	rtn
+
+g24_pair_sm_reinit:	
+	jam STATE_24G_PAIRING_2,mem_24g_pair_sm
+	fetch 1,mem_24g_pair_switch
+	rtn blank
+	jam STATE_24G_PAIRING_1,mem_24g_pair_sm
+	rtn
+
+g24_pair_sm_1_waiting_ack:
+	jam STATE_24G_PAIRING_2,mem_24g_pair_sm
+	branch g24_transmit_abandon
+	
+g24_pair_sm_2_waiting_ack:
+	fetch 1,mem_24g_pair_switch
+	branch g24_pair_sm_2_waiting_ack_skip,blank
+	fetch 4,mem_24g_rxpayload+2
+	store 4,mem_24g_receiver_addr
+g24_pair_sm_2_waiting_ack_skip:	
+	jam STATE_24G_PAIRING_3,mem_24g_pair_sm
+	branch g24_transmit_abandon
+
+g24_pair_sm_3_waiting_ack:
+	fetch 1,mem_24g_pair_switch
+	branch g24_pair_sm_3_waiting_ack_skip,blank
+	fetch 4,mem_24g_rxpayload+2
+	fetcht 4,mem_24g_device_addr
+	isub temp,null
+	nrtn zero
+g24_pair_sm_3_waiting_ack_skip:	
+	jam STATE_24G_PAIRING_4,mem_24g_pair_sm
+	branch g24_transmit_abandon	
+	
+g24_pair_sm_4_waiting_ack:
+	fetch 1,mem_24g_pair_switch
+	branch g24_pair_sm_4_waiting_ack_skip,blank
+	fetch 4,mem_24g_rxpayload+2
+	fetcht 4,mem_24g_receiver_addr
+	isub temp,null
+	nrtn zero
+g24_pair_sm_4_waiting_ack_skip:	
+	jam STATE_24G_PAIRING_SUCCESS,mem_24g_pair_sm
+	jam BT_EVT_24G_PAIRING_COMPLETE,mem_fifo_temp
+	call ui_ipc_send_event
+	setarg 0
+	store 2,mem_24g_pair_timeout
+	fetch 4,mem_24g_rxpayload+2
+	call g24_update_addr_and_synccrc8
+g24_pair_exit:
+	fetch 1,mem_24g_conn_sm
+	set0 STATE_24G_PAIR,pdata
+	store 1,mem_24g_conn_sm
+	branch g24_transmit_abandon
+
+
+
+
+/****************************g24 pair transmitter end********************************/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/****************************g24 pair receiver start********************************/
+
+
+g24_bind_mode_enable:
+	jam DONGLE_BIND,mem_24g_work_mode
+	jam CLEAR_INIT,mem_24g_mode_init
+	rtn
+
+g24_bind_init:
+	fetch 1,mem_24g_mode_init
+	rtnbit1 DONGLE_BIND
+	set1 DONGLE_BIND,pdata
+	store 1,mem_24g_mode_init
+	setarg 0
+	store 3,mem_24g_device1_bind_step
+	store 1,mem_24g_device1_bind_disable
+	store 1,mem_24g_device2_bind_disable
+	store 4,mem_24g_transmitter_addr
+	jam 1,mem_24g_ackpayload_enable
+	branch g24_pair_init_param
+
+
+g24_bind_ackpayload_prep:
+	jam 1,mem_24g_ackpayload_enable
+	jam 0x08,mem_24g_datalen
+	arg mem_24g_bind_payload,contr
+	arg mem_24g_txbuf,contw
+	branch memcpy8
+
+
+g24_bind_data_process:
+	bpatchx patch30_1,mem_patch30
+	call g24_rx_interrupt_clear
+	call g24_receive_packet
+	nbranch g24_rx_interrupt_clear,user3
+	call g24_bind_data_parse
+	call g24_transmit_ack
+	call g24_bind_device_status_check
+	call dongle_kb_bind_soft_reset
+	fetch 1,mem_24g_pair_switch
+	rtn blank
+	fetch 4,mem_24g_transmitter_addr
+	rtn blank
+	branch g24_update_addr_and_synccrc8
+
+g24_bind_data_error:
+	call g24_rx_interrupt_clear
+	branch g24_end_of_packet
+
+g24_bind_data_parse:
+	jam BIND_MODE_CONTINUE,mem_24g_bind_mode_continue	//about 400ms
+	arg mem_24g_rxbuf,contr
+	arg mem_24g_rxdata_temp,contw
+	call memcpy8
+	bpatchx patch30_2,mem_patch30
+	fetch 1,mem_24g_rxdata_temp+2
+	beq DATATYPE_BIND,g24_bind_first_step	//bind step 1
+	beq DATATYPE_CONFIG,g24_bind_second_step
+	beq DATATYPE_OK,g24_bind_third_step
+	beq DATATYPE_ATTEMP,g24_data_attemp
+	rtn
+
+
+g24_bind_first_step:
+	fetch 1,mem_24g_rxdata_temp+3
+	beq DATATYPE_DEVICE1,g24_bind_first_step_device1
+	beq DATATYPE_DEVICE2,g24_bind_first_step_device2
+	rtn
+
+g24_bind_first_step_device1:
+	fetch 1,mem_24g_device1_bind_disable
+	nrtn blank
+	jam 1,mem_24g_device1_bind_step
+g24_bind_dvc1_payload_cfg:
+	jam DATATYPE_DEVICE1,mem_24g_bind_payload
+g24_bind_payload_cfg:
+	jam 0x80,mem_24g_bind_payload+1
+	fetch 6,mem_24g_lap
+	store 6,mem_24g_bind_payload+2
+	rtn
+
+g24_bind_first_step_device2:
+	fetch 1,mem_24g_device2_bind_disable
+	nrtn blank
+	jam 1,mem_24g_device2_bind_step
+g24_bind_dvc2_payload_cfg:
+	jam DATATYPE_DEVICE2,mem_24g_bind_payload
+	branch g24_bind_payload_cfg
+
+
+g24_bind_second_step:
+	fetch 1,mem_24g_pair_switch
+	branch g24_bind_second_step_skip,blank
+	fetch 4,mem_24g_rxdata_temp+4
+	fetcht 4,mem_24g_lap
+	isub temp,null
+	nrtn zero
+g24_bind_second_step_skip:	
+	fetch 1,mem_24g_rxdata_temp+3
+	beq DATATYPE_DEVICE1,g24_bind_second_step_device1
+	beq DATATYPE_DEVICE2,g24_bind_second_step_device2
+	rtn
+
+g24_bind_second_step_device1:
+	fetch 1,mem_24g_device1_bind_disable
+	nrtn blank
+	fetch 1,mem_24g_device1_bind_step
+	beq 1,g24_bind_dvc1_step_set2
+	rtn
+g24_bind_dvc1_step_set2:
+	jam 2,mem_24g_device1_bind_step
+	fetch 1,mem_24g_pair_switch
+	branch g24_bind_dvc1_payload_cfg,blank
+g24_bind_dvc1_payload_cfg_transmitter_addr:
+	jam DATATYPE_DEVICE1,mem_24g_bind_payload
+g24_bind_payload_cfg_transmitter_addr:
+	jam 0x80,mem_24g_bind_payload+1
+	fetch 4,mem_24g_transmitter_addr
+	store 4,mem_24g_bind_payload+2
+	branch enable_user
+
+g24_bind_second_step_device2:
+	fetch 1,mem_24g_device2_bind_disable
+	nrtn blank
+	fetch 1,mem_24g_device2_bind_step
+	beq 1,g24_bind_dvc2_step_set2
+	rtn
+g24_bind_dvc2_step_set2:
+	jam 2,mem_24g_device2_bind_step
+	fetch 1,mem_24g_pair_switch
+	branch g24_bind_dvc2_payload_cfg,blank	
+	jam DATATYPE_DEVICE2,mem_24g_bind_payload
+	branch g24_bind_payload_cfg_transmitter_addr
+
+
+g24_bind_third_step:
+	fetch 1,mem_24g_pair_switch
+	branch g24_bind_third_step_skip,blank
+	fetch 4,mem_24g_rxdata_temp+4
+	fetcht 4,mem_24g_transmitter_addr
+	isub temp,null
+	nrtn zero
+g24_bind_third_step_skip:
+	fetch 1,mem_24g_rxdata_temp+3
+	beq DATATYPE_DEVICE1,g24_bind_third_step_device1
+	beq DATATYPE_DEVICE2,g24_bind_third_step_device2
+	rtn
+
+g24_bind_third_step_device1:
+	fetch 1,mem_24g_device1_bind_disable
+	nrtn blank
+	fetch 1,mem_24g_device1_bind_step
+	beq 2,g24_bind_dvc1_step_success
+	rtn
+g24_bind_dvc1_step_success:
+	jam 1,mem_24g_device1_bind_disable
+	//call g24_binding_dvc1_living	//works on auto pair only
+	call g24_bind_dvc1_payload_cfg
+	fetch 1,mem_24g_bind_device_status
+	or_into 0x01,pdata
+	store 1,mem_24g_bind_device_status
+g24_bind_exit:
+	setarg 0
+	store 2,mem_24g_device1_bind_step
+	rtn
+	
+g24_bind_third_step_device2:
+	fetch 1,mem_24g_device2_bind_disable
+	nrtn blank
+	fetch 1,mem_24g_device2_bind_step
+	bne 0,g24_bind_dvc2_step_success
+	rtn
+g24_bind_dvc2_step_success:
+	jam 1,mem_24g_device2_bind_disable
+	//call g24_binding_dvc2_living	//works on auto pair only
+	call g24_bind_dvc2_payload_cfg
+	fetch 1,mem_24g_bind_device_status
+	or_into 0x02,pdata
+	store 1,mem_24g_bind_device_status
+	call g24_bind_exit
+	branch dongle_g24_store_dvc2_bind_flag
+
+g24_binding_device_check:	//works on auto pair
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_BIND
+	fetch 1,mem_24g_pair_mode
+	nrtn blank
+	fetch 1,mem_24g_rxbuf+3
+	beq DATATYPE_DEVICE1,g24_binding_dvc1_status	//bit0
+	beq DATATYPE_DEVICE2,g24_binding_dvc2_status	//bit1
+	rtn
+g24_binding_dvc1_status:
+	fetch 1,mem_24g_bind_device_living
+	rtnbit0 0
+disable_user3:
+	disable user3
+	rtn 
+g24_binding_dvc2_status:
+	fetch 1,mem_24g_bind_device_living
+	rtnbit0 1
+	branch disable_user3
+
+g24_binding_dvc1_living:
+	fetch 1,mem_24g_pair_mode
+	nrtn blank
+	fetch 1,mem_24g_bind_device_living
+	or_into 0x01,pdata
+	store 1,mem_24g_bind_device_living
+	rtn
+
+g24_binding_dvc2_living:
+	fetch 1,mem_24g_pair_mode
+	nrtn blank
+	fetch 1,mem_24g_bind_device_living
+	or_into 0x02,pdata
+	store 1,mem_24g_bind_device_living
+	rtn
+
+
+g24_bind_device_status_check:
+	fetch 1,mem_24g_bind_device_status
+	rtn blank
+g24_bind_device_status:
+	fetch 1,mem_24g_rxdata_temp+3
+	beq DATATYPE_DEVICE1,g24_binding_dvc1_living
+	beq DATATYPE_DEVICE2,g24_binding_dvc2_living
+	rtn
+
+
+
+/****************************g24 pair receiver end********************************/
+
+
+
+
+
+
+
+
+
+
+
+
+

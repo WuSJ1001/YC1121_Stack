@@ -1,0 +1,50 @@
+
+memalloc ali_mesh(
+	0 mem_mesh_Proxy_Nonce
+	1 mem_mesh_Proxy_Nonce_Nonce_Type
+	1 mem_mesh_Proxy_Nonce_Pad
+	3 mem_mesh_Proxy_Nonce_SEQ
+	2 mem_mesh_Proxy_Nonce_SRC
+	2 mem_mesh_Proxy_Nonce_Pad2
+	4 mem_mesh_Proxy_Nonce_IV_Index
+
+	16 mem_mesh_white_list
+	2 mem_mesh_white_list_num
+	1 mem_mesh_addressed_filter_type
+)
+
+
+xmemalloc ali_mesh_element(
+	196 mem_mesh_le_att_list
+	3 mem_mesh_send_message_SEQ_temp
+	
+)
+
+(
+0x00 MESH_PROXY_SERVICE_DATA_ID_TYPE_NETWORK_ID
+0x01 MESH_PROXY_SERVICE_DATA_ID_TYPE_NODE_IDENTITY
+)
+
+(
+0x00 MESH_PROXY_MESSAGE_TYPE_NETWORK_PDU
+0x01 MESH_PROXY_MESSAGE_TYPE_MESH_BEACON
+0x02 MESH_PROXY_MESSAGE_TYPE_PROXY_CONFIGURATION
+0x03 MESH_PROXY_MESSAGE_TYPE_PROVISIONING_PDU
+)
+
+(
+0x0e	MESH_PROXY_DATA_IN_HANDLE
+0x10	MESH_PROXY_DATA_OUT_HANDLE
+0x11	MESH_PROXY_ENABLE_DATA_OUT_HANDLE
+0x14	MESH_PROVISIONING_DATA_IN_HANDLE
+0x16	MESH_PROVISIONING_DATA_OUT_HANDLE
+0x17	MESH_PROVISIONING_ENABLE_DATA_OUT_HANDLE
+)
+
+(
+0x00 PROXY_OPCODE_SET_FILTER_TYPE
+0x01 PROXY_OPCODE_ADD_ADDR_TO_FILTER
+0x02 PROXY_OPCODE_REMOVE_ADDR_TO_FILTER
+0x03 PROXY_OPCODE_FILTER_STATUS
+)
+

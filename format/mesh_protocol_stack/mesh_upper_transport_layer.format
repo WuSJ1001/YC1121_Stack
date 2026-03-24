@@ -1,0 +1,172 @@
+
+memalloc ali_mesh(
+	2 mem_mesh_upper_transport_layer_payload_ptr
+	1 mem_mesh_segmented_upper_transport_layer_payload_len
+	2 mem_mesh_segmented_lower_transport_layer_SegZero
+	1 mem_mesh_segmented_lower_transport_layer_SegO
+	1 mem_mesh_segmented_lower_transport_layer_SegN
+	1 mem_mesh_segmented_last_packet_upper_teansport_payload_len
+
+	0 mem_mesh_upper_tran_layer_queue_temp
+	1 mem_mesh_upper_tran_layer_temp_packet_flag
+	2 mem_mesh_upper_tran_layer_temp_packet_transmit_delay
+	1 mem_mesh_upper_tran_layer_temp_packet_TID
+	1 mem_mesh_upper_tran_layer_temp_packet_header_IVI_NID
+	1 mem_mesh_upper_tran_layer_temp_packet_header_CTL_TTL
+	3 mem_mesh_upper_tran_layer_temp_packet_header_SEQ
+	2 mem_mesh_upper_tran_layer_temp_packet_header_SRC
+	2 mem_mesh_upper_tran_layer_temp_packet_header_DST
+	1 mem_mesh_upper_tran_layer_temp_packet_length
+	108 mem_mesh_upper_tran_layer_temp_packet_payload
+
+
+	64 mem_mesh_network_dup_cache
+	80 mem_mesh_network_msg_cache
+
+	1 mem_mesh_network_relay_gatt_queue_each_size
+	1 mem_mesh_network_relay_gatt_queue_length
+	1 mem_mesh_network_relay_gatt_queue_current_num
+	1 mem_mesh_network_relay_gatt_queue_read_ptr
+	1 mem_mesh_network_relay_gatt_queue_write_ptr
+	340 mem_mesh_network_relay_gatt_queue_ele
+
+	
+
+	
+
+)
+
+xmemalloc ali_mesh(
+	16 mem_mesh_application_key
+	1 mem_mesh_ASZMIC
+
+	0 mem_mesh_access_message_mic_cache
+	4 mem_mesh_access_message_mic_cache_buff1
+	36 mem_mesh_access_message_mic_cache_buff2_10
+
+	3 mem_mesh_send_message_SEQ
+
+	2 mem_mesh_send_message_SRC
+
+	1 mem_mesh_send_message_TTL
+
+	//Upper transport access PDU
+	1 mem_mesh_send_upper_layer_IVI_and_NID
+	1 mem_mesh_send_upper_layer_CTL_and_TTL
+	3 mem_mesh_send_upper_layer_SEQ
+	2 mem_mesh_send_upper_layer_SRC
+	2 mem_mesh_send_upper_layer_DST
+	16 mem_mesh_send_access_lower_transport_layer
+	4 mem_mesh_send_network_layer_NetMIC
+
+	1 mem_mesh_upper_tran_layer_packet_advertising
+	1 mem_mesh_upper_tran_layer_packet_tid
+	1 mem_mesh_upper_tran_layer_packet_type
+
+	1 mem_mesh_upper_receive_new_message_timer
+
+	1 mem_mesh_upper_tran_layer_queue_each_size
+	1 mem_mesh_upper_tran_layer_queue_length
+	1 mem_mesh_upper_tran_layer_queue_current_num
+	1 mem_mesh_upper_tran_layer_queue_read_ptr
+	1 mem_mesh_upper_tran_layer_queue_write_ptr
+	40 mem_mesh_upper_tran_layer_queue_element_1
+	40 mem_mesh_upper_tran_layer_queue_element_2
+	40 mem_mesh_upper_tran_layer_queue_element_3
+	40 mem_mesh_upper_tran_layer_queue_element_4
+
+	1 mem_mesh_queue_each_size
+	1 mem_mesh_queue_length
+	1 mem_mesh_queue_current_num
+	1 mem_mesh_queue_read_ptr
+	1 mem_mesh_queue_write_ptr
+	136 mem_mesh_queue_ele
+
+)
+
+
+amemalloc mem_mesh_nonce_struct(
+	//application payload encryption
+	0 mem_mesh_Application_Nonce
+	1 mem_mesh_Application_Nonce_Nonce_Type
+	//bit7 is ASZMIC
+	1 mem_mesh_Application_Nonce_ASZMIC_and_Pad	//
+	3 mem_mesh_Application_Nonce_SEQ
+	2 mem_mesh_Application_Nonce_SRC
+	2 mem_mesh_Application_Nonce_DST
+	4 mem_mesh_Application_Nonce_IV_Index
+)
+
+amemalloc mem_mesh_nonce_struct(
+	//application payload encryption
+	0 mem_mesh_Device_Nonce
+	1 mem_mesh_Device_Nonce_Nonce_Type
+	1 mem_mesh_Device_Nonce_ASZMIC_and_Pad	//
+	3 mem_mesh_Device_Nonce_SEQ
+	2 mem_mesh_Device_Nonce_SRC
+	2 mem_mesh_Device_Nonce_DST
+	4 mem_mesh_Device_Nonce_IV_Index
+)
+
+amemalloc mem_mesh_access_layer_payload_len(
+	1 mem_mesh_upper_transport_layer_payload_len
+)
+
+amemalloc mem_mesh_upper_tran_layer_temp_packet_payload(
+//unsegment access message
+	0 mem_mesh_upper_tran_layer_temp_pakcet_AKF_AID
+	1 mem_mesh_upper_tran_layer_temp_unsegmented_pakcet_AKF_AID
+	4 mem_mesh_upper_tran_layer_temp_unsegmented_packet_fill
+	0 mem_mesh_upper_tran_layer_temp_pakcet_upper_tran_access_pdu
+	15 mem_mesh_upper_tran_layer_temp_unsegmented_pakcet_upper_tran_access_pdu
+)
+
+amemalloc mem_mesh_upper_tran_layer_temp_packet_payload(
+//segment access message
+	1 mem_mesh_upper_tran_layer_temp_segmented_pakcet_AKF_AID
+	2 mem_mesh_upper_tran_layer_temp_segmented_pakcet_SeqZero
+	1 mem_mesh_upper_tran_layer_temp_segmented_pakcet_SegO
+	1 mem_mesh_upper_tran_layer_temp_segmented_pakcet_SegN
+	104 mem_mesh_upper_tran_layer_temp_segmented_pakcet_upper_tran_access_pdu
+)
+
+
+
+(
+15 UNSEGMENTED_ACCESS_MESSAGE_MAX_UPPER_TRANSPORT_ACCESS_PDU_LEN
+12 SEGMENTED_ACCESS_MESSAGE_UNINT_PDU_LEN
+)
+
+(//bit of mem_mesh_upper_tran_layer_temp_packet_flag
+7 BIT_UPPER_FLAG_PROXY_CONTROL
+6 BIT_UPPER_FLAG_APP_CONTROL
+5 BIT_UPPER_FLAG_VENDOR_INDICATION
+4 BIT_UPPER_FLAG_RETRANSMIT
+//BIT3-0
+0x0f DATA_UPPER_FLAG_MAX_RETRY_COUNT
+
+1 UPPER_RETRY_COUNT_STATUS
+1 UPPER_RETRY_COUNT_INDICATION
+)
+
+(
+0 NULL_PACKET_ADVERTISING
+1 PACKET_IN_BEARER
+2 PACKET_IN_ADVERTING
+3 PACKET_RECEIVE_INDICATION
+)
+
+(
+1 UPPER_TRAN_TMALL_MESSAGE
+2 UPPER_TRAN_APP_MESSAGE
+3 UPPER_TRAN_TMALL_AND_APP
+
+0 BIT_UPPER_TRAN_TMALL_MESSAGE
+1 BIT_UPPER_TRAN_APP_MESSAGE
+2 BIT_UUPER_TRAN_PROXY_MESSAGE
+)
+
+(
+30 MESH_RECEIVE_NEW_MESSAGE_TIMER
+)
+

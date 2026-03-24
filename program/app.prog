@@ -1,0 +1,331 @@
+app_init:
+	bpatch patch16_1,mem_patch16
+	fetch 1,mem_device_option
+	branch app_init,blank				/* wait ram to be initialized */
+	beq DVC_OP_DONGLE,dongle_init
+	beq DVC_OP_SHUTTER,shutter_init
+	beq DVC_OP_MODULE,module_init
+	beq DVC_OP_CAR,car_init
+	beq DVC_OP_SHUTTER_DY,shutter_dy_init
+	beq DVC_OP_REMOTE_CAR,remote_car_init
+	beq DVC_OP_KEYBOARD,keyboard_init
+	beq DVC_OP_HCI_BOOT,hci_init
+//	beq DVC_OP_TEST,test_init
+	beq DVC_OP_MOUSE,mouse_init
+	beq DVC_OP_MESH,ali_mesh_init
+	rtn
+
+
+app_param_init:
+	rtn wake
+	call adc_init_data
+	fetch 1,mem_device_option
+	beq DVC_OP_SHUTTER,shutter_default_init
+	beq DVC_OP_SHUTTER_DY,shutter_default_init
+	beq DVC_OP_DONGLE,dongle_default_init
+	beq DVC_OP_MOUSE,mouse_default_init
+	beq DVC_OP_KEYBOARD,mouse_default_parm_init
+	beq DVC_OP_REMOTE_CAR,remote_car_default_init
+	rtn
+	
+app_process_idle:
+	call ui_dispatch
+	call check_51cmd
+	call app_process_bb_event
+	fetch 2,mem_cb_idle_process
+	branch callback_func
+
+app_process_ble:
+	fetch 2,mem_cb_le_process
+	branch callback_func
+
+app_process_bb_event:
+	bpatch patch16_2,mem_patch16
+	//return if c51 need to process bb event
+	arg mem_ipc_fifo_bt2c51,rega
+	call fifo_out
+	rtn blank
+	//reaching here mains c51 cannot get bb event.
+	copy pdata,regc
+	call app_event_normal_process
+	branch app_process_bb_event_priority
+	
+app_discard_event:
+	arg 0,regc
+	rtn
+
+//************************************************//
+//*APP BB EVENT NORMAL PROCESS**//
+//************************************************//
+app_event_normal_process:
+	beq BT_EVT_BUTTON_LONG_PRESSED,app_evt_button_long_pressed
+	beq BT_EVT_LE_CONNECTED,app_le_event_bb_connected
+	beq BT_EVT_LE_DISCONNECTED,app_le_event_bb_disconn
+	rtn
+
+
+
+app_process_bb_event_priority:
+	fetch 2,mem_cb_bb_event_process
+	branch callback_func
+	
+app_check_wake_lock:
+	fetch 2,mem_cb_check_wakelock
+	branch callback_func
+	
+app_will_enter_lpm:
+	fetch 2,mem_cb_before_lpm
+	branch callback_func
+
+app_le_event_bb_connected:
+	fetch 2,mem_ui_state_map
+	set1 UI_STATE_BLE_CONNECTED,pdata
+	store 2,mem_ui_state_map
+	rtn
+	
+app_le_event_bb_disconn:
+	jam 0,mem_le_l2cap_att_states
+	fetch 2,mem_ui_state_map
+	set0 UI_STATE_BLE_CONNECTED,pdata
+	store 2,mem_ui_state_map
+	branch app_lpm_mult_disable
+	
+
+app_evt_button_long_pressed:
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	set1 APP_DISC_BY_BUTTON,pdata
+	store APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	rtn
+	
+
+app_evt_timer:
+	store 1,mem_app_evt_timer_count
+app_evt_100ms_loop:
+	bpatch patch16_3,mem_patch16
+	fetch 1,mem_app_evt_timer_count
+	rtn blank
+	increase -1,pdata
+	store 1,mem_app_evt_timer_count
+	call ui_button_polling
+	call app_lpm_wake_auto_lock_timer
+	call flash_write_spi_sm_timer
+	fetch 2,mem_cb_event_timer
+	call callback_func
+	branch app_evt_100ms_loop
+
+
+//regc:timer addr
+//regb:timer up call back fuction
+timer_single_step:
+	ifetch 1,regc
+	rtn blank
+	pincrease -1
+	istore 1,regc
+	nrtn blank
+	copy regb,pdata
+	branch callback_func
+
+//regc:timer addr
+//regb:timer up call back fuction
+timer_single_step_2B:
+	ifetch 2,regc
+	rtn blank
+	pincrease -1
+	istore 2,regc
+	nrtn blank
+	copy regb,pdata
+	branch callback_func
+	
+app_power_timer:
+	fetcht 2,mem_power_param_ptr
+	add temp,power_timer_offset,regc
+	arg app_power_timer_timeout,regb
+	branch timer_single_step
+	
+app_power_timer_timeout:
+	call app_got_power_state_common
+	beq POWER_STARTING,app_enter_power_stanby_state
+app_enter_power_off_state:
+	branch app_enter_hibernate
+app_enter_power_stanby_state:
+	setarg POWER_STANDBY
+	istore 1,regc
+	add temp,power_standby_cb_offset,regb
+app_power_cb_common:
+	ifetch 2,regb
+	branch callback_func
+
+
+app_bb_hibernate:
+	call app_disconn_reason_clear
+	branch app_enter_hibernate
+
+	
+app_disconn_reason_clear:
+	setarg 0
+	store APP_DISC_RSN_SIZE,mem_app_disconn_reason
+	rtn
+app_disconn_reason_flag_clear:
+	setarg 0
+	store APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	rtn
+
+
+	
+app_disconn_reason_collect_ble:
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	set1 APP_DISC_BLE,pdata
+	store APP_DISC_RSN_SIZE,mem_app_disconn_reason
+	setarg 0
+	store APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	rtn
+
+	
+//************************************************//
+//********APP SHARED FUNCSIONS*******//
+//************************************************//
+
+
+app_get_lpm_wake_lock:
+	arg wake_lock_app,queue
+	branch lpm_get_wake_lock
+
+app_put_lpm_wake_lock:
+	arg wake_lock_app,queue
+	branch lpm_put_wake_lock
+	
+app_lpm_wake_auto_lock:
+	jam  LPM_WAKE_UP_DELAY_TIMER,mem_wake_up_delay_timer
+	branch app_get_lpm_wake_lock
+	
+app_lpm_wake_auto_lock_timer:
+	arg mem_wake_up_delay_timer,regc
+	arg app_put_lpm_wake_lock,regb
+	branch timer_single_step
+
+
+app_ble_start_direct_adv:
+	jam BT_CMD_START_DIRECT_ADV,mem_fifo_temp
+	branch ui_ipc_send_cmd
+
+app_ble_stop_direct_adv:
+	jam BT_CMD_STOP_DIRECT_ADV,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_ble_stop_adv:
+	jam BT_CMD_STOP_ADV,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_ble_start_adv:	
+	jam BT_CMD_START_ADV,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_ble_start_scan:
+	jam BT_CMD_LE_START_SCAN,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_ble_stop_scan:
+	jam BT_CMD_LE_STOP_SCAN,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_ble_start_conn:
+	jam BT_CMD_LE_START_CONN,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_ble_disconnect:
+	jam BT_CMD_LE_DISCONNECT,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_led_start_blink:	
+	jam BT_CMD_LED_BLINK,mem_fifo_temp
+	branch ui_ipc_send_cmd
+
+app_led_on:
+	jam BT_CMD_LED_ON,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_led_stop_blink:
+app_led_off:
+	jam BT_CMD_LED_OFF,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+app_enter_hibernate:
+	jam BT_CMD_ENTER_HIBERNATE,mem_fifo_temp 
+	branch ui_ipc_send_cmd
+	
+
+app_ble_store_reconn_info:
+	jam BT_CMD_STORE_RECONN_INFO_LE,mem_fifo_temp
+	branch ui_ipc_send_cmd
+
+
+app_lpm_mult_enable:
+	set1 mark_lpm_mult_enable,mark
+	rtn
+
+app_lpm_mult_disable:
+	set0 mark_lpm_mult_enable,mark
+	rtn
+
+
+/*
+
+mem_power_param struct
+{
+	usigned char     mem_power_state
+	usigned char     mem_power_timer
+	usigned char	 mem_power_off_timeout
+	usigned char	 mem_power_starting_timeout
+	usigned long	 mem_power_off_cb
+	usigned long	 mem_power_starting_cb
+	usigned long	 mem_power_standby_cb
+	usigned long 	 mem_ui_butten_up_cb
+}
+    	functions:power state switching by mem_app_power_timer timeout or by button_long_pressed event
+    	(power off -> power starting->power standby->power off) and power timer initialization 
+ input parameters:mem_power_param_ptr should be point to the variable(mem_power_param) address where the input parameters stored in with its format
+output parameters:switched power state will be stored in variable mem_power_state*/
+app_button_long_pressed:
+	call app_got_power_state_common
+	beq POWER_STANDBY,app_power_shutting_down
+app_power_starting:
+	setarg POWER_STARTING
+	istore 1,regc
+	add temp,power_starting_timeout_offset,rega
+	add temp,power_starting_cb_offset,regb
+app_power_common:
+	ifetcht 1,rega
+	increase 1,regc
+	istoret 1,regc
+	branch app_power_cb_common
+	
+app_power_shutting_down:
+	setarg POWER_OFF
+	istore 1,regc
+	fetch 2,mem_ui_state_map
+	bbit0 UI_STATE_BLE_CONNECTED,app_power_off_end
+	call le_send_terminate_ind_user_terminated
+	call app_ble_disconnect
+app_power_off_end:
+	fetcht 2,mem_power_param_ptr
+	add temp,power_off_timeout_offset,rega
+	add temp,power_off_cb_offset,regb
+	branch app_power_common
+	
+app_got_power_state_common:
+	fetcht 2,mem_power_param_ptr
+	add temp,power_state_offset,regc
+	ifetch 1,regc
+	rtn
+
+app_event_button_up:
+	call app_got_power_state_common
+	bne POWER_OFF,app_power_release
+	branch app_enter_hibernate
+app_power_release:
+	add temp,ui_butten_up_cb_offset,regb
+	branch app_power_cb_common
+
+
+
+

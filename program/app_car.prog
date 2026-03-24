@@ -1,0 +1,991 @@
+ifdef COMPILE_CAR
+
+define CAR_TEST_FUNCTION
+
+car_init:
+	call enable_authrom
+	rtn wake
+	setarg car_g24_receive_process
+	store 2,mem_cb_24g_receive_process
+	
+	setarg g24_bind_ackpayload_prep
+	store 2,mem_cb_24g_ackpayload
+	
+	setarg car_g24_cb_data_device1
+	store 2,mem_cb_24g_data_device1
+
+	setarg car_le_before_hibernate
+	store 2,mem_cb_before_hibernate
+	
+	setarg car_le_process_lpm_before
+	store 2,mem_cb_before_lpm	
+		
+	setarg car_scale_process_idle	
+	store 2,mem_cb_idle_process	
+	
+	setarg car_scale_process_bb_event 
+	store 2,mem_cb_bb_event_process	
+	
+	setarg app_get_lpm_wake_lock
+	store 2,mem_cb_check_wakelock
+	
+	setarg car_le_receive_data
+	store 2,mem_cb_att_write
+	
+	setarg car_le_bb_event_timer
+	store 2,mem_cb_event_timer
+	
+	bpatch patch05_6,mem_patch05
+	call car_init_environment
+	call car_lpm_timer_enable
+	call queue_init
+	jam 2,mem_lpm_mult
+	jam POWER_ON,mem_car_24g_received_pac
+	fetch 1,mem_car_config_soft_switch_enable
+	store 1,mem_car_hard_soft_switch
+	beq HARD_SWITCH, car_hard_switch_power_on_signal
+	fetch 1,mem_car_config_soft_switch_gpio
+	store 1,mem_ui_button_gpio
+	jam OFF,mem_le_adv_enable
+car_soft_switch_power_on_init:
+	call ui_button_init
+	call ui_button_polling
+	jam POWER_STARTING,mem_car_power_state
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BTN_DOWN
+ 	branch app_enter_hibernate
+ 	
+
+car_power_off_signal:	
+	branch car_ui_led_init
+	
+car_hard_switch_power_on_signal:
+	jam POWER_STANDBY,mem_car_power_state
+car_soft_switch_power_on_signal:
+	jam ON,mem_le_adv_enable
+	setarg FAST_ADV_INTERVAL_VALUE_CAR
+	call shutter_ble_adv_interval_set
+car_le_modified_name_adv:
+	arg mem_le_name+7,contw
+	fetch 1,mem_le_lap
+car_name_loop:
+	and pdata,0xF0,temp
+	rshift4 temp,temp
+	call car_hex_to_ascii
+	istoret 1, contw
+	and pdata,0x0F,temp
+	call car_hex_to_ascii
+	istoret 1, contw
+	call le_modified_name_att_list
+	fetcht 1,mem_le_name_len
+	copy temp,loopcnt
+	arg mem_le_adv_data+2,contw
+	arg mem_le_name,contr
+	call memcpy
+car_le_modified_name_scan:
+	fetcht 1,mem_le_name_len
+	copy temp,loopcnt
+	arg mem_le_scan_data+2,contw
+	arg mem_le_name,contr
+	branch memcpy
+car_hex_to_ascii:
+	sub temp,9,null
+	branch car_hex_num,positive
+	add temp,55,temp
+	rtn
+car_hex_num:	
+	add temp,48,temp
+	rtn
+
+car_ui_led_init:
+	fetch 1,mem_car_config_blood_led1_gpio
+	bne INVALID_PIN_NUM,car_blood_led_gpio_set
+car_ui_led_init_1:
+	fetch 1,mem_car_config_pairing_led_gpio
+	bne INVALID_PIN_NUM,car_pairing_led_gpio_set
+car_ui_led_init_2:
+	fetch 1,mem_car_config_low_voltage_led_gpio
+	bne INVALID_PIN_NUM,car_low_voltage_led_gpio_set
+car_ui_led_init_3:
+	fetch 1, mem_car_led_num
+	copy pdata,loopcnt
+	setarg mem_car_led_map
+	copy pdata,rega
+car_in_lp1:
+	copy rega,contr
+	ifetch 1,contr
+	copy contr,rega
+	beq INVALID_PIN_NUM,car_in_lp1_end
+	copy pdata,temp
+	call gpio_config_output
+car_in_lp1_end:
+	loop car_in_lp1
+car_ui_led_init_end:
+	rtn
+car_blood_led_gpio_set:
+	fetch 8,mem_car_config_blood_led1_gpio
+	store 8,mem_car_led_map+2
+	branch car_ui_led_init_1
+car_pairing_led_gpio_set:
+	store 1,mem_car_led_map
+	branch car_ui_led_init_2
+car_low_voltage_led_gpio_set:
+	store 1,mem_car_led_map+1
+	branch car_ui_led_init_3
+
+car_init_environment:
+	
+	call car_g24_init
+	call car_g24_load_commom_addr
+	arg 0,rega
+	call pwm_init
+	call car_ui_led_init
+	call car_start_blink
+	call car_init_adc_hvin
+	branch car_motor_init
+car_read_otp_addr:
+        rtn
+car_motor_init:
+	fetch 1, mem_car_motor_gpio_num
+	copy pdata,loopcnt
+	setarg mem_car_motor_gpio_map
+	copy pdata,rega
+p_in_lp1:
+	copy rega,contr
+	ifetch 1,contr
+	copy contr,rega
+	beq INVALID_PIN_NUM,p_in_lp1_end
+	copy pdata,temp
+	store 1, mem_car_gpio
+	call car_ui_gpio_init
+p_in_lp1_end:
+	loop p_in_lp1
+p_car_ui_led_init_end:
+	rtn
+
+car_ui_gpio_init:
+	fetch 1,mem_car_gpio
+	rtneq UI_BUTTON_GPIO_DISABLE
+	iforce temp
+	branch gpio_config_output
+
+	
+car_init_adc_hvin:
+	jam 100,mem_car_notify_vdd_value_last
+	rtn
+	
+car_le_before_hibernate:
+	call car_gpio_set_before_hibernate
+	call clear_wake
+car_le_process_lpm_before:
+	branch keyscan_process_lpm_before
+
+car_gpio_set_before_hibernate:
+	call check_51cmd_led_off
+car_gpio_set_before_lpm_common:
+	arg GPIO_NUMBER,loopcnt
+	arg core_gpio_conf,contr
+car_setgpio_loop:
+	copy contr,contw
+	ifetch 1,contr
+	beq gpcfg_spid_miso,car_setgpio_pullup
+	beq gpcfg_spid_ncs,car_setgpio_pullup
+	beq gpcfg_spid_sck,car_setgpio_pullup
+	beq gpcfg_spid_mosi,car_setgpio_pullup
+	beq gpcfg_spid_sdio,car_setgpio_pullup
+	beq gpcfg_iic_scl,car_setgpio_pullup
+	beq gpcfg_iic_sda,car_setgpio_pullup
+	beq gpcfg_input,car_setgpio_pullup
+car_setgpio_loop_end:
+	loop car_setgpio_loop
+	arg core_gpio_conf_hi+GPIO_NUMBER_EXT,pdata
+	isub contr,null
+	branch car_motor_setgpio,zero
+car_setgpio_loop_ext:
+	arg GPIO_NUMBER_EXT,loopcnt
+	arg core_gpio_conf_hi,contr
+	branch car_setgpio_loop
+
+car_setgpio_pullup:
+	setarg gpcfg_pullup
+	istore 1,contw
+	branch car_setgpio_loop_end
+car_setgpio_pulldown:
+	setarg gpcfg_pulldown
+	istore 1,contw	
+	branch car_setgpio_loop_end
+car_motor_setgpio:	
+	fetch 1,mem_car_motor_gpio_num
+	copy pdata,loopcnt
+	arg mem_car_motor_gpio_map,contr
+car_motor_setgpio_loop:
+	ifetch 1,contr
+	set1 7,pdata
+	arg gpcfg_output_low,temp
+	call gpio_config_function
+	loop car_motor_setgpio_loop
+	rtn
+	 
+car_key_scan_process:
+	branch keyscan_key_process
+
+car_scale_process_idle:
+	call car_le_send_packet
+	call car_g24_status_process
+	branch car_key_scan_process
+
+car_g24_status_process:
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_CONNECTED
+	fetch 1,mem_car_24g_received_pac
+	beq WORK_PAIRED,car_g24_connected_event
+	rtn
+car_g24_connected_event:
+	fetch 1,mem_car_24g_status
+	rtneq WORK_PAIRED
+	jam WORK_PAIRED,mem_car_24g_status
+	call car_lpm_timer_disable
+	call car_stop_blink
+	branch car_g24_connected
+
+car_lpm_timer_enable:
+	fetch 2,mem_car_enter_lpm_timer_count	
+	store 2,mem_car_enter_lpm_timer
+	jam 0,mem_car_enter_lpm_flag
+	rtn
+
+	
+car_lpm_timer_disable:
+	setarg 0
+	branch car_lpm_timer_enable+1
+
+
+car_stop_blink:
+	arg 0,rega
+	branch ui_led_blink_stop_global
+	
+	
+car_start_blink:
+	arg 0,rega
+	branch ui_led_blink_start_global
+	
+
+
+
+
+car_le_send_packet:
+	fetch 2,mem_ui_state_map
+	rtnbit0 UI_STATE_BLE_CONNECTED
+	call le_fifo_check_nearly_full
+	nrtn blank
+	arg mem_car_pop_queue_buff,rega
+	call queue_pop
+	nrtn user
+	arg mem_car_pop_queue_buff,contr
+	branch le_send_notify_from_list
+ 
+car_scale_process_bb_event:
+	copy regc,pdata
+	beq BT_EVT_BUTTON_UP,app_event_button_up
+	beq BT_EVT_BUTTON_LONG_PRESSED,app_button_long_pressed
+	beq BT_EVT_LE_CONNECTED,car_scale_event_le_conn
+	beq BT_EVT_LE_DISCONNECTED,car_scale_event_le_discon
+	rtn
+
+car_scale_event_le_conn:
+	call car_lpm_timer_disable
+	call car_stop_blink
+	set0 mark_24g_rxmode,mark
+	branch car_scale_process_conn
+car_g24_connected:
+	fetch 2,mem_car_24g_no_data_timeout_count
+	store 2,mem_car_24g_no_data_timeout_timer
+car_scale_process_conn:
+	jam 0x14,mem_car_notify_vdd_timer
+	jam 0,mem_lpm_mode
+	call app_ble_stop_adv
+	branch app_lpm_mult_enable
+
+
+car_scale_event_le_discon:
+	set1 mark_24g_rxmode,mark
+	call car_lpm_timer_enable
+	call car_fb_motor_stop
+	call car_lr_motor_stop
+car_g24_disconnect:
+	setarg 0
+	store 5,mem_car_led_control
+	/*setarg 4
+	call pwm_disable
+	setarg 5
+	call pwm_disable
+	setarg 20
+	call pwm_disable
+	setarg 21
+	call pwm_disable
+	setarg 22
+	call pwm_disable
+	setarg 7
+	call pwm_disable*/
+	call queue_init
+	jam 10,mem_motor1_speed
+	jam 10,mem_motor2_speed
+	jam 10,mem_motor3_speed
+//	jam 1,mem_lpm_mode
+	jam 2,mem_lpm_mult
+	setarg FAST_ADV_INTERVAL_VALUE_CAR
+	call shutter_ble_adv_interval_set
+	branch app_ble_start_adv
+
+car_le_bb_event_timer:
+	call car_moto1_blank_data_timer
+	call car_moto2_blank_data_timer
+	call car_moto3_blank_data_timer
+	//call app_power_timer
+	//call car_notify_vdd_timer
+	call car_24g_no_data_timeout_timer
+	branch car_24g_bind_enable_timer
+	//branch car_enter_lpm_timer
+
+car_24g_bind_enable_timer:
+	arg mem_car_24g_bind_enable_delay_count,regc
+	arg 0,regb
+	branch timer_single_step
+
+car_enter_lpm_timer:
+	arg mem_car_enter_lpm_timer,regc
+	arg car_enter_lpm_enable,regb
+	branch timer_single_step_2B
+car_enter_lpm_enable:
+	jam 1,mem_car_enter_lpm_flag
+	rtn
+	
+car_24g_no_data_timeout_timer:
+	arg mem_car_24g_no_data_timeout_timer,regc
+	arg car_24g_no_data_timer_timeout,regb
+	branch timer_single_step_2B
+car_24g_no_data_timer_timeout:
+	jam WORK_SEARCH,mem_car_24g_status
+	jam POWER_ON,mem_car_24g_received_pac
+	branch car_g24_disconnect
+
+car_notify_vdd_timer:
+	fetch 1,mem_car_config_bat_notify_enable
+	rtn blank
+	arg mem_car_notify_vdd_timer,regc
+	arg car_notify_vdd,regb
+	branch timer_single_step
+car_notify_vdd:
+	fetch 1,mem_car_notify_vdd_count
+	store 1,mem_car_notify_vdd_timer
+ 	fetch 1,mem_car_working_flag
+ 	nrtn blank
+car_read_hvin:
+	call vdd_calculate_by_mode
+	store 2,mem_vdd_now_vol
+	arg mem_vdd_calculate_set,rega
+	call adc_bat_percent_lowpower_out
+	fetcht 1,mem_car_notify_vdd_value_last
+	isub temp,null
+	branch car_notify_vdd_next2,positive
+	store 1,mem_car_notify_vdd_value_last
+	copy pdata,temp
+car_notify_vdd_next2:
+	storet 1,mem_car_notify_vdd_percent
+	fetch 1,mem_car_config_low_voltage_percent
+	isub temp,null
+	call car_enter_low_bat,positive
+	storet 1,mem_notify_bat_payload 
+	arg 6,loopcnt
+	arg mem_notify_bat_head,contr
+	call calc_check_sum_start
+	store 1,mem_notify_bat_check_sum
+	arg mem_notify_bat_packet,rega
+	branch queue_push
+car_enter_low_bat:
+	fetch 1,mem_low_bat_flag
+	nrtn blank
+	jam 1,mem_low_bat_flag
+	arg 1,rega
+	branch ui_led_blink_start_global
+car_low_bat_led_off:
+	arg 1,rega
+	branch ui_led_blink_stop_global
+
+////////////////////////check sum////////////////////////
+//loopcnt = sum number,contr = ptr
+calc_check_sum_start:
+	arg 0,rega
+calc_check_sum_loop:
+	ifetch 1,contr
+	iadd rega,rega
+	loop calc_check_sum_loop
+calc_check_sum_and:
+	and rega,0xff,pdata
+	rtn
+
+car_le_receive_data:	
+	fetch 1,mem_le_att_opcode
+	beq ATTOP_WRITE_REQUEST,car_le_parse_att_write_request
+	rtn
+car_le_parse_att_write_request:
+	fetch 2,mem_le_att_handle
+	beq ATT_CAR_CONTROL_HANDLE,car_control_le_receive
+	rtn
+
+/*
+*	typedef struct
+*	{
+*		2byte	packet_head				(mem_app_receive_temp)
+*		1byte	packet_cmd				(mem_app_receive_temp+2)
+*		2byte	packet_payload_length	(mem_app_receive_temp+3)
+*		10byte	packet_payload			(mem_app_receive_temp+5)
+*		1byte	packet_check_sum		(mem_app_receive_temp+15)
+*	}
+*/
+le_app_receive_data:
+	bpatch patch05_7,mem_patch05
+	ifetch 5,rega
+	store 5,mem_app_receive_temp
+	fetch 2,mem_app_receive_temp
+	arg LE_RECEIVE_PACKET_HEAD,temp
+	isub temp,null
+	nrtn zero
+	fetch 2,mem_app_receive_temp+3
+	byteswap pdata,pdata
+	store 2,mem_app_receive_temp+3
+	copy pdata,loopcnt
+	increase 5,rega
+	copy rega,contr
+	arg mem_app_receive_temp+5,contw
+	call memcpy
+	ifetch 1,contr
+	store 1,mem_app_receive_temp+15
+	arg mem_app_receive_temp+2,rega
+	arg mem_app_receive_temp+5,regb
+	rtn
+
+car_control_le_receive:
+	setarg 0
+	store 5,mem_le_receive_payload
+	store 5,mem_le_receive_payload+5
+	call le_app_receive_data
+	copy regb,contr
+	arg mem_le_receive_payload,contw
+	arg 10,loopcnt
+	call memcpy
+car_receive_cmd_select:
+	bpatch patch06_0,mem_patch06
+	ifetch 1,rega
+	beq CAR_CMD_OLD_CAR_CONTROL,car_drive_old
+	beq CAR_CMD_OLD_SPEED_CONTROL,car_speed_set_old
+	beq CAR_CMD_L_R_MOTOR_CONTROL,car_motor_control
+	beq CAR_CMD_F_B_MOTOR_CONTROL,car_motor_control
+	beq CAR_CMD_IR_CONTROL,car_ir_data_rx_from_app
+	beq CAR_CMD_LED_CONTROL,car_led_control_receive
+	beq CAR_CMD_DEVICE_INFO,car_info_request
+	rtn
+
+car_24g_receive_data:
+	call car_control_le_receive
+	fetch 1,mem_app_receive_temp+2	//cmd
+	beq CAR_CMD_L_R_MOTOR_CONTROL,car_24g_receive_data_next
+	beq CAR_CMD_F_B_MOTOR_CONTROL,car_24g_receive_data_next
+	rtn
+car_24g_receive_data_next:
+	fetch 1,mem_le_receive_payload	//moto1
+	ncall car_moto1_enable_blank_data_timer,blank
+	fetch 1,mem_le_receive_payload+2	//moto2
+	ncall car_moto2_enable_blank_data_timer,blank
+	fetch 1,mem_le_receive_payload+4	//moto3
+	ncall car_moto3_enable_blank_data_timer,blank
+	rtn
+
+car_moto1_enable_blank_data_timer:
+	jam 5,mem_car_moto1_blank_timer
+	rtn
+car_moto2_enable_blank_data_timer:
+	jam 5,mem_car_moto2_blank_timer
+	rtn
+car_moto3_enable_blank_data_timer:
+	jam 5,mem_car_moto3_blank_timer
+	rtn
+
+car_moto1_blank_data_timer:
+	arg mem_car_moto1_blank_timer,regc
+	arg car_moto1_blank_data,regb
+	branch timer_single_step
+car_moto2_blank_data_timer:	
+	arg mem_car_moto2_blank_timer,regc
+	arg car_moto2_blank_data,regb
+	branch timer_single_step
+car_moto3_blank_data_timer:		
+	arg mem_car_moto3_blank_timer,regc
+	arg car_moto3_blank_data,regb
+	branch timer_single_step
+
+car_moto1_blank_data:
+	jam 0,mem_le_receive_payload
+	branch car_motor_control
+car_moto2_blank_data:
+	jam 0,mem_le_receive_payload+2
+	branch car_motor_control
+car_moto3_blank_data:
+	jam 0,mem_le_receive_payload+4
+	branch car_motor_control
+	
+	
+///////////////////////Motor//////////////////////////////////////////
+
+car_drive_old:	
+	fetch 1,mem_le_receive_payload
+	store 1,mem_motor1_status
+	fetch 1,mem_le_receive_payload+1
+	store 1,mem_motor2_status
+	branch car_motor_control_common
+
+
+	
+car_left_right_control_old:
+	fetch 1,mem_le_receive_payload
+	store 1,mem_motor2_status
+	branch car_motor2_control
+car_front_back_control_old:
+	fetch 1,mem_motor1_speed
+	call car_reset_old_speed
+	fetch 1,mem_le_receive_payload+1
+	store 1,mem_motor1_status
+	branch car_motor1_control
+car_reset_old_speed:
+	beq SPEED_LEVEL_2,car_reset_old_speed2
+	beq SPEED_LEVEL_3,car_reset_old_speed3
+	store 1,mem_motor1_speed
+	rtn
+car_reset_old_speed2:
+	jam SPEED_LEVEL_5,mem_motor1_speed
+	rtn
+car_reset_old_speed3:
+	jam SPEED_LEVEL_10,mem_motor1_speed
+	rtn
+car_speed_set_old:
+	fetch 1,mem_le_receive_payload
+	call car_reset_old_speed
+	fetch 1,mem_motor1_speed
+	call car_motor_speed_duty_setting
+	call car_motor_speed_duty_transform
+	jam 0x00,mem_pdatatemp+1	//pwm channel0
+	branch pwm_duty_cycle_set
+
+car_motor_control:
+	fetch 1,mem_car_24g_go_die_flag
+	nrtn blank
+	fetch 6,mem_le_receive_payload
+	store 6,mem_motor1_status
+	fetch 1,mem_motor1_speed
+	fetcht 1,mem_motor2_speed
+	iand temp,pdata
+	fetcht 1,mem_motor3_speed
+	iand temp,pdata
+	call car_motor_working_flag,blank	
+car_motor_control_common:
+	bpatch patch06_1,mem_patch06
+	fetch 2,mem_ui_state_map
+	isolate1 UI_STATE_BLE_CONNECTED,pdata
+	ncall car_lpm_timer_enable,true
+	call car_motor1_control
+	call car_motor2_control
+	branch car_conn_led_state
+
+car_conn_led_state:
+	fetch 1,mem_motor1_status
+	fetcht 1,mem_motor2_status
+	iadd temp,pdata
+	nbranch check_51cmd_led_on,blank
+	branch check_51cmd_led_off	
+
+car_motor1_control:
+	arg mem_motor1_status,contr
+	branch car_motor1_status_select
+car_motor2_control:
+	arg mem_motor2_status,contr
+	branch car_motor2_status_select
+car_motor3_control:
+	arg mem_motor3_status,contr
+	branch car_motor_status_select
+car_motor_working_flag:
+	jam 0,mem_car_working_flag
+	rtn
+
+car_motor1_status_select:
+	ifetch 1,contr
+	beq TURN_FRONT,car_lr_motor_stop
+	beq TURN_LEFT,car_lr_motor_left
+	beq TURN_RIGHT,car_lr_motor_right
+	rtn
+car_motor2_status_select:
+	ifetch 1,contr
+	beq MOTOR_STOP,car_fb_motor_stop
+	beq GO_BACK,car_fb_motor_front
+	beq GO_FRONT,car_fb_motor_back
+	rtn
+
+car_lr_motor_stop:
+	fetcht 1,mem_car_motor_left_gpio
+	call gpio_out_inactive
+	fetcht 1,mem_car_motor_right_gpio
+	branch gpio_out_inactive
+car_lr_motor_left:
+	fetcht 1,mem_car_motor_left_gpio
+	call gpio_out_active
+	fetcht 1,mem_car_motor_right_gpio
+	branch gpio_out_inactive
+car_lr_motor_right:
+	fetcht 1,mem_car_motor_left_gpio
+	call gpio_out_inactive
+	fetcht 1,mem_car_motor_right_gpio
+	branch gpio_out_active
+car_fb_motor_stop:
+	fetcht 1,mem_car_motor_front_gpio
+	call gpio_out_inactive
+	fetcht 1,mem_car_motor_back_gpio
+	branch gpio_out_inactive
+car_fb_motor_front:
+	fetcht 1,mem_car_motor_front_gpio
+	call gpio_out_active
+	fetcht 1,mem_car_motor_back_gpio
+	branch gpio_out_inactive
+car_fb_motor_back:
+	fetcht 1,mem_car_motor_front_gpio
+	call gpio_out_inactive
+	fetcht 1,mem_car_motor_back_gpio
+	branch gpio_out_active
+
+	
+
+
+car_motor_status_select:
+	bpatch patch06_2,mem_patch06
+	ifetch 1,contr
+	beq MOTOR_STOP,car_motor_stop
+	beq GO_FRONT,car_motor_positive
+	beq GO_BACK,car_motor_negative
+	rtn
+car_motor_positive:
+	jam 0,mem_motor_select_p_n
+	branch car_motor_negative+1
+car_motor_negative:
+	jam 1,mem_motor_select_p_n
+	ifetch 1,contr
+	store 1,mem_car_motor_speed
+	ifetch 8,regb
+	branch car_motor_work
+
+car_motor_stop:
+	ifetch 1,regb
+	call pwm_disable
+	increase 1,regb
+	ifetch 1,regb
+	branch pwm_disable
+car_motor_work:
+	store 8,mem_motor_pwm_pin1_set
+	jam 1,mem_car_working_flag
+	fetch 1,mem_motor_select_p_n
+	beq 0,car_motor_select_positive
+car_motor_select_negative:
+	fetch 1,mem_motor_pwm_pin2_set
+	store 1,mem_motor_pwm_pin_set
+	fetch 1,mem_motor_pwm_pin1_set
+car_motor_work_next:
+	call pwm_disable
+	fetch 1,mem_car_motor_speed
+	call car_motor_speed_duty_setting
+	store 1,mem_motor_pwm_dute_set
+	fetch 6,mem_motor_pwm_pin_set
+	store 6,mem_pdatatemp
+	branch pwm_out_set
+car_motor_select_positive:
+	fetch 1,mem_motor_pwm_pin1_set
+	store 1,mem_motor_pwm_pin_set
+	fetch 1,mem_motor_pwm_pin2_set
+	branch car_motor_work_next
+
+car_motor_speed_duty_setting:
+	mul32 pdata,5,pdata
+	add pdata,50,pdata
+	rtn
+car_motor_speed_duty_transform:
+	arg 12000,temp
+	imul32 temp,pdata
+	div pdata,100
+	call wait_div_end
+	quotient temp
+	copy temp,rega
+	setarg 12000
+	isub temp,regb
+	rtn
+
+car_ir_data_rx_from_app:
+	rtn
+
+car_led_control_receive:
+	fetch 8,mem_le_receive_payload
+	store 8,mem_car_led_control
+	rtn
+
+car_info_request:
+	fetch 1,mem_car_config_device_select
+	store 1,mem_car_info_request_payload
+	fetch 1,mem_car_config_motor_layout
+	store 1,mem_car_info_request_payload+1
+	fetch 1,mem_car_config_ir_enable
+	store 1,mem_car_info_request_payload+2
+	arg 13,loopcnt
+	arg mem_car_info_request_head,contr
+	call calc_check_sum_start
+	store 1,mem_car_info_request_checksum
+	arg mem_car_info_request,rega
+	branch queue_push
+
+
+/************************************G24 CAR RX FUNC START**************************************/
+car_g24_init:
+	setarg 0
+	store 8,mem_24g_bind_payload
+	call g24_receive_init
+	branch g24_mode_switch_init
+
+car_g24_receive_process:
+	call car_g24_mode_switch
+	call car_g24_work_mode
+	call car_g24_bind_mode
+	branch car_g24_lpm_dipatch
+
+car_g24_mode_switch:
+	call g24_mode_switch_bind_work
+car_g24_bind_mode_enable:
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_BIND
+	fetch 1,mem_car_24g_bind_enable_delay_count	//after power on 10s,enable bind
+	nbranch g24_switch_work_mode,blank
+	fetch 1,mem_car_24g_status	//after paired,disable bind mode
+	beq WORK_SEARCH,g24_switch_work_mode
+	rtn
+
+car_g24_work_mode:
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_WORK
+	call car_g24_work_mode_start
+	branch car_g24_ch_polling_clear,user3
+car_g24_receive_ch_polling:
+	fetch 1,mem_car_enter_lpm_flag
+	rtn blank
+	fetch 1,mem_car_24g_ch_polling
+	increase 1,pdata
+	store 1,mem_car_24g_ch_polling
+	beq 4,car_g24_ch_polling_clear
+	call g24_ch
+	call car_g24_receive_packet_start
+	nbranch car_g24_receive_ch_polling,user3
+car_g24_ch_polling_clear:
+	jam 0,mem_car_24g_ch_polling
+	rtn
+car_g24_work_mode_start:
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_WORK
+	call car_g24_work_init
+	call g24_ch_process
+	branch car_g24_receive_packet_start
+car_g24_work_init:
+	fetch 1,mem_24g_mode_init
+	rtnbit1 DONGLE_WORK
+	set1 DONGLE_WORK,pdata
+	store 1,mem_24g_mode_init
+	fetch 1,mem_tx_power_temp
+	store 1,mem_tx_power
+	jam 0,mem_24g_ackpayload_enable
+	jam 0,mem_usb_tx_enable
+	jam 1,mem_24g_abort_packet
+	jam 0,mem_24g_pid
+	//fetch 4,mem_lap
+	fetch 4,mem_car_24g_commom_addr
+	branch g24_work_init+12
+car_g24_receive_packet_start:	
+	call g24_receive_transmit_ack
+	nbranch g24_rx_interrupt_clear,user3
+p_g24_receive_packet_parse:
+	call g24_receive_packet_parse_pid_crc
+	nbranch g24_rx_interrupt_clear,user
+	fetch 1,mem_24g_rxdata_length
+	branch g24_rx_interrupt_clear,blank
+	increase 2,pdata
+	iforce loopcnt
+	arg mem_24g_rxbuf,contr
+	arg mem_24g_rxdata_temp,contw
+	call memcpy
+	jam 0,mem_24g_mode_switch
+	fetch 1,mem_24g_pair_mode
+	call g24_enable_nodata_timer,blank
+	fetch 1,mem_24g_rxdata_temp+2
+	beq DATATYPE_ATTEMP,car_g24_data_attemp	//reconn packet
+	beq DATATYPE_DEVICE1,car_g24_data_device1	//mouse
+	branch g24_receive_packet_parse+14
+car_g24_data_attemp:
+	fetch 1,mem_24g_pair_mode
+	nrtn blank
+	fetch 1,mem_24g_bind_device_status
+	rtn blank
+	//call check_51cmd_led_on
+	branch g24_data_attemp	
+car_g24_data_device1:
+	call g24_ch_timer_reinit
+	fetch 1,mem_24g_abort_packet
+	fetcht 1,mem_24g_rxdata_temp
+	isolate1 bit_abort,temp
+	setflag true,0,pdata
+	store 1,mem_24g_abort_packet
+	beq 1,car_g24_data_attemp_device1_abort
+	branch g24_data_device1+7
+car_g24_data_attemp_device1_abort:
+	fetch 1,mem_device_option
+	sub pdata,DVC_OP_CAR,null
+	call check_51cmd_led_on,zero
+	fetch 4,mem_24g_rxdata_temp+10
+	branch g24_store_device1_addr
+	
+car_g24_bind_mode:
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_BIND
+	call g24_bind_init
+	call car_g24_bind_device_addr
+
+	call g24_rx_interrupt_clear
+	call g24_receive_packet
+	nbranch g24_rx_interrupt_clear,user3
+	call g24_bind_data_parse
+	call g24_transmit_ack
+	call g24_bind_device_status_check
+	call g24_bind_data_process+8
+
+	fetch 1,mem_24g_bind_device_status
+	nbranch car_g24_bind_mode_exit,blank
+	call g24_nodata_process
+	fetch 1,mem_24g_nodata_timer_enable
+	rtn blank
+	setarg 0
+	store 4,mem_24g_device1_addr
+	rtn
+car_g24_bind_mode_exit:
+	jam 0,mem_24g_mode_switch
+	arg 0,rega
+	call check_51cmd_led_on
+	call g24_switch_work_mode
+	call g24_timer_init
+
+        fetch 4,mem_24g_lap
+        store 4,mem_car_24g_commom_addr
+        fetch 1,mem_car_save_addr_flag
+        ncall car_g24_save_commom_addr,blank
+		
+	fetch 4,mem_car_24g_commom_addr
+	branch g24_update_addr_and_synccrc8
+
+car_g24_save_commom_addr:
+
+        fetch 1,mem_car_save_addr_flag
+        rtn blank
+	fetch 1,mem_24g_transmitter_addr+1	//Tx lap H
+	store 1,mem_car_24g_commom_addr+3
+
+	fetch 1,mem_24g_lap+1				//Rx lap H
+	store 1,mem_car_24g_commom_addr+2
+
+	fetch 1,mem_24g_transmitter_addr	//Tx lap L
+	store 1,mem_car_24g_commom_addr+1
+
+	fetch 1,mem_24g_lap					//Rx lap L
+	store 1,mem_car_24g_commom_addr
+ifdef CAR_TEST_FUNCTION
+        rtn
+endif // CAR_TEST_FUNCTION  	
+	call car_g24_search_commom_addr
+	fetch 4,mem_car_24g_commom_addr
+	fetcht 4,mem_car_24g_commom_addr_temp 
+	isub temp,null
+	rtn zero        
+        copy regc,regb
+        arg mem_car_24g_commom_addr,rega
+        arg 4,loopcnt        
+        branch otp_write
+        
+car_g24_load_commom_addr:
+
+        fetch 4,mem_24g_lap
+        store 4,mem_car_24g_commom_addr
+        fetch 1,mem_car_save_addr_flag
+        rtn blank
+ifdef CAR_TEST_FUNCTION
+        rtn
+endif // CAR_TEST_FUNCTION         
+        call car_g24_search_commom_addr
+        fetch 4,mem_car_24g_commom_addr_temp
+        rtn blank
+        store 4,mem_car_24g_commom_addr
+        rtn
+
+/* regc=otp start address and output */        
+car_g24_search_commom_addr:
+ifdef CAR_TEST_FUNCTION
+        rtn
+endif // CAR_TEST_FUNCTION 
+        fetch 1,mem_car_save_addr_flag
+        rtn blank
+        arg OTP_OFFSET_CAR_COMMOM_START_ADDR,regc
+car_g24_search_commom_addr_loop:
+        copy regc,regb
+        arg mem_car_24g_commom_addr_read,rega
+        arg 4,loopcnt
+        call otp_read_data
+        fetch 4,mem_car_24g_commom_addr_read
+        rtn blank    
+        store 4,mem_car_24g_commom_addr_temp
+        copy regc,pdata
+        arg OTP_OFFSET_CAR_COMMOM_END_ADDR,temp
+        isub temp,null
+        rtn positive        
+        increase 4,regc
+        branch car_g24_search_commom_addr_loop
+        
+car_g24_bind_device_addr:
+	fetch 4,mem_24g_device1_addr
+	rtn blank
+	branch g24_update_addr_and_synccrc8
+
+car_g24_cb_data_device1:
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_CONNECTED
+	fetch 2,mem_car_24g_no_data_timeout_count
+	store 2,mem_car_24g_no_data_timeout_timer
+	jam WORK_PAIRED,mem_car_24g_received_pac
+	arg mem_24g_rxdata_temp+3,rega
+	branch car_24g_receive_data
+
+car_g24_lpm_dipatch:
+	fetch 1,mem_car_enter_lpm_flag
+	rtn blank
+	call car_g24_lpm_wait
+	nrtn user
+	fetch 3,mem_24g_enter_hibernate	//about 1000ms
+	call clk2lpo
+	storet 4,mem_sleep_counter
+  	branch lpm_sleep
+car_g24_lpm_wait:
+	enable user
+	call lpo_calibration
+	fetch 3,mem_clks_per_lpo
+	branch disable_user,blank
+	branch car_le_process_lpm_before
+
+endif
+
+
+

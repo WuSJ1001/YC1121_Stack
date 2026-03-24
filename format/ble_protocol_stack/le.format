@@ -1,0 +1,441 @@
+
+memalloc(
+260 mem_le_rxbuf
+
+/* security temp */
+4 mem_le_mic
+4 mem_le_peer_mic
+//8 mem_le_skdm
+//8 mem_le_skds
+16 mem_le_mrand
+
+
+/* ========= le context =========== */
+1 mem_le_state
+1 mem_le_mode
+2 mem_le_tsniff
+4 mem_le_anchor
+6 mem_le_clk_offset
+2 mem_le_receive_window
+6 mem_le_plap
+1 mem_le_conn_handle
+1 mem_le_arq
+1 mem_le_ch
+1 mem_le_hop
+2 mem_le_event_count
+4 mem_le_supervision_timer
+2 mem_le_instant
+1 mem_le_channels
+1 mem_le_op
+
+	/* these 3 should NOT be seperated */
+4 mem_le_access
+3 mem_le_crcinit
+1 mem_le_window_size
+
+	/* these 3 should NOT be seperated */
+2 mem_le_slave_latency
+2 mem_le_superto
+5 mem_le_channel_map
+
+
+1 mem_le_rx_phy
+1 mem_le_tx_phy
+
+9 mem_le_update_new_param
+
+16 mem_le_sk
+
+1 mem_le_peer_sca
+1 mem_le_err_code
+1 mem_le_ll_pairing_fail_reason
+
+/* ========= le context ending =========== */
+
+/* test */
+1 mem_le_testtype
+1 mem_cmd_le_create_conn
+
+)
+
+amemalloc mem_le_update_new_param(
+//update connection parameter
+	0 mem_le_new_param
+	1 mem_le_new_transmitwindowsize
+	2 mem_le_new_transmitwindowoffset
+	2 mem_le_new_conninterval
+	2 mem_le_new_connslavelatency
+	2 mem_le_new_connsupervisiontimeout
+)
+
+amemalloc mem_le_update_new_param(
+//update map parameter
+	5 mem_le_new_map
+)
+
+amemalloc mem_le_update_new_param(
+//update phy parameter
+	1 mem_le_new_m2s_phy
+	1 mem_le_new_s2m_phy
+)
+
+amemalloc mem_le_rxbuf(
+//data channel PDU
+	1 mem_le_rxbuf_data_header
+	1 mem_le_rxbuf_data_length
+	255 mem_le_rxbuf_data_payload
+)
+
+amemalloc mem_le_rxbuf(
+//data channel LL control PDU
+	1 mem_le_rxbuf_data_ll_header
+	1 mem_le_rxbuf_data_ll_length
+	1 mem_le_rxbuf_data_ll_opcode
+	26 mem_le_rxbuf_data_ll_control_data
+)
+
+xmemalloc(
+1 mem_version
+2 mem_company_id
+2 mem_sub_version
+
+2 mem_le_dsniff
+2 mem_le_conn_interval
+1 mem_le_tx_ifs_defference
+1 mem_le_tx2m_delay
+
+1 mem_le_txheader
+1 mem_le_txlen
+256 mem_le_txpayload
+
+//modified name
+1 mem_le_name_len
+30 mem_le_name
+
+
+/* smp related */
+
+16 mem_le_ltk
+1 mem_ltk_exists
+16 mem_le_rconfirm
+16 mem_le_srand
+1 mem_le_iat
+1 mem_le_rat
+1 mem_le_preq
+1 mem_le_preq_iocap
+1 mem_le_preq_oob
+1 mem_le_preq_auth
+1 mem_le_preq_max_keysize
+1 mem_le_preq_init_key_distribution
+1 mem_le_preq_resp_key_distribution
+1 mem_le_pres
+1 mem_le_pres_iocap
+1 mem_le_pres_oob
+1 mem_le_pres_auth
+1 mem_le_pres_max_keysize
+1 mem_le_pres_init_key_distribution
+1 mem_le_pres_resp_key_distribution
+
+
+
+//START of LE conn parameter structure
+0 mem_le_conn_param
+1 mem_le_conn_peer_addr_type
+6 mem_le_conn_peer_addr
+1 mem_le_conn_own_addr_type
+2 mem_le_interval_min
+2 mem_le_interval_max
+2 mem_le_latency
+2 mem_le_timeout
+//START of LE conn parameter structure
+
+
+3 mem_le_lap
+1 mem_le_uap
+2 mem_le_nap
+
+
+2 mem_le_local_mtu
+2 mem_le_remote_mtu
+
+8 mem_le_skdm
+8 mem_le_skds
+
+2 mem_le_init_superto
+2 mem_ui_le_uuid_table
+
+1 mem_le_secure_connect_flag
+1 mem_le_secure_connect_state
+1 mem_le_sc_confirm_gkey_flag
+
+
+1 mem_le_pairing_state
+1 mem_le_enc_state
+1 mem_le_pairing_mode
+4 mem_le_tk
+2 mem_le_ediv
+8 mem_le_rand
+16 mem_le_irk
+
+//LE attribute list
+4 mem_le_transmit_window
+
+//ble General configuration 
+1 mem_le_configuration
+16 mem_le_fixed_ltk
+2 mem_le_pairing_handle
+
+
+1 mem_le_packet_llid
+
+//for continue
+2 mem_le_l2cap_size
+2 mem_le_packet_len_recved
+2 mem_le_payload_ptr
+
+
+//ble gatt signaling
+1 mem_le_signaling_identifier
+2 mem_le_l2cap_signaling_conn_param_update_rsp_result
+
+1 mem_le_md_count
+2 mem_ble_l2cap_tx_buff0_ptr
+2 mem_ble_l2cap_tx_buff_size_ptr
+)
+
+(//mem_le_T_IFS
+150 PARAM_T_IFS_150US
+20000 PARAM_20MS_INIT
+-11 PARAM_SYNC_TIME_DIFFERENCE
+40 PARAM_CODED_C1_TERM1_TIME_40US
+1666 PARAM_WINDOWN_SIZE
+//T_IFS = 150-modem(CRC time)
+15000 param_sifs
+)
+
+
+(
+0 DEFAULT_STATES
+1 IPHONE_LOST_LTK
+2 MODULE_LOST_LTK
+3 LTK_NOT_LOST
+)
+
+	//BLE ErrorCodes
+	(    
+	0x01 ERROR_UNKNOWN_HCI_COMMAND
+	0x02 ERROR_NO_CONNECTION
+	0x03 ERROR_HARDWARE_FAILURE
+	0x04 ERROR_PAGE_TIMEOUT
+	0x05 ERROR_AUTHENTICATION_FAILURE
+	0x06 ERROR_KEY_MISSING
+	0x07 ERROR_MEMORY_FULL
+	0x08 ERROR_CONNECTION_TIMEOUT
+	0x09 ERROR_MAX_CONNECTIONS
+	0x0A ERROR_MAX_SCO_CONNECTIONS
+	0x0B ERROR_MAX_ACL_CONNECTIONS
+	0x0C ERROR_COMMAND_DISALLOWED
+	0x0D ERROR_HOST_REJECT_LIMITED_RESOURCES
+	0x0E ERROR_HOST_REJECT_SECURITY_REASONS
+	0x0F ERROR_HOST_REJECT_REMOTE_IS_ONLY_PERSONAL
+	0x10 ERROR_HOST_TIMEOUT
+	0x11 ERROR_UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE
+	0x12 ERROR_INVALID_HCI_COMMAND_PARAMETERS
+	0x13 ERROR_REMOTE_USER_TERMINATED_CONNECTION
+	0x14 ERROR_REMOTE_LOW_RESOURCES
+	0x15 ERROR_REMOTE_POWERING_OFF
+	0x16 ERROR_CONNECTION_TERMINATED_BY_LOCAL_HOST
+	0x17 ERROR_REPEATED_ATTEMPTS
+	0x18 ERROR_PAIRING_NOT_ALLOWED
+	0x19 ERROR_UNKNOWN_LMP_PDU
+	0x1A ERROR_UNSUPPORTED_REMOTE_FEATURE
+	0x1B ERROR_SCO_OFFSET_REJECTED
+	0x1C ERROR_SCO_INTERVAL_REJECTED
+	0x1D ERROR_SCO_AIR_MODE_REJECTED
+	0x1E ERROR_INVALID_LMP_PARAMETER
+	0x1F ERROR_UNSPECIFIED_ERROR
+	0x20 ERROR_UNSUPPORTED_LMP_PARAMETER_VALUE
+	0x21 ERROR_ROLE_CHANGE_NOT_ALLOWD
+	0x22 ERROR_LMP_RESPONSE_TIMEOUT
+	0x23 ERROR_ERROR_TRANSACTION_COLLISION
+	0x24 ERROR_LMP_PDU_NOT_ALLOWED
+	0x25 ERROR_ENCRYPTION_MODE_NOT_ACCEPTABLE
+	0x26 ERROR_UNIT_KEY_USED
+	0x27 ERROR_QOS_NOT_SUPPORTED
+	0x28 ERROR_INSTANT_PASSED
+	0x29 ERROR_PAIRING_W_UNIT_KEY_NOT_SUPPORTED
+	0x2a ERROR_DIFFERENT_TRANSACTION_COLLISION
+	0x2c ERROR_QOS_UNACCEPTABLE_PARAMETER
+	0x2d ERROR_QOS_REJECTED
+	0x2e ERROR_CHANNEL_CLASSIFICATION_NOT_SUPPORTED
+	0x2f ERROR_INSUFFICIENT_SECURITY
+	0x30 ERROR_PARAMETER_OUT_OF_MANDATORY_PANGE
+	0x32 ERROR_ROLE_SWITCH_PENDING
+	0x34 ERROR_RESERVED_SLOT_VIOLATION
+	0x35 ERROR_ROLE_SWITCH_FAILED
+	0x36 ERROR_EXTENDED_INQUIRY_RESPONSE_TOO_LARGE
+	0x37 ERROR_SIMPLE_PAIRING_NOT_SUPPORTED_BY_HOST
+	0x38 ERROR_HOST_BUSY_PAIRING
+	0x3d ERROR_MIC_FAILURE
+	)
+
+
+	//modified_name
+	(
+	0X20 SPACE	
+	)
+	/* LE L2CAP CID */
+	(
+	0x0004 LE_L2CAP_CID_ATT
+	0x0005 LE_L2CAP_CID_SIGNAL
+	0x0006 LE_L2CAP_CID_SMP
+	)
+
+	//LE address type
+	(
+	0 LE_ADDR_TYPE_PUBLIC
+	1 LE_ADDR_TYPE_RANDOM
+	)
+	//LE address type bitmap
+	(
+	7 LE_RECEIVER_ADDR_BIT
+	6 LE_SENDER_ADDR_BIT
+	)
+	//LE SCAN TYPE
+	(
+	0x00 LE_SCAN_TYPE_PASSIVE //no SCAN_REQ shall be sent
+	0x01 LE_SCAN_TYPE_ACTIVE
+	)
+
+	//LE SCAN ENABLE
+	(
+	0x00 LE_SCAN_DISABLE
+	0x01 LE_SCAN_ENABLE
+	0x0101 LE_ACTIVE_SCAN_ENABLE
+	)
+
+	//LE FIND INFORMATION RESPONSE
+	//THE FORMAT OF THE INFORMATION DATA
+	(
+	0x01 UUID_SIZE_16BIT
+	0x02 UUID_SIZE_128BIT
+	)
+
+//	le_state_map 0-2 is reserved for state_inconn,state_insniff and state_sco
+(
+3 lestate_got_first_packet
+4 lestate_encryption
+5 lestate_update_param
+6 lestate_update_map
+7 lestate_update_phy
+)
+
+// 	le mode
+(
+0 lemode_idle
+1 lemode_slave
+3 lemode_master
+5 lemode_2m
+6 lemode_lr
+7 lemode_lr_s8
+
+0x20 mode_2m
+0x40 mode_lr_s2
+0xc0 mode_lr_s8
+
+)
+
+(
+0 llid0
+1 llid1
+2 nesn
+3 sn
+4 md
+5 wak
+6 txdat
+)
+
+(
+0x00 LLID_RESERVED
+0x01 LLID_CONTINUE
+0x02 LLID_START
+0x03 LLID_LE_LL
+0x01 LLID_EMPTY
+)
+
+(
+4 LE_TX_BUFF_COUNT
+3 LE_TX_BUFF_UPDATE_LOOPCNT //LE_TX_BUFF_COUNT-1
+
+12 LE_MD_MAX_COUNT
+)
+
+
+(
+0 LE_INITATOR_LTK_BIT
+1 LE_INITATOR_IRK_BIT
+2 LE_INITATOR_CSRK_BIT
+)
+
+
+
+
+
+(
+0  LE_FIND_BY_TYPE_VAL_RES_NOT_FOUND
+1  LE_FIND_BY_TYPE_VAL_RES_FOUND_STARTING_HANDLE
+2  LE_FIND_BY_TYPE_VAL_RES_FOUND_ENDING_HANDLE
+
+)
+
+(
+0 MASTER_PUBLIC_ADDR
+1 MASTER_RANDOM_ADDR
+)
+
+(
+0x06 LE_ERR_PIN_OR_KEY_MISSING
+)
+
+(
+39 LE_CCM_DIRECTIONBIT
+)
+(
+36 BR_CCM_0_LENGTH_CONTINUATION
+37 BR_CCM_DIRECTIONBIT
+)
+
+(
+96000 TIMER_SMP_PAIRING_TIMEOUT //30S
+)
+
+
+
+//mem_le_enc_state
+(
+0 FLAG_LE_ENC_NULL
+1 FLAG_LE_RCV_ENC_START
+2 FLAG_LE_ENC_PAUSE
+3 FLAG_LE_RCV_START_ENC_RSP
+4 FLAG_LE_SEND_START_ENC_RSP
+5 FLAG_LE_SEND_START_ENC_REQ
+0xff FLAG_LE_ENC_END
+)
+
+(//mem_le_configuration
+//bit0:use fixed key , ble passkey pairing
+0 BIT_BLE_PASSKEY_FIXED_KEY
+//bit1:ble pairing use fixed long term key
+1 BIT_BLE_PAIRING_FIXED_LTK
+//bit2:ble transmit packet will set more data flag
+2 BIT_BLE_TRANSMIT_PACKET_BY_MD
+//bit3:master read handle, with requires an authenticated link
+3 BIT_BLE_READ_AUTH
+//bit4:master write handle, with requires an authenticated link
+4 BIT_BLE_WRITE_AUTH
+//bit5:cannot enter long sleep
+5 BIT_BLE_SHORT_MULT
+//bit6:DEAL baseband packet
+6 BIT_BLE_DEAL_BB_PACKET
+)
+

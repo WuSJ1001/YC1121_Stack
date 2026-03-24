@@ -1,0 +1,151 @@
+/*
+	mesh中接收到lower transport包判断
+	是Unsegmented包，直接上传到upper transport layer
+	是Segmented包，重组后上传到upper transport layer
+*/
+
+
+ali_mesh_lower_transport_layer_receive_lower_transport_PDU:
+	bpatchx patch35_5,mem_patch35
+	fetch 1,mem_mesh_message_Transport_Head
+	bbit1 TRANSPORT_HEAD_BIT_SEG,ali_mesh_lower_transport_layer_receive_lower_transport_PDU_segmented_message
+	jam 0,mem_mesh_ASZMIC
+	branch ali_mesh_upper_transport_layer_receive_unsegmented_access_message
+
+//segmented message reassembly
+ali_mesh_lower_transport_layer_receive_lower_transport_PDU_segmented_message:
+	call ali_mesh_lower_transport_layer_receive_SegAccMess_resolve_SZMIC_SeqZero_SegON
+	rtn user
+	call ali_mesh_lower_transport_layer_receive_segmented_access_message_check_blockAck
+	rtn user
+	call ali_mesh_lower_transport_layer_receive_segmented_access_message_store_segment
+	branch ali_mesh_lower_transport_layer_receive_segmented_access_message_decrypt_segment
+
+//提取SZMIC/SeqZero/SegO/SegN
+//分别存储到SZMIC、SegO、SegN、SeqZero
+ali_mesh_lower_transport_layer_receive_SegAccMess_resolve_SZMIC_SeqZero_SegON:
+	call disable_user
+	arg 3,loopcnt
+	arg mem_mesh_message_segment_access_SZMIC_SeqZero_SegO_SegN,rega
+	call inverse_data
+	fetchr rega, 3,mem_mesh_message_segment_access_SZMIC_SeqZero_SegO_SegN
+	and rega,0x1f,temp
+	storet 1,mem_mesh_segmented_access_message_SegN
+	fetch 1, mem_mesh_segmented_access_message_SegN_upper_limit
+	isub temp, null
+	nbranch enable_user, positive
+	
+	rshift4 rega,pdata
+	rshift pdata,pdata
+	and pdata,0x1f,temp
+	storet 1,mem_mesh_segmented_access_message_SegO
+	rshift4 pdata,pdata
+	rshift pdata,pdata
+	arg 0x1fff,rega
+	iand rega,temp
+	copy pdata,regb
+	fetch 2,mem_mesh_segmented_access_message_SeqZero
+	isub temp,null
+	ncall ali_mesh_lower_transport_layer_receive_segmented_access_message_recover_SeqZero,zero
+	storet 2,mem_mesh_segmented_access_message_SeqZero
+	rshift8 regb,pdata
+	rshift4 pdata,pdata
+	rshift pdata,pdata
+	store 1,mem_mesh_segmented_access_message_SZMIC
+	store 1,mem_mesh_ASZMIC
+	rtn
+
+ali_mesh_lower_transport_layer_receive_segmented_access_message_recover_SeqZero:
+	setarg 0
+	store 4,mem_mesh_segmented_access_message_BlockAck
+	jam 0,mem_mesh_segmented_access_message_current_length
+	rtn
+
+
+//检查blockAck标志,返回值mem_mesh_segmented_access_message_receive_finish
+//1表示收到成功
+ali_mesh_lower_transport_layer_receive_segmented_access_message_check_blockAck:
+	call disable_user
+	fetch 1,mem_mesh_segmented_access_message_SegO
+	copy pdata,queue
+	fetch 4,mem_mesh_segmented_access_message_BlockAck
+	qisolate1 pdata
+	branch enable_user,true
+	qset1 pdata
+	store 4,mem_mesh_segmented_access_message_BlockAck
+	fetcht 1,mem_mesh_segmented_access_message_SegN
+	add temp,1,loopcnt
+ali_mesh_lower_transport_layer_receive_segmented_access_message_check_blockAck_loop:
+	add loopcnt,-1,queue
+	qisolate1 pdata
+	nrtn true
+	loop ali_mesh_lower_transport_layer_receive_segmented_access_message_check_blockAck_loop
+	jam 1,mem_mesh_segmented_access_message_receive_finish
+	rtn
+
+
+//存储segment m内容，放到mem_mesh_segmented_access_message_SegO
+ali_mesh_lower_transport_layer_receive_segmented_access_message_store_segment:
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	pincrease -6	//DST(2) Head(1) SZMIC_SeqZero_SegO_SegN(3)
+	copy pdata,loopcnt 
+	fetcht 1,mem_mesh_segmented_access_message_current_length
+	iadd temp,temp
+	storet 1,mem_mesh_segmented_access_message_current_length
+	fetch 2, mem_mesh_segmented_access_message_Segment_ptr
+	iforce contw
+	fetch 1,mem_mesh_segmented_access_message_SegO
+	mul32 pdata,12,pdata
+	iadd contw,contw
+	arg mem_mesh_message_Transport_segmented_access_messagePDU_Segment,contr
+	branch memcpy
+
+//判断是否收完包，收完包，clear中间标志
+ali_mesh_lower_transport_layer_receive_segmented_access_message_decrypt_segment:
+	fetch 1,mem_mesh_segmented_access_message_receive_finish
+	rtneq 0
+	setarg 0
+	store 5,mem_mesh_segmented_access_message_BlockAck
+	fetcht 2,mem_mesh_message_SEQ+1
+	byteswap temp,temp
+	setarg 0xe000
+	iand temp,temp
+	fetch 2,mem_mesh_segmented_access_message_SeqZero
+	ior temp,pdata
+	byteswap pdata,pdata
+	store 2,mem_mesh_message_SEQ+1	//计算Application Nonce需要使用到初始的SEQ
+	branch ali_mesh_upper_transport_layer_receive_segmented_access_message
+
+
+/*
+	mesh中发送lower transport layer判断
+	是Unsegmented message，直接下发到network transport layer
+	是Segmented message，拆分后上传到network transport layer
+*/
+//Unsegmented access message写入SEG、AKF、AID
+ali_mesh_lower_transport_layer_send_unsegmented_access_message:
+	fetch 1,mem_mesh_upper_transport_layer_payload_len
+	add pdata,1,temp
+	copy pdata,loopcnt
+	storet 1,mem_mesh_lower_transport_layer_payload_len
+	fetch 1,mem_mesh_message_Transport_Head
+	set0 TRANSPORT_HEAD_BIT_SEG,pdata
+	store 1,mem_mesh_unsegmented_access_lower_transport_layer_head
+	arg mem_mesh_access_layer_payload,contr
+	call memcpy_fast
+	branch ali_mesh_network_layer_send_access_message
+
+//segmented access message写入SEG、AKF、AID
+//input:rega is current segment payload length
+//contr is current segment payload ptr
+ali_mesh_lower_transport_layer_send_segmented_access_message:
+	add rega,4,temp
+	copy rega,loopcnt
+	storet 1,mem_mesh_lower_transport_layer_payload_len
+	arg mem_mesh_segmented_access_lower_transport_layer_parameters,contw
+	call memcpy_fast
+	fetch 1,mem_mesh_message_Transport_Head
+	set1 TRANSPORT_HEAD_BIT_SEG,pdata
+	store 1,mem_mesh_segmented_access_lower_transport_layer_head
+	branch ali_mesh_network_layer_send_access_message
+

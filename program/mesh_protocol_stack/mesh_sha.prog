@@ -1,0 +1,139 @@
+
+sha_endian_swap2:	
+	ifetch 4,contr
+	force 4,rega
+	increase 3,contw
+sha_endian_loop:	
+	istore 1,contw
+	rshift8 pdata,pdata
+	increase -2,contw
+	increase -1,rega
+	nbranch sha_endian_loop,zero
+	increase 5,contw
+	loop sha_endian_swap2
+	rtn	
+
+
+sha_getw:
+	lshift2 queue,pdata
+	iadd timeup,contr
+	ifetch 4,contr
+	rtn
+	
+sha_r:
+	force 16,alarm
+	arg mem_dat,timeup
+sha_r_loop:	
+	add alarm,-7,queue
+	call sha_getw
+	iforce temp						/* W[t - 7] */
+	add alarm,-16,queue
+	call sha_getw
+	iadd temp,temp					/* W[t-7] + W[t-16] */
+	add alarm,-2,queue
+	call sha_getw
+	shasx pdata,1,pdata
+	iadd temp,temp					/* S1(W[t -  2]) + W[t-7] + W[t-16] */
+	add alarm,-15,queue
+	call sha_getw
+	shasx pdata,0,pdata
+	iadd temp,temp					/* S0(W[t - 15]) + S1(W[t -  2]) + W[t-7] + W[t-16] */
+	lshift2 alarm,pdata
+	iadd timeup,contw
+	istoret 4,contw
+	increase 1,alarm
+	compare 64,alarm,0xff
+	nbranch sha_r_loop,true
+	rtn
+
+
+sha_init:
+	arg memh0,contr
+	force 7,regext_index
+sha_init_0:	
+	ifetch 4,contr
+	iforce regext
+	increase -1,regext_index
+	branch sha_init_0,positive
+	rtn
+
+sha:
+	bpatchx patch36_3,mem_patch36
+	call sha_r		/* preprocessing data into R() */
+	arg memahbak,contw
+	force 0,regext_index
+sha_0:	
+	deposit regext
+	istore 4,contw
+	increase 1,regext_index
+	compare 8,regext_index,0xff
+	nbranch sha_0,true
+//	call ice_break
+//	call enable_authrom
+	arg BLE_MESH_SHA256_ADDR,timeup
+//	call ice_break
+//	arg mem_authrom_dat,timeup
+	arg mem_dat,alarm
+	force 64,loopcnt
+sha_loop:	
+	ifetcht 4,alarm
+	ifetch 4,timeup
+	increase 4,timeup
+	increase 4,alarm
+	iadd temp,pdata			/* x+K */
+	force 7,regext_index
+	iadd regext,temp			/* x+K+h */
+	force 4,regext_index
+	shasx regext,3,pdata
+	iadd temp,temp			/* temp = s3(e)+x+K+h */
+	force 5,regext_index
+	deposit regext
+	force 6,regext_index
+	ixor regext,pdata
+	force 4,regext_index
+	iand regext,pdata			/* (e & (f ^ g)) */
+	force 6,regext_index
+	ixor regext,pdata			/* F1(e, f, g) = g ^ (e & (f ^ g)) */
+	iadd temp,temp			/* temp1 = h + S3(e) + F1(e,f,g) + K + x */
+	force 7,regext_index
+	copy temp,regext			/* save to H */
+	force 3,regext_index
+	deposit regext
+	iadd temp,regext			/* save to D */
+	force 0,regext_index
+	deposit regext
+	force 1,regext_index
+	iand regext,temp			/* a & b */
+	ior regext,pdata			/* a | b */			
+	force 2,regext_index
+	iand regext,pdata			/* (c & (a | b)) */
+	ior temp,temp				/* F0:(a & b) | (c & (a | b)) */
+	force 0,regext_index
+	shasx regext,2,pdata
+	iadd temp,pdata			/* temp2 = S2(a) + F0(a,b,c) */
+	force 7,regext_index
+	iadd regext,regext			/* h = temp1 + temp2 */
+	regexrot					/* rotate move h,a-g => a-h */
+	loop sha_loop
+	arg memahbak,contr
+	force 0,regext_index
+sha_1:	
+	ifetch 4,contr
+	iadd regext,regext
+	increase 1,regext_index
+	compare 8,regext_index,0xff
+	nbranch sha_1,true
+	rtn
+//	branch disable_authrom
+
+	
+sha_result:
+	arg   memresult,contw
+	force 7,regext_index
+sha_regext_save:
+	deposit regext
+	istore  4,contw 
+	increase -1,regext_index
+	branch   sha_regext_save,positive
+	rtn	
+

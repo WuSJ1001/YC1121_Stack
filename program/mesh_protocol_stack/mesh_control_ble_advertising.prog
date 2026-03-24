@@ -1,0 +1,222 @@
+
+//mesh控制ble advertising广播逻辑的主流程
+ali_mesh_control_ble_adv_process:
+	call ali_mesh_ble_adv
+	branch ali_mesh_control_ble_adv_tmall_packet
+
+
+//mesh 控制ble advertising 广播timer流程
+ali_mesh_control_ble_adv_timer_process:
+	call ali_mesh_advertising_unprovisioned_timer_interval_timer
+	branch ali_mesh_advertising_unprovisioned_timer
+
+//mesh打开ble advertising
+ali_mesh_control_ble_advertising_on_advertising:
+	jam DEVICE_BEACON_ON,mem_mesh_advertising_unprovisioned_device_beacon_switch
+	rtn
+
+//mesh关闭ble advertising
+ali_mesh_control_ble_advertising_off_advertising:
+	jam DEVICE_BEACON_OFF,mem_mesh_advertising_unprovisioned_device_beacon_switch
+	rtn
+
+
+/*
+	mesh控制发送unprovisioned device beacon advertising
+	配网阶段包已经配网后tmall回复包
+*/
+ali_mesh_control_ble_adv_tmall_packet:
+	arg ali_mesh_control_ble_adv_tmall_packet_send_package,regb
+	arg MESH_ADV_TMALL_MESSAGE_INTERVAL,rega
+	arg mesh_ble_adv_tmall,queue
+	branch ali_mesh_chip_timer_check_with_random_timer
+
+
+
+
+//控制不同状态发包情况
+ali_mesh_control_ble_adv_tmall_packet_send_package:
+	fetch 1,mem_mesh_provisioned_flag
+	beq UNPROVISIONED_BEACON_STATUS,ali_mesh_control_ble_advertising_send_device_beacon_packet
+	beq SILENCE_BEACON_STATUS,ali_mesh_control_ble_advertising_send_device_silence_beacon_packet
+	beq PAIRING_STATUS,ali_mesh_control_ble_advertising_send_pairing_packet
+	beq PAIRED_STATUS,ali_mesh_control_ble_advertising_send_paired_packet
+	branch ali_mesh_control_ble_advertising_send_paired_packet
+
+ali_mesh_control_ble_advertising_send_device_silence_beacon_packet:
+	jam 0,mem_le_adv_enable
+	branch ali_mesh_control_ble_advertising_off_advertising
+
+ali_mesh_control_ble_advertising_send_paired_packet:
+	call ali_mesh_advertising_bearer_layer_init_queue_param
+	arg mem_mesh_queue_ele_temp,rega
+	call queue_get_new_ele
+	nrtn user
+	fetch 1,mem_mesh_upper_tran_layer_packet_type
+	bbit1 BIT_UUPER_TRAN_PROXY_MESSAGE,ali_mesh_control_ble_advertising_send_paired_packet_end_duration_proxy
+	fetch 1,mem_mesh_queue_ele_duration
+	pincrease -1
+	istore 1,regb
+	and pdata,0x7f,pdata	
+	call ali_mesh_control_ble_advertising_send_paired_packet_end_duration,blank	//周期到丢弃
+	fetch 1,mem_mesh_upper_tran_layer_packet_type
+	rtnbit0 BIT_UPPER_TRAN_TMALL_MESSAGE		
+	arg mem_mesh_adv_data_len,contw
+	arg mem_mesh_queue_ele_len,contr
+	call memcpy32
+	branch mesh_le_send_adv
+
+ali_mesh_control_ble_advertising_send_paired_packet_end_duration_proxy:
+	arg mem_mesh_queue_ele_duration,rega
+	call queue_pop
+	call queue_empty
+	nrtn blank
+
+	call ali_mesh_send_paired_packet_init_advertising
+	branch ali_mesh_control_ble_advertising_off_advertising
+	
+
+ali_mesh_control_ble_advertising_send_paired_packet_end_duration:
+	arg mem_mesh_queue_ele_duration,rega
+	call queue_pop
+	call queue_empty
+	nrtn blank
+	
+	jam ADV_PAIRING_MESH_MESSAGE_INTERVAL,mem_mesh_advertising_unprovisioned_device_beacon_interval
+	branch ali_mesh_control_ble_advertising_off_advertising
+
+ali_mesh_send_paired_packet_init_advertising:
+	jam NULL_PACKET_ADVERTISING,mem_mesh_upper_tran_layer_packet_advertising
+	rtn
+
+
+ali_mesh_control_ble_advertising_send_device_beacon_packet:
+	call ali_mesh_config_device_uuid_by_three_tuple
+	call ali_mesh_send_Unprovisioned_Beacons_tmall
+	call ali_mesh_control_ble_advertising_device_beacon_check_duration
+	nrtn zero			//in advertising beacon duration
+	fetch 1,mem_mesh_provisioned_flag
+	beq SILENCE_BEACON_STATUS,ali_mesh_end_advertising_silence_device_beacon_packet
+	beq UNPROVISIONED_BEACON_STATUS,ali_mesh_end_advertising_unprovisioned_device_beacon_packet
+	rtn
+
+
+//广播一次生存周期减1
+//output:zero is end of duration
+ali_mesh_control_ble_advertising_device_beacon_check_duration:
+	fetch 1,mem_mesh_advertising_unprovisioned_device_beacon_duration
+	add pdata,-1,pdata
+	store 1,mem_mesh_advertising_unprovisioned_device_beacon_duration
+	rtn
+
+//静默广播生存周期完成关闭广播
+ali_mesh_end_advertising_silence_device_beacon_packet:
+	jam ADV_SILENCE_DEVICE_BEACON_INTERVAL,mem_mesh_advertising_unprovisioned_device_beacon_interval
+	branch ali_mesh_control_ble_advertising_off_advertising
+	
+//未配网广播生存周期完成关闭广播
+ali_mesh_end_advertising_unprovisioned_device_beacon_packet:
+	jam ADV_UNPROVISIONED_DEVICE_BEACON_DURATION,mem_mesh_advertising_unprovisioned_device_beacon_interval
+	branch ali_mesh_control_ble_advertising_off_advertising
+
+
+ali_mesh_control_ble_advertising_send_pairing_packet:
+	branch mesh_le_send_adv
+
+/*
+	注册定时器功能
+*/
+ali_mesh_chip_timer_check_with_random_timer:
+	fetch 1,mem_mesh_advertising_unprovisioned_device_beacon_switch
+	rtnne DEVICE_BEACON_ON
+ali_mesh_chip_timer_check_with_random_timer_continue:
+	random pdata
+	and pdata,0x07,pdata
+	iadd rega,rega
+//input:queue is timer id
+//rega is timer count
+//regb is cb ptr
+ali_mesh_chip_timer_check:
+	call timer_check
+	nrtn blank
+	copy rega,pdata
+	call timer_init
+	copy regb,pdata
+	branch callback_func
+
+
+//静默广播定时器10min后进入静默广播状态
+ali_mesh_advertising_unprovisioned_timer:
+	arg mem_mesh_advertising_unprovisioned_device_beacon_timer,regc
+	arg ali_mesh_advertising_unprovisioned_timeout, regb
+	branch timer_single_step_2B
+
+//定时器超时如果当前处于未配网广播状态，进入静默广播
+ali_mesh_advertising_unprovisioned_timeout:
+	fetch 1,mem_mesh_provisioned_flag
+	rtnne UNPROVISIONED_BEACON_STATUS
+	fetch 1,mem_mesh_UUID_FeatureFlag
+	set1 BIT_SILENCE_ADV_FLAG,pdata
+	store 1,mem_mesh_UUID_FeatureFlag
+	jam SILENCE_BEACON_STATUS,mem_mesh_provisioned_flag
+	branch ali_mesh_send_silence_device_beacon_init_advertising
+
+
+//控制广播发送间隙的timer
+//不同状态广播间隔不一样
+ali_mesh_advertising_unprovisioned_timer_interval_timer:
+	arg mem_mesh_advertising_unprovisioned_device_beacon_interval,regc
+	arg ali_mesh_advertising_unprovisioned_timer_interval_timeout,regb
+	branch timer_single_step
+
+//控制广播发送超时
+//处于未配网广播或者静默广播状态，进入下一次广播
+//处于配网状态，清除配网状态
+ali_mesh_advertising_unprovisioned_timer_interval_timeout:
+	fetch 1,mem_mesh_provisioned_flag
+//	beq SILENCE_BEACON_STATUS,ali_mesh_send_silence_device_beacon_init_advertising
+	beq UNPROVISIONED_BEACON_STATUS,ali_mesh_send_unprovisioned_device_beacon_init_advertising
+	beq PAIRED_STATUS,ali_mesh_send_paired_packet_init_advertising
+	rtn
+
+ali_mesh_stop_send_indication_packet:
+	call ali_mesh_advertising_bearer_layer_queue_init
+	call ali_mesh_upper_transport_layer_queue_pop
+	jam 0,mem_mesh_advertising_unprovisioned_device_beacon_interval
+	call ali_mesh_control_ble_advertising_off_advertising
+	branch ali_mesh_send_paired_packet_init_advertising
+
+
+ali_mesh_send_unprovisioned_device_beacon_init_advertising:
+	jam ADV_UNPROVISIONED_DEVICE_BEACON_DURATION,mem_mesh_advertising_unprovisioned_device_beacon_duration
+	branch ali_mesh_control_ble_advertising_on_advertising
+
+
+ali_mesh_send_silence_device_beacon_init_advertising:
+	jam ADV_SILENCE_DEVICE_BEACON_DURATION,mem_mesh_advertising_unprovisioned_device_beacon_duration
+	branch ali_mesh_control_ble_advertising_on_advertising
+
+ali_mesh_network_layer_control_relay_packet:
+	arg ali_mesh_network_layer_control_send_relay_packet,regb
+	arg MESH_ADV_RELAY_MESSAGE_INTERVAL,rega
+	arg mesh_ble_relay_timer,queue
+	branch ali_mesh_chip_timer_check_with_random_timer_continue
+
+ali_mesh_network_layer_control_send_relay_packet:
+	fetch 1,mem_mesh_upper_tran_layer_packet_advertising
+	nrtn blank
+	call ali_mesh_network_layer_init_queue_param
+	arg mem_mesh_queue_ele_temp,rega
+	call queue_get_new_ele
+	nrtn user
+	fetch 1,mem_mesh_queue_ele_duration
+	pincrease -1
+	istore 1,regb
+	call queue_pop,blank	
+	arg mem_mesh_adv_data_len,contw
+	arg mem_mesh_queue_ele_len,contr
+	call memcpy32
+	branch mesh_le_send_adv
+
+
+

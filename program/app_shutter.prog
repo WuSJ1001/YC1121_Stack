@@ -1,0 +1,656 @@
+
+ifdef COMPILE_SHUTTER
+
+shutter_init:
+	call enable_authrom
+	rtn wake
+	
+	setarg shutter_process_idle
+	store 2,mem_cb_idle_process
+		
+	setarg shutter_process_bb_event 
+	store 2,mem_cb_bb_event_process
+	
+	setarg ble_shutter_receive_data
+	store 2,mem_cb_att_write
+
+	setarg shutter_le_bb_event_timer
+	store 2,mem_cb_event_timer
+
+	setarg shutter_key_change
+	store 2,mem_cb_shutter_keycan
+
+	call shutter_common_init
+	
+	bpatch patch14_0,mem_patch14
+	call shutter_load_buffer_config_form_DataRom
+
+shutter_power_switch:
+	fetch 1, mem_shutter_hard_soft_switch_case
+	beq HARD_SWITCH, shutter_hart_swtich_power_on
+	fetch 1,mem_shutter_soft_switch_button_gpio
+	store 1,mem_ui_button_gpio
+	branch ui_soft_swtich_init
+
+
+shutter_common_init:
+	setarg shutter_le_before_hibernate
+	store 2,mem_cb_before_hibernate
+
+	setarg shutter_process_lpm_before
+	store 2,mem_cb_before_lpm
+
+	setarg shutter_soft_swtich_power_on
+	store 2,mem_shutter_soft_switch_poweron_callback_function
+	
+	setarg shutter_soft_swtich_power_off
+	store 2,mem_shutter_soft_switch_poweroff_callback_function
+
+	jam 7,mem_version
+	call le_modified_name_adv
+	call shutter_init_param	
+	call keyscan_key_init
+	call queue_init
+	branch ui_led_init_global
+
+
+/**************hard swtich function**************/
+shutter_hart_swtich_power_on:
+	jam UI_BUTTON_GPIO_DISABLE,mem_ui_button_gpio
+	jam SS_STATE_POWER_ON,mem_shutter_soft_switch_power_state
+	branch shutter_start_reconnect
+/****************************/
+
+/**************lpm lock callback function**************/
+shutter_le_scale_lpm_lock:
+	fetch 1,mem_shutter_soft_switch_power_state
+	beq SS_STATE_POWER_OFF,app_get_lpm_wake_lock
+	call l2cap_malloc_get_full_map
+	fetch 1,mem_used_map
+	nbranch app_get_lpm_wake_lock,blank
+	branch app_put_lpm_wake_lock
+/****************************/
+
+/**************c512bt event callback function*************/
+shutter_process_bb_event:
+	copy regc,pdata
+	
+/**************ble shutter event*****************/
+	beq BT_EVT_LE_CONNECTED,ble_shutter_process_baseband_connect
+	beq BT_EVT_LE_DISCONNECTED,ble_shutter_process_baseband_disconnect
+	beq BT_EVT_LE_RECONNECT_COMPLETE,ble_shutter_process_reconnect_complete
+	beq BT_EVT_LE_PARSE_CONN_PAPA_UPDATE_RSP,ble_shutter_process_parse_connect_parameter_update_response
+/***************soft swtich event****************/
+	beq BT_EVT_BUTTON_LONG_PRESSED,ui_soft_switch_botton_long_press
+	beq BT_EVT_BUTTON_DOWN,shutter_process_soft_swtich_button_down
+	beq BT_EVT_BUTTON_UP,shutter_process_soft_swtich_button_up
+	rtn
+/****************************/
+
+
+/******************ble shutter event**********************/
+ble_shutter_process_baseband_connect:
+	call shutter_stop_bluetooth_discovery
+	setarg 0
+	store 2,mem_ble_shutter_reconn_timer
+	branch app_led_off
+
+
+ble_shutter_process_baseband_disconnect:
+	call queue_init
+	jam 0,mem_ble_shutter_enable_notify
+	branch shutter_start_reconnect
+
+
+ble_shutter_process_reconnect_complete:
+	call queue_init
+	jam 1,mem_ble_shutter_enable_notify
+	fetch 8,mem_ble_shutter_interval_min
+	store 8,mem_le_interval_min
+	call app_lpm_mult_enable
+	branch le_l2cap_tx_update_req
+
+
+ble_shutter_process_parse_connect_parameter_update_response:
+	fetch 2,mem_le_l2cap_signaling_conn_param_update_rsp_result
+	rtneq BLE_SIGNALING_CONNECT_PARAMETER_UPDATE_ACCEPTED
+	fetch 8,mem_ble_shutter_interval_min_new
+	rtn blank
+	store 8,mem_le_interval_min
+	branch le_l2cap_tx_update_req
+/**************************************/
+
+/******************soft swtich event**********************/
+//shutter_process_soft_swtich_button_long_press:
+//	branch ui_soft_switch_botton_long_press
+
+shutter_process_soft_swtich_button_down:
+	fetch 1,mem_shutter_hard_soft_switch_case
+	rtneq HARD_SWITCH
+	fetch 1,mem_shutter_soft_switch_power_state
+	rtnne SS_STATE_POWER_ON
+	call shutter_store_currenct_led_state
+	branch app_led_on
+	
+shutter_store_currenct_led_state:
+	jam 1,mem_shutter_soft_swtich_botton_down
+	arg 11,loopcnt
+	arg mem_shutter_soft_swtich_led_struct_temp,contw
+	arg mem_shutter_led_struct_app_led,contr
+	branch memcpy
+	
+shutter_process_soft_swtich_button_up:
+	fetch 1,mem_shutter_hard_soft_switch_case
+	rtneq HARD_SWITCH
+	fetch 1,mem_shutter_soft_switch_power_state
+	beq SS_STATE_POWER_ON,shutter_load_currenct_led_state
+	branch ui_soft_switch_botton_up
+
+shutter_load_currenct_led_state:
+	fetch 1,mem_shutter_soft_swtich_botton_down
+	rtnne 1
+	jam 0,mem_shutter_soft_swtich_botton_down
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,app_led_off
+	arg 11,loopcnt
+	arg mem_shutter_soft_swtich_led_struct_temp,contr
+	arg mem_shutter_led_struct_app_led,contw
+	branch memcpy
+	
+/**************************************/
+
+
+shutter_le_bb_event_timer:
+/**************shutter check sleep timer**********************/
+	call shutter_check_sleep_timer
+/************************************/
+/**************soft reset power off timer**********************/
+	call shutter_check_power_off_timer
+/************************************/
+
+/**************ble shutter timer**********************/
+	branch ble_shutter_reconn_timer
+/************************************/
+
+/**************shutter check sleep timer**********************/
+shutter_check_sleep_timer:
+	arg mem_shutter_sleep_timer,regc
+	arg shutter_sleep_timeout,regb
+	branch timer_single_step_2B
+shutter_sleep_timeout:
+	jam SS_STATE_POWER_OFF,mem_shutter_soft_switch_power_state
+	call app_led_off
+	call shutter_disconnect_current_connection
+	branch shutter_wait_power_off
+
+/**************soft reset power off timer**********************/
+shutter_check_power_off_timer:
+	arg mem_shutter_power_off_timer,regc
+	arg shutter_check_power_off_timeout,regb
+	branch timer_single_step
+
+shutter_check_power_off_timeout:
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,shutter_wait_power_off
+	fetch 1,mem_shutter_led_struct_app_led_type
+	beq UI_LED_STATE_BLINK_START,shutter_wait_power_off
+	beq UI_LED_STATE_BLINK_LIGHTING,shutter_wait_power_off
+	beq UI_LED_STATE_BLINK_DARKING,shutter_wait_power_off
+	branch app_enter_hibernate
+/************************************/
+
+/**************ble shutter timer**********************/
+ble_shutter_reconn_timer:
+	fetch 1,mem_shutter_soft_switch_power_state
+	rtnne SS_STATE_POWER_ON
+	arg mem_ble_shutter_reconn_timer,regc
+	arg shutter_start_bluetooth_discovery,regb
+	branch timer_single_step_2B
+/************************************/
+
+shutter_process_idle:
+	call shutter_send_data_to_master
+	branch keyscan_key_process
+
+
+shutter_process_lpm_before:
+	call gpio_set_before_lpm
+	branch keyscan_process_lpm_before
+
+shutter_le_before_hibernate:
+	call gpio_set_before_lpm
+	branch disable_authrom
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+
+/****************shutter bluetooth control**********************/
+shutter_stop_bluetooth_discovery:
+//	fetch 1,mem_shutter_bluetooth_type
+//	bbit1 BLE_SHUTTER,ble_shutter_stop_bluetooth_discovery
+//	rtn
+ble_shutter_stop_bluetooth_discovery:
+	fetch 2,mem_ble_shutter_connect_timeout
+	store 2,mem_shutter_sleep_timeout
+	store 2,mem_shutter_sleep_timer
+	branch app_ble_stop_adv
+	
+
+shutter_start_bluetooth_discovery:
+	fetch 1,mem_shutter_soft_switch_power_state
+	rtnne SS_STATE_POWER_ON
+//	fetch 1,mem_shutter_bluetooth_type
+//	bbit1 BLE_SHUTTER,ble_shutter_start_discovery
+//	rtn
+ble_shutter_start_discovery:
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_CONNECTED
+	fetch 2,mem_ble_shutter_discovery_timeout
+	store 2,mem_shutter_sleep_timeout
+	store 2,mem_shutter_sleep_timer
+	fetch 2,mem_ble_shutter_discovery_adv_interval
+	call shutter_ble_adv_interval_set
+	call app_led_start_blink
+	fetch 4,mem_ble_shutter_discovery_blink_on_time
+	store 4,mem_shutter_led_struct_app_led_on_time
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_ADV
+	branch app_ble_start_adv
+
+shutter_soft_swtich_power_on:
+shutter_start_reconnect:
+	fetch 1,mem_shutter_soft_switch_power_state
+	rtnne SS_STATE_POWER_ON
+//	fetch 1,mem_shutter_bluetooth_type
+//	bbit1 BLE_SHUTTER,ble_shutter_start_reconnect
+//	rtn
+ble_shutter_start_reconnect:
+	fetch 2,mem_ble_shutter_reconn_timer
+	fetcht 2,mem_ble_shutter_reconn_timeout
+	storet 2,mem_ble_shutter_reconn_timer
+	nrtn blank
+	fetch 2,mem_ble_shutter_reconn_adv_interval
+	call shutter_ble_adv_interval_set
+	call app_led_start_blink
+	fetch 4,mem_ble_shutter_reconn_blink_on_time
+	store 4,mem_shutter_led_struct_app_led_on_time
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_ADV
+	branch app_ble_start_adv
+
+shutter_disconnect_current_connection:
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,app_ble_disconnect
+	branch shutter_stop_bluetooth_discovery
+/**************************************/
+/////////////////////////////////////////////////////////////////////////
+//output:if user is enable,mean,can send data
+shutter_check_data_enable:
+	call disable_user
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,shutter_check_ble_data_enable
+	rtn
+
+shutter_check_ble_data_enable:
+	fetch 1,mem_ble_shutter_enable_notify
+	rtn blank
+	branch enable_user
+/////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////
+//output:if user is enable,mean,bluetooth disconnect
+shutter_check_bluetooth_conn:
+	call disable_user
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_CONNECTED
+	branch enable_user
+/////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////
+shutter_change_bluetooth_status_bt_disconn:
+//	fetch 1,mem_shutter_bluetooth_type
+//	bbit1 BLE_SHUTTER,ble_shutter_change_bluetooth_status_bt_disconn
+//	rtn
+ble_shutter_change_bluetooth_status_bt_disconn:
+	branch shutter_start_reconnect
+
+/////////////////////////////////////////////////////////////////////////
+
+shutter_check_send_data:
+	disable user2
+	fetch 2,mem_shutter_sleep_timeout
+	store 2,mem_shutter_sleep_timer
+
+	call shutter_check_bluetooth_conn
+	branch shutter_change_bluetooth_status_bt_disconn,user
+	
+	call shutter_check_data_enable
+	nrtn user
+	branch enable_user2
+
+//queue = key index
+//rega =1 press, =0 release
+shutter_key_change:
+	call shutter_check_send_data
+	nrtn user2
+	deposit rega
+	branch shutter_key_release,blank
+shutter_key_press:
+	call app_led_on
+	arg mem_key0_press,regc
+	branch push_queue_press_or_release
+
+shutter_key_release:
+	call app_led_off
+	arg mem_key0_release,regc
+
+push_queue_press_or_release:
+	arg MAX_QUEUE_NUM,pdata
+	imul32 queue,pdata
+	iadd regc,regc
+	
+//input:regc the address that want push to queue buffer
+push_buffer_in_queue:
+	ifetch 1,regc
+	rtn blank
+	call queue_push_one_byte
+	increase 1,regc
+	branch push_buffer_in_queue
+
+
+shutter_send_data_to_master:
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,pop_queue_to_ble_data
+	rtn
+
+pop_queue_to_ble_data:
+	call le_fifo_check_nearly_full
+	nrtn blank
+	call queue_pop_one_byte
+	nrtn user
+	pincrease -1
+	mul32 pdata,SHUTTER_BLE_DATA_BUFFER,pdata
+	arg mem_ble_data_buffer1,temp
+	iadd temp,contr
+	branch le_send_notify_from_list
+
+///////////queue function////////////
+//input:pdata is data that want push
+queue_push_one_byte:
+	store 1,mem_pdatatemp
+	arg mem_pdatatemp,rega
+	branch queue_push
+
+queue_pop_one_byte:
+	arg mem_pdatatemp,rega
+	call queue_pop
+	nrtn user
+	fetch 1,mem_pdatatemp
+	rtn
+
+///////////queue function ending////////////
+ble_shutter_receive_data:
+	fetch 2,mem_le_att_handle
+	beq GATT_KEYBOARD_WRITE_HANDLE,ble_shutter_process_reconnect_complete
+	rtn
+
+shutter_init_param:
+	jam 0x02,mem_shutter_power_off_timeout
+/////////////ble connect interval//////////////
+	setarg 0x00200008
+	store 4,mem_ble_shutter_interval_min		//set min interval is 10ms,set max interval is 40ms
+	setarg 0x012c0005
+	istore 4,contw
+///////////////////////////////////////
+//////////////////MTU/////////////
+	jam 0x17,mem_le_local_mtu
+///////////////////////////////////////
+////////////////justwork/////////
+	setarg 0x1b
+ 	store 2,mem_le_pairing_handle
+	branch le_set_fixed_ltk_justwork
+///////////////////////////////////////
+
+shutter_load_buffer_config_form_DataRom:
+///////load data Rom/////////
+	arg BLE_KEY_VALUE_LIST_SIZE,loopcnt
+	arg mem_ble_data_buffer1,contw
+	arg BLE_SHUTTER_KEY_VALUE_LIST_ADDR,contr
+	branch memcpy_fast
+
+//shutter_load_ble_gatt_form_DataRom:
+//	arg BLE_GATT_LIST_SIZE,loopcnt
+//	arg BLE_SHUTTER_GATT_LIST_ADDR,contr
+//	branch memcpy_fast
+
+//shutter_load_dy_keyvalue_buffer_config_form_DataRom:
+///load data Rom/////////
+//	arg BT_DY_KEY_VALUE_LIST_SIZE,loopcnt
+//	arg mem_shutter_mousekey_value_list,contw
+//	arg BLE_SHUTTER_DY_MOUSEKEY_VALUE_LIST_ADDR,contr
+//	branch memcpy_fast
+
+
+/////////////////////////////////////////////////////////////////
+//shutter_soft_swtich_power_on:
+//	branch shutter_start_reconnect
+
+
+shutter_soft_swtich_power_off:
+	arg 0,rega
+	arg mem_shutter_power_off_led_style,regc
+	call ui_led_set_style_global
+	call shutter_disconnect_current_connection
+shutter_wait_power_off:
+	fetch 1,mem_shutter_power_off_timeout
+	store 1,mem_shutter_power_off_timer
+	rtn
+	
+
+/*************soft swtich ui config*********************/
+ui_soft_swtich_init:
+	setarg SS_STATE_POWER_UP
+	call ui_soft_swtich_init_power_on_time
+	jam UI_BUTTON_STATE_UP,mem_ui_button_last_state
+	call ui_button_init
+	call ui_button_polling
+ui_soft_switch_first_power_on:
+	fetch 1,mem_shutter_soft_switch_first_power_on
+	branch ui_soft_swtich_init_next, blank
+	fetch 1,core_lpm_isogate
+	bbit1 cold_wake,ui_soft_switch_power_on
+ui_soft_swtich_init_next:		
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BTN_DOWN
+	branch app_enter_hibernate
+
+ui_soft_swtich_init_power_on_time:
+	fetcht 2,mem_power_param_ptr
+	istore 1,temp		//init power state 
+	ifetch 1,contw		//power on time
+	store 1,mem_ui_button_timeout
+	rtn
+
+
+ui_soft_switch_botton_up:
+	fetch 2,mem_power_param_ptr
+	ifetch 1,pdata
+	rtnne SS_STATE_POWER_UP
+	branch app_enter_hibernate
+
+
+ui_soft_switch_botton_long_press:
+	fetcht 2,mem_power_param_ptr
+	ifetch 1,temp
+	beq SS_STATE_POWER_ON,ui_soft_switch_power_off
+ui_soft_switch_power_on:
+	setarg SS_STATE_POWER_ON
+	fetcht 2,mem_power_param_ptr
+	istore 1,temp		//init power state 
+	add temp,SS_POWER_OFF_TIME,contr
+	ifetch 1,contr
+	istore 1,mem_ui_button_timeout
+	ifetch 2,contr
+	branch callback_func
+
+ui_soft_switch_power_off:
+	setarg SS_STATE_POWER_OFF
+	call ui_soft_swtich_init_power_on_time
+	add temp,SS_POWER_OFF_CB,contr
+	ifetch 2,contr
+	branch app_enter_hibernate,blank		//no call back function , just enter hibernate
+	branch callback_func
+	
+/*************soft swtich ui config ending*********************/
+
+//pdata:adv interval value
+shutter_ble_adv_interval_set:
+	store 2,mem_lpm_interval
+	increase -4,pdata
+	store 2,mem_le_adv_interval
+	rtn
+
+le_send_notify_from_list:
+	ifetch 1,contr	//length 
+	copy pdata,rega
+	ifetcht 2,contr	//handle
+	call store_contr
+	call le_att_malloc_tx_notify
+	copy rega,loopcnt
+	call get_contr
+	branch memcpy
+
+shutter_le_uuid_table_conf:
+	setarg BLE_SHUTTER_GATT_LIST_ADDR
+	store 2,mem_ui_le_uuid_table	//BLE ATT LIST END
+	rtn
+	
+shutter_dy_le_uuid_table_conf:
+	setarg mem_shutter_le_uuid_sup	//BLE ATT LIST 
+	store 2,mem_ui_le_uuid_table	//BLE ATT LIST END
+	rtn
+
+/*************shutter default_init starting*********************/
+shutter_default_init:
+	fetch 2,mem_shutter_key_conf0_temp
+	store 2,mem_shutter_key_conf0
+	fetch 1,mem_shutter_led_struct_app_led_gpio_temp
+	store 1,mem_shutter_led_struct_app_led_gpio
+	store 1,mem_shutter_power_off_led_style_gpio
+	fetch 1,mem_shutter_hard_soft_switch_case_temp
+	store 1,mem_shutter_hard_soft_switch_case
+	fetch 1,mem_shutter_soft_switch_button_gpio_temp
+	store 1,mem_shutter_soft_switch_button_gpio
+//	jam 0x01,mem_shutter_bluetooth_type
+//	setarg 0x0030
+//	store 2,mem_classic_shutter_random_mac_offset_addr
+//	setarg 0x0000
+//	store 2,mem_shutter_config_eeprom_offset_addr
+	setarg 0x0002
+	store 2,mem_key0_press
+	store 2,mem_key1_press
+	setarg 0x0006
+	store 2,mem_key0_release
+	store 2,mem_key1_release
+	setarg 0x0007
+	store 2,mem_key2_press
+	setarg 0x0008
+	store 2,mem_key2_release
+	setarg mem_shutter_soft_switch_power_state
+	store 2,mem_power_param_ptr
+	setarg 0x201400
+	store 3,mem_shutter_soft_switch_power_state
+	jam 0x01,mem_lpm_mode
+	setarg 0x0100
+	store 2,mem_lpm_interval
+	jam 0x08,mem_lpm_overhead
+	jam 0x05,mem_lpm_mult
+	jam 0x02,mem_lpm_mult_timeout
+	setarg 0x0096
+	store 2,mem_ble_shutter_reconn_blink_on_time
+	istore 2,contw
+	setarg 0x0296
+	store 2,mem_ble_shutter_discovery_blink_on_time
+	istore 2,contw
+	setsect 0,0x10
+	setsect 1,0x8008
+	setsect 2,0x2c000
+	setsect 3,0x04
+	store 8,mem_ble_shutter_interval_min_new
+	jam 0x01,mem_ui_led_struct_num
+	setarg mem_shutter_led_struct_app_led
+	store 2,mem_ui_led_struct_ptr
+	setarg 0x0000
+	store 2,mem_shutter_led_struct_app_led
+	setsect 0,0x1a0
+	setsect 1,0x68
+	setsect 2,0x00
+	setsect 3,0x00
+	store 8,mem_shutter_led_struct_app_led_on_time
+	setarg 0x0301
+	store 2,mem_shutter_power_off_led_style
+	setsect 0,0x1a0
+	setsect 1,0xe8
+	setsect 2,0x00
+	setsect 3,0x00
+	store 8,mem_shutter_power_off_led_style_on_time
+	setarg 0x000e
+	store 2,mem_ble_shutter_reconn_adv_interval
+	setarg 0x0140
+	store 2,mem_ble_shutter_discovery_adv_interval
+	store 2,mem_le_adv_interval
+	setarg 0x0050
+	store 2,mem_ble_shutter_reconn_timeout
+	jam 0x07,mem_le_adv_channel_map
+	jam 0x00,mem_le_adv_enable
+	setsect 0,0xfb
+	setsect 1,0x2c212
+	setsect 2,0x800f
+	setsect 3,0x21
+	store 8,mem_local_rx_max_octets
+	setsect 0,0x0bb8
+	setsect 1,0x02ee
+	store 4,mem_ble_shutter_discovery_timeout
+	setarg mem_queue_each_size
+	store 2,mem_queue_ptr
+	setarg 0x2001
+	store 2,mem_queue_each_size
+	jam 0x1f,mem_le_adv_data_len
+	setsect 0,0x10102
+	setsect 1,0x80c1
+	setsect 2,0x18120
+	setsect 3,0x640c
+	store 9,mem_le_adv_data
+	setsect 0,0x3c1
+	istore 2,contw
+	jam 0x1f,mem_le_scan_data_len
+	setsect 0,0x2090d
+	setsect 1,0x34c15
+	setsect 2,0x28532
+	setsect 3,0x1d1d5
+	store 9,mem_le_scan_data
+	setsect 0,0x26574
+	setsect 1,0x1c
+	istore 3,contw
+	setarg mem_shutter_keyscan
+	store 2,mem_keyscan_ptr
+	jam 0x02,mem_shutter_key_num
+	setarg mem_shutter_nv_data
+	store 2,mem_nv_data_ptr
+	jam 0x05,mem_nv_data_number
+	fetch 1,mem_shutter_dy_conf
+	beq SHUTTER_TYPE,shutter_le_uuid_table_conf
+	beq SHUTTER_DY_TYPE,shutter_dy_le_uuid_table_conf
+	rtn	
+	
+
+/*************shutter default_init ending*********************/
+
+
+
+
+
+else
+	branch assert
+	
+endif

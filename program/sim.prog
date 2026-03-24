@@ -1,0 +1,785 @@
+simstart:
+	force 8,radio_ctrl
+	force 0,radio_ctrl
+    //dpll enable
+	jam 0xcf,core_bbpll_ctrl0
+	jam 0xe9,core_bbpll_ctrl1
+	jam 5,core_clksel
+	jam 0,core_clkoff
+	jam 0,core_clkoff+1
+	jam SYSTEM_CLK_12M,mem_system_clk
+
+//	call sim_nec
+//	branch sim_c1
+//	jam 8,0x8011 //efuse lock
+//	call sim_wdt
+//	call sim_nec
+//	call sim_dac
+//    call sim_ccm
+//	call sim_otp
+//    branch sim_assert
+//	branch sim_lr
+//	call sim_snooze
+//	call sim_adpcm
+//	branch sim_lpm_clk
+//	call sim_pwm
+//	call sim_saradc
+//	branch sim_usb
+	branch sim_lpm_sleep
+//	branch sim_iic
+//	call sim_cal
+//	call sim_uart
+//	call sim_spi
+//	branch sim_le
+	branch sim_assert
+	fetch 1,mem_sim_slave
+	beq 1,assert
+
+sim_assert:
+	branch sim_assert
+
+
+
+sim_adpcm:
+	arg mem_le_test_sync,contr
+	arg 0,contw
+	arg 192,loopcnt
+sim_adpcm_loop:
+	ifetch 4,contr
+	call adpcm_byte
+	istore 1,contw
+	loop sim_adpcm_loop
+	copy contr,rega
+	arg 0,regb
+	arg 192,loopcnt
+	call string_compare
+	nbranch assert,zero
+	arg mem_le_test_sync+768,contr
+	arg 0,contw
+	arg 192,loopcnt
+	pulse init_adpcm
+sim_adpcm_loop2:
+	ifetch 1,contr
+	pcm pdata,temp
+	istoret 2,contw
+	rshift4 pdata,pdata
+	pcm pdata,temp
+	istoret 2,contw
+	loop sim_adpcm_loop2	
+	copy contr,rega
+	arg 0,regb
+	arg 768,loopcnt
+	call string_compare
+	nbranch assert,zero
+	rtn
+	
+// pdata is 4 byte pcm data, return in pdata
+adpcm_byte:
+	adpcm pdata,temp
+	rshift16 pdata,pdata
+	adpcm pdata,pdata
+	lshift4 pdata,pdata
+	ior temp,pdata
+	rtn
+
+	
+
+sim_nec:
+	jam gpcfg_nec_input,core_gpio_conf+6
+	setarg 0x100000
+	arg 0x31,temp
+	call nec_init_config
+	nop 10000
+	jam 0x0,core_nec_ctrl
+	rtn
+
+sim_saradc:
+	jam 0,core_gpadc_cfg1
+	jam 0x77,core_gpadc_ctrl
+	call sim_sadc_cal
+	jam 0xc1,core_gpadc_cfg0
+	jam 1,core_sadc_clkdiv
+	call sim_sadc
+	jam 11,core_sadc_clkdiv
+	call sim_sadc
+	jam 119,core_sadc_clkdiv
+	call sim_sadc
+	jam 11,core_sadc_clkdiv
+	call sim_sadc
+	jam 0,core_sadc_clkdiv
+	call sim_sadc_dma
+	rtn
+
+
+sim_sadc_dma:
+	jam 0x80,core_gpadc_cfg1
+	jam 10,core_sadc_clkdiv
+	jam 0xff,core_sadc_eaddr
+	jam 0xb,core_sadc_ctrl
+	nop 1000
+	jam 0x3,core_sadc_ctrl
+	rtn
+
+sim_sadc_cal:
+	jam 0xc9,core_gpadc_cfg0
+	jam 7,core_sadc_clkdiv
+sim_sadc:
+	jam 0x23,core_sadc_ctrl
+sim_sadc_wait:
+	fetch 1,core_perf_status
+	bbit0 5,sim_sadc_wait
+	fetcht 2,core_sadc_data
+	jam 6,core_sadc_ctrl
+sim_sadc_wait2:
+	fetch 1,core_perf_status
+	bbit1 5,sim_sadc_wait2
+	jam 0,core_sadc_ctrl
+	rtn
+
+
+sim_pwm:
+	jam 0xce,core_clkoff+1
+	jam 0x1,core_pwm_pcnt0
+	jam 0x1,core_pwm_ncnt0
+	jam 0x10,core_gpio_conf+6
+	jam 0x1,core_pwm_autoload
+	jam 0x1,core_pwm_en //pwm0/1 enable
+	rtn
+
+sim_usb:
+	call usb_init
+sim_usb_loop:
+	call usb_isr
+	branch sim_usb_loop
+
+sim_lpm_clk:
+	jam 1,mem_context
+	branch sim_lpm_cont,wake
+	jam 0x2,core_ccnt_bit
+	jam ccnt_start,core_misc_ctrl
+sim_lpm_wait:
+	call lpo_calibration
+	fetch 3,mem_clks_per_lpo
+	branch sim_lpm_wait,blank
+	lshift4 pdata,pdata
+	store 3,mem_clks_per_lpo
+sim_lpm_cont:
+	setarg param_rt_rthalfslot
+	store 2,mem_param_rt_rthalfslot
+	call lpm_recover_clk,wake
+	setarg 10000
+	call sleep,wake
+sim_lpm_sleep:
+	branch sim_lpm_hibernate,wake
+	arg 120,temp
+	storet 4,mem_sleep_counter
+	branch lpm_sleep
+
+sim_lpm_hibernate:
+	until null,lpo_edge
+	jam 0x77,core_gpio_wakeup_cfg+3
+	until null,lpo_edge
+	jam 0x77,core_gpio_wakeup_cfg+4
+	until null,lpo_edge
+	jam 2,core_gpio_wakeup_cfg+5
+	until null,lpo_edge
+	jam 0xaa,core_puwakeup
+	until null,lpo_edge
+	arg 60,temp
+	branch lpm_hibernate+2
+
+
+sim_le:
+	jam lemode_2m,mem_le_mode
+	fetch 1,mem_sim_slave
+	beq 1,sim_le_slave
+	jam 1,mem_le_scan_enable
+sim_le_loop:
+	call le_advertising_dispatch
+	branch sim_le_loop
+
+sim_le_slave:
+	jam 1,mem_le_adv_enable
+	nop 1000
+	branch sim_le_loop
+
+
+sim_otp:
+	fetch 1,mem_sim_slave
+	beq 1,assert
+	setarg 0x1234567
+	store 4,mem_tmp_buffer
+	arg 0x1230,regb
+	arg mem_tmp_buffer,rega
+	arg 4,loopcnt
+	call otp_write
+	arg 0x1230,regb
+	arg mem_tmp_buffer+4,rega
+	arg 4,loopcnt
+	call otp_read_data
+	fetch 4,mem_tmp_buffer
+	ifetcht 4,contr
+	isub temp,null
+	nbranch assert,zero
+	jam 0x73,0x8002
+	until null,lpo_edge
+	until null,lpo_edge
+	jam 0x80,0x8144
+	until null,lpo_edge
+	fetch 1,0x8144
+	arg 0x1230,regb
+	arg mem_tmp_buffer+4,rega
+	arg 4,loopcnt
+	call otp_read_data
+	fetch 4,mem_tmp_buffer
+	ifetcht 4,contr
+	isub temp,null
+	nbranch assert,zero
+	rtn
+	
+
+sim_snooze:
+	setarg 0x40
+	arg 13,loopcnt
+	arg core_gpio_conf,contw
+	lstore contw
+	jam 0x3,0x8150
+	setarg 123
+	iadd lpo_time,alarm
+	snooze
+	rtn
+
+ifdef TEST
+
+sim_ccm:
+    //call sim_aes_key_config_case1
+    //call sim_aes_dec_dma_case1
+    //call sim_aes_enc_dma_case1
+    call sim_aes_key_config_case4
+    call sim_aes_dec_dma_case4
+    call sim_aes_enc_dma_case4
+    rtn
+
+sim_aes_key_config_case1:
+    //key
+    force 4,regext_index
+    arg 0x6789,pdata
+    lshift16 pdata,pdata
+    arg 0x6789,temp
+    ior temp,regext
+    force 5,regext_index
+    arg 0x6789,pdata
+    lshift16 pdata,pdata
+    arg 0x6789,temp
+    ior temp,regext
+    force 6,regext_index
+    arg 0x2345,pdata
+    lshift16 pdata,pdata
+    arg 0x2345,temp
+    ior temp,regext
+    force 7,regext_index
+    arg 0x2345,pdata
+    lshift16 pdata,pdata
+    arg 0x2345,temp
+    ior temp,regext
+    //nonce
+    force 8,regext_index
+    arg 0xbc61,pdata
+    lshift16 pdata,pdata
+    arg 0x4e49,temp
+    ior temp,regext
+    force 9,regext_index
+    arg 0xccdd,pdata
+    lshift16 pdata,pdata
+    arg 0x0000,temp
+    ior temp,regext
+    force 0xa,regext_index
+    arg 0x8899,pdata
+    lshift16 pdata,pdata
+    arg 0xaabb,temp
+    ior temp,regext
+    force 0xb,regext_index
+    arg 0x0000,pdata
+    lshift16 pdata,pdata
+    arg 0x6677,temp
+    ior temp,regext
+    //aad
+    jam 0x00,0x80d5
+    jam 0x19,0x80d6
+    jam 0x02,0x80d7
+    rtn
+
+sim_aes_dec_dma_case1:
+    //mic golden
+    force 0,regext_index
+    arg 0xc5dd,pdata
+    lshift16 pdata,pdata
+    arg 0xa210,temp
+    ior temp,regext
+    
+    //payload
+
+    //dma config
+    jam 0x00,0x80d1
+    jam 0x10,0x80d2
+    jam 0x00,0x80d3
+    jam 0x10,0x80d4
+    jam 0x6,0x800a 
+    jam 0x7,0x800a 
+    nop 1000
+    rtn
+
+sim_aes_enc_dma_case1:
+    //payload
+
+    //dma config
+    jam 0x00,0x80d1
+    jam 0x10,0x80d2
+    jam 0x00,0x80d3
+    jam 0x11,0x80d4
+    jam 0x2,0x800a 
+    jam 0x3,0x800a 
+    nop 1000
+    rtn
+
+sim_aes_key_config_case4:
+    //key
+    force 4,regext_index
+    arg 0x1bd1,pdata
+    lshift16 pdata,pdata
+    arg 0x2ace,temp
+    ior temp,regext
+    force 5,regext_index
+    arg 0xbd56,pdata
+    lshift16 pdata,pdata
+    arg 0x14a1,temp
+    ior temp,regext
+    force 6,regext_index
+    arg 0x1f8b,pdata
+    lshift16 pdata,pdata
+    arg 0x9dbd,temp
+    ior temp,regext
+    force 7,regext_index
+    arg 0xfc22,pdata
+    lshift16 pdata,pdata
+    arg 0x8384,temp
+    ior temp,regext
+    //nonce
+    force 8,regext_index
+    arg 0xb3be,pdata
+    lshift16 pdata,pdata
+    arg 0x9549,temp
+    ior temp,regext
+    force 9,regext_index
+    arg 0x2769,pdata
+    lshift16 pdata,pdata
+    arg 0x00bd,temp
+    ior temp,regext
+    force 0xa,regext_index
+    arg 0xb727,pdata
+    lshift16 pdata,pdata
+    arg 0x5bf9,temp
+    ior temp,regext
+    force 0xb,regext_index
+    arg 0x1100,pdata
+    lshift16 pdata,pdata
+    arg 0x82b8,temp
+    ior temp,regext
+    //aad
+    jam 0x00,0x806c
+    jam 0x19,0x806d
+    jam 0x02,0x806e
+    rtn
+
+sim_aes_dec_dma_case4:
+    //mic golden
+    force 0,regext_index
+    arg 0x7c32,pdata
+    lshift16 pdata,pdata
+    arg 0x2cc6,temp
+    ior temp,regext
+    
+    //payload
+    arg 0x1001,contw
+    arg 0xb839, pdata
+    istore 2,contw
+    arg 0xc85f, pdata
+    istore 2,contw
+    arg 0x3756, pdata
+    istore 2,contw
+    arg 0x9249, pdata
+    istore 2,contw
+    arg 0xf07f, pdata
+    istore 2,contw
+    arg 0xd647, pdata
+    istore 2,contw
+    arg 0x2b40, pdata
+    istore 2,contw
+    arg 0x7ccc, pdata
+    istore 2,contw
+    arg 0xfff9, pdata
+    istore 2,contw
+    arg 0xffff, pdata
+    istore 2,contw
+    jam 0x11,0x80c1
+
+    //dma config
+    jam 0x01,0x8068
+    jam 0x10,0x8069
+    jam 0x02,0x806a
+    jam 0x40,0x806b
+    jam 0x6,0x800a 
+    jam 0x7,0x800a 
+    call wait_ccm_done
+    fetch 1,0x4012
+    bne 0x05,assert
+    rtn
+
+sim_aes_enc_dma_case4:
+    //payload
+    arg 0x4002,contw
+    arg 0x1286, pdata
+    istore 2,contw
+    arg 0xa56d, pdata
+    istore 2,contw
+    arg 0xb3db, pdata
+    istore 2,contw
+    arg 0x6491, pdata
+    istore 2,contw
+    arg 0xa19b, pdata
+    istore 2,contw
+    arg 0xc4ca, pdata
+    istore 2,contw
+    arg 0x9160, pdata
+    istore 2,contw
+    arg 0x3372, pdata
+    istore 2,contw
+    arg 0xff05, pdata
+    istore 2,contw
+    arg 0xffff, pdata
+    istore 2,contw
+    jam 0x11,0x80da //ccm_inptr
+
+    //dma config
+    jam 0x02,0x80d1
+    jam 0x40,0x80d2
+    jam 0x01,0x80d3
+    jam 0x11,0x80d4
+    jam 0x2,0x800a 
+    jam 0x3,0x800a 
+    call wait_ccm_done
+    fetch 1,0x1111
+    bne 0xf9,assert
+    rtn
+
+
+
+
+
+
+
+
+
+sim_dac:
+	jam gpcfg_dac_p,core_gpio_conf+4
+	jam gpcfg_dac_n,core_gpio_conf+5
+	jam 0,core_clkoff
+	setarg 0x012972
+	store 3,core_dac_coef
+	call sim_sine
+	setarg 0x200
+	store 2,core_dac_saddr
+	jam 0x4f,core_dac_len
+	jam 0xe0,core_dac_vol
+	jam 0x5,core_dac_ctrl
+	branch sim_assert
+
+sim_sine:
+	setarg 00
+	store 2,0x200
+	setarg 5690
+	istore 2,contw
+	setarg 11209
+	istore 2,contw
+	setarg 16386
+	istore 2,contw
+	setarg 21065
+	istore 2,contw
+	setarg 25104
+	istore 2,contw
+	setarg 28380
+	istore 2,contw
+	setarg 30794
+	istore 2,contw
+	setarg 32271
+	istore 2,contw
+	setarg 32767
+	istore 2,contw
+	add contw,-2,contr
+	arg 10,loopcnt
+sine_loop1:
+	ifetch 2,contr
+	istore 2,contw
+	increase -4,contr
+	loop sine_loop1
+	arg 0x200,contr
+	arg 20,loopcnt
+sine_loop2:
+	ifetcht 2,contr
+	sub temp,0,temp
+	istoret 2,contw
+	loop sine_loop2
+	rtn
+
+	
+
+sim_lpm:
+	setarg 0
+	arg 8,loopcnt
+sim_lpm_loop:
+	until null,lpo_edge
+	store 1,core_lpm_ldosel
+	pincrease 0x10
+	loop sim_lpm_loop
+	call app_lpm_peripheral_lock_shutter
+	call app_lpm_mpu_lock_ble
+
+
+sim_lr:
+	jam 3,mem_le_ch_mapped
+	setarg 0xfedcba
+	store 3,mem_le_crcinit
+	call le_enable
+	setarg 0x1234567
+	iforce access
+	set1 mark_ble_lr,mark
+//	set1 mark_ble_lr_s8,mark
+	setarg 0x2e0403
+	store 3,mem_le_txheader
+	setarg 0x123456
+	istore 3,contw
+	call le_transmit
+	branch assert
+
+
+
+sim_c1:
+	setarg 0xb4b5b6
+	store 3,mem_le_lap
+	setarg 0xb1b2b3
+	istore 3,contw
+	setarg 0xa4a5a6
+	store 3,mem_le_plap
+	setarg 0xa1a2a3
+	istore 3,contw
+	setarg 0x101
+	store 4,mem_le_preq
+	setarg 0x70710
+	istore 3,contw
+	setarg 0x302
+	store 4,mem_le_pres
+	setarg 0x50008
+	istore 3,contw
+	jam 0,mem_le_conn_peer_addr_type
+	jam 1,mem_le_adv_own_addr_type
+	arg regidx_key,regext_index
+	arg 4,loopcnt
+sim_clear_key_loop:
+	arg 0,regext
+	increase 1,regext_index
+	loop sim_clear_key_loop
+
+	setarg 0x702EE0
+	store 3,mem_le_rconfirm
+	setarg 0x274EC6
+	istore 3,contw
+	setarg 0x0E6388
+	istore 3,contw
+	setarg 0x56AD6F
+	istore 3,contw
+	setarg 0x83D521
+	istore 3,contw
+	setarg 0x57	
+	istore 1,contw
+	arg mem_le_rconfirm,rega
+	call aes_init
+	call function_c1
+	branch loop
+
+loop:
+	branch loop
+
+sim_wdt:
+    jam 8,0x8043
+    jam 0x7e,0x8004
+    nop 1000
+    jam 0xf,0x800b
+    rtn
+
+
+
+
+sim_uart:
+	jam 0x67,mem_h5tx_buf
+	setarg mem_h5tx_buf
+	add pdata,0x80,temp
+	call uarta_init_tx
+	increase 0x80,pdata
+	increase 0x80,temp
+	jam gpcfg_uart_txd,core_gpio_conf + 16
+	jam 0x81,core_uart_ctrl
+	setarg 0x30
+	store 2,core_uart_baud
+	fetch 1,mem_sim_slave
+	beq 1,sim_uart_slave
+	call uarta_prepare_tx
+	call sim_uart_wait+3
+	setarg 0x1357d9a
+	istore 4,contu
+	arg 0xaa69,rega
+	istorer rega,2,contu
+	setarg 0xfedcb3
+	istore 3,contu
+	storer contu,2,core_uart_twptr
+sim_uart_wait:
+	fetch 1,core_uart_status
+	bbit1 uart_status_tx_busy,sim_uart_wait
+	nop 200
+	rtn
+
+sim_uart_slave:
+	nop 247
+	fetch 1,mem_h5tx_buf
+	bne 0x67,assert
+	branch sim_uart_slave
+	fetch 1,core_uart_status
+	bbit1 uart_status_rx_fifo_empty,sim_uart_slave
+	fetch 1,core_uart_rxitems
+	bne 9,sim_uart_slave
+	fetcht 8,mem_h5tx_buf
+	call uarta_prepare_rx
+	ifetch 8,contu
+	isub temp,null
+	nbranch assert,zero
+	rtn
+
+
+
+sim_cal:
+
+	call tx_iq_precomp
+	fetchr regf,2,mem_omega
+	ifetchr regf,2,contr
+	ifetchr regf,2,contr
+	fetchr regf,2,mem_b1
+	ifetchr regf,2,contr
+	fetchr regf,2,mem_b2
+	ifetchr regf,2,contr
+	arg 0x1000,timeup
+	call tx_iq_cal
+	jam 1,core_ice_ctrl
+
+	arg 0x1000,timeup
+	call rx_iq_comp
+	jam 1,core_ice_ctrl
+	
+
+sim_iic:
+	call iic_init_600khz
+    call iicd_init_pin
+iic_write:
+	setarg 6
+	store 2,core_iicd_txlen
+	setarg 0x10a0
+	store 2,0x1000
+    setarg 0x5a00
+	store 2,0x1002
+    setarg 0xa5a5
+	store 2,0x1004
+	setarg 0x1000
+	store 2,core_iicd_txaddr
+	setarg 0
+	store 2,core_iicd_rxlen
+	jam 3,core_iicd_ctrl
+	jam iicd_start,core_misc_ctrl
+	call wait_iicd_done
+	nop 300
+iic_dummy_write:
+	setarg 3
+	store 2,core_iicd_txlen
+	setarg 0x10a0
+	store 2,0x1000
+    setarg 0x00
+	store 1,0x1002
+	setarg 0x1000
+	store 2,core_iicd_txaddr
+	setarg 0
+	store 2,core_iicd_rxlen
+	jam 3,core_iicd_ctrl
+	jam iicd_start,core_misc_ctrl
+	call wait_iicd_done
+	nop 300
+iic_read:
+    setarg 1
+	store 2,core_iicd_txlen
+    setarg 0xa1
+	store 1,0x1000
+	setarg 0x1000
+	store 2,core_iicd_txaddr
+    setarg 0x1100
+	store 2,core_iicd_rxaddr
+	setarg 3
+	store 2,core_iicd_rxlen
+	jam 1,core_iicd_ctrl
+	jam iicd_start,core_misc_ctrl
+	call wait_iicd_done
+    fetch 1, 0x1100
+    bne 0x5a, assert
+    rtn
+
+sim_spi:
+    //jam gpcfg_spid_miso ,core_gpio_conf + 12 
+    //jam gpcfg_spid_ncs ,core_gpio_conf + 13 
+    //jam gpcfg_spid_sck ,core_gpio_conf + 14 
+    //jam gpcfg_spid_mosi ,core_gpio_conf + 15
+    call spi_gpio_init
+
+    setarg 3 
+    store 2 ,core_spid_rxlen 
+    setarg 4 
+    store 2 ,core_spid_txlen 
+    setarg 0x1200 
+    store 2 ,core_spid_txaddr 
+    setarg 0x1300 
+    store 2 ,core_spid_rxaddr
+    setarg 0x0003
+	store 2,0x1200
+    setarg 0x0000
+	store 2,0x1202
+    jam spid_start ,core_misc_ctrl 
+    call wait_spid_done
+    fetch 1, 0x1302
+    bne 0xaa, assert
+    rtn
+
+
+sim_adc:
+    jam 0xc,0x8a0a
+    jam 0x2,0x8a17
+    jam 0x1,0x8a97
+    jam 0x0,0x80dc
+    jam 0x80,0x8053
+    nop 10000
+    jam 0x5,0x80dc
+    jam 0x80,0x8053
+    nop 10000
+    jam 0xa,0x80dc
+    jam 0x80,0x8053
+    nop 10000
+    jam 0xf,0x80dc
+    jam 0x80,0x8053
+    nop 10000
+    jam 0x0,0x8053
+    rtn
+
+ endif

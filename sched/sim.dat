@@ -1,0 +1,54 @@
+
+mem_lpm_xtalcnt:10 20 64
+mem_lpm_isogate:8f 2f 3b
+mem_lpm_hibernate_switch:20
+mem_lpm_ldo_sel:19
+mem_fcomp_div:24
+
+mem_xtal_freq:18	#24MHz
+mem_set_cdb_on:00
+mem_syn_cal_ctrl:00
+
+mem_le_lap:11 22 33
+mem_le_adv_data_len:1b
+mem_le_adv_data:0c 09
+'Yichip Temp
+ 03 19 40 02 02 01 05 02 0a 00 03 03 f1 18
+mem_le_ch_mapped:24
+mem_le_adv_interval:20 00
+mem_le_scan_window:20 00
+mem_le_scan_type:01
+mem_le_adv_own_addr_type:01
+
+
+mem_patch00:01
+
+
+4580:ff
+mem_rf_init_ptr:80 45		
+
+
+
+
+
+
+#ecb enc data
+4f00:
+0a94 0bb5 416e f045 f1c3 9458 c653 ea5a 
+
+
+#cbc xor data
+4e00:
+5a5a 5a5a 5a5a 5a5a 6363 6363 6363 6363
+
+#cbc enc data1
+4e20:
+7033 eafa b089 698f 43cb 1050 1e73 1109 
+
+#cbc enc data2
+4e30:
+3cfd e1a1 eb69 42b0 2593 3009 5238 53f9 
+
+
+
+

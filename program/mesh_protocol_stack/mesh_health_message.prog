@@ -1,0 +1,219 @@
+
+/*
+	mesh里面configuration和health指令的解析
+*/
+
+ali_mesh_access_layer_config_or_health_message_opcode:
+	fetch 1,mem_mesh_configuration_health_message_opcode
+	beq MESH_MESSAGE_OPCODE_CONFIG_COMPOSITION_DATA_GET_NO_HEAD,ali_mesh_access_layer_config_composition_data
+	beq MESH_MESSAGE_OPCODE_CONFIG_NODE_RESET_NO_HEAD,ali_mesh_access_layer_config_or_health_message_opcode_node_reset
+	beq MESH_MESSAGE_OPCODE_CONFIG_MODEL_SUBSCRIPTION_ADD_NO_HEAD,ali_mesh_message_config_modle_subscription_add
+	beq MESH_MESSAGE_OPCODE_CONFIG_MODEL_SUBSCRIPTION_DELETE_NO_HEAD,ali_mesh_message_config_modle_subscription_delete
+//ifdef TM_OVERWRTE
+	beq MESH_MESSAGE_OPCODE_CONFIG_MODEL_SUBSCRIPTION_ADD_OW_NO_HEAD, ali_mesh_message_config_modle_subscription_add_overwrite
+//endif
+	rtn
+
+ali_mesh_message_config_modle_subscription_add_overwrite:
+	call ali_mesh_message_config_modle_subscription_check_element
+	call ali_mesh_message_config_modle_subscription_add_value_address_ow
+	call ali_mesh_message_config_modle_subscription_save	
+	setarg MESH_CONFIGURATION_AND_HEALTH_MESSAGE_OPCODE_HEADER
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_MESSAGE_OPCODE_CONFIG_MODEL_SUBSCRIPTION_ADD_OW_STATUS
+	istore 1,contw
+	
+	setarg MESH_SUCCESS
+	istore 1,contw
+	fetch 2,mem_mesh_subscription_element_address_ow
+	istore 2,contw
+
+	fetch 1, mem_mesh_receive_model_message_payload_len
+	arg 4, temp
+	isub temp, loopcnt
+	arg mem_mesh_subscription_list_num_ow, contr
+	call memcpy
+	fetch 1, mem_mesh_receive_model_message_payload_len
+	pincrease 1
+	store 1,mem_mesh_access_layer_payload_len
+
+	
+	arg 0, queue
+	branch ali_mesh_ali_vendor_message_send_message
+
+ali_mesh_message_config_modle_subscription_add_value_address_ow:
+	fetch 1, mem_mesh_subscription_list_num_ow
+	rtn blank
+	sub pdata, SUBSCRIPTION_MAX_COUNT, null
+	ncall ali_mesh_message_config_modle_subscription_set_addr_max, positive
+	iforce loopcnt
+	arg mem_mesh_subscription_value_address_start_ow, contr
+	add rega, 2, contw   //skip mem_mesh_init_first_element_group_address
+	branch  ali_mesh_byte_swap    
+
+ali_mesh_byte_swap:
+	ifetch 2, contr
+	byteswap pdata, pdata
+	istore 2, contw
+	loop ali_mesh_byte_swap
+	rtn
+
+ali_mesh_message_config_modle_subscription_set_addr_max:
+//	jam SUBSCRIPTION_MAX_COUNT, mem_mesh_subscription_list_num_ow
+	setarg SUBSCRIPTION_MAX_COUNT
+	rtn
+
+ali_mesh_access_layer_config_composition_data:
+	jam RECEIVE_CONFIG_COMPOSITION_DATA_GET, mem_mesh_provisioned_flag
+	setarg MESH_MESSAGE_OPCODE_CONFIG_COMPOSITION_DATA_STATUS
+	store 1,mem_mesh_access_layer_payload
+	setarg 0x00
+	istore 1,contw
+	setarg COMPANY_IDENTIFIERS_ALIBABA
+	istore 2,contw		//CID
+	setarg 0x0000
+	istore 2,contw		//PID
+	setarg 0x0001
+	istore 2,contw		//VID
+	setarg 0x0005
+	istore 2,contw		//Replay Protect list
+	setarg 0x0003
+	istore 2,contw		//feature Relay and Proxy
+	setarg 0x0000
+	istore 2,contw		//Loc
+	setarg 0x02
+	istore 1,contw		//Number of sig models
+	setarg 0x02	
+	istore 1,contw		//Number of vendor models
+	setarg 0x0000
+	istore 2,contw		
+	setarg 0x1000
+	istore 2,contw		//Generic OnOff Server
+	setarg 0x000001a8
+	istore 4,contw
+	setarg 0x000101a8
+	istore 4,contw		//
+	jam 28,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+
+ali_mesh_access_layer_config_or_health_message_opcode_node_reset:
+	jam HEALTH_NODE_RESET_TIMEOUT,mem_mesh_health_node_reset_timer
+//	call ali_mesh_access_layer_send_config_node_reset_status
+//	fetch 2,mem_mesh_cb_receive_node_reset
+//	branch callback_func
+ali_mesh_access_layer_send_config_node_reset_status:
+	setarg MESH_CONFIGURATION_AND_HEALTH_MESSAGE_OPCODE_HEADER
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_MESSAGE_OPCODE_CONFIG_NODE_RESET_STATUS_NO_HEAD
+	istore 1,contw
+	jam 2,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+ali_mesh_access_layer_health_node_reset_timer:
+	arg mem_mesh_health_node_reset_timer,regc
+	arg ali_mesh_access_layer_health_node_reset_timeout, regb
+	branch timer_single_step
+
+
+ali_mesh_access_layer_health_node_reset_timeout:
+	call mesh_clear_provisioning_data_only
+//	branch ali_mesh_app_delete_paired
+ali_mesh_app_delete_paired:
+	branch soft_reset_chip
+
+
+ali_mesh_message_config_modle_subscription_add:
+	call ali_mesh_message_config_modle_subscription_status
+	fetch 2,mem_mesh_core_feature
+	rtnbit1 MESH_FEATURE_DISABLE_SUBSCRIPTION
+	call ali_mesh_message_config_modle_subscription_check_element
+	call ali_mesh_message_config_modle_subscription_add_value_address
+ali_mesh_message_config_modle_subscription_save:
+	fetch 2,mem_mesh_cb_subscriptuion_list_changed
+	branch callback_func
+
+	
+ali_mesh_message_config_modle_subscription_delete:
+	call ali_mesh_message_config_modle_subscription_status
+	fetch 2,mem_mesh_core_feature
+	rtnbit1 MESH_FEATURE_DISABLE_SUBSCRIPTION
+	call ali_mesh_message_config_modle_subscription_check_element
+	fetcht 2,mem_mesh_subscription_value_address
+	rshift8 temp,pdata
+	rshift4 pdata,pdata
+	beq 0x0c,ali_mesh_message_config_modle_subscription_delete_group_addr
+	byteswap temp, temp
+ali_mesh_message_config_modle_subscription_delete_next:
+	call ali_mesh_message_config_modle_subscription_check_value_address
+	nrtn user
+	setarg 0
+	istore 2,rega
+	fetch 2,mem_mesh_cb_subscriptuion_list_changed
+	branch callback_func
+
+ali_mesh_message_config_modle_subscription_delete_group_addr:
+	setarg -1
+	istore SUBSCRIPTION_MAX_COUNT,rega
+	istore SUBSCRIPTION_MAX_COUNT,contw
+	fetch 2,mem_mesh_cb_subscriptuion_list_changed
+	branch callback_func
+
+ali_mesh_message_config_modle_subscription_check_value_address:
+	arg SUBSCRIPTION_MAX_COUNT,loopcnt
+ali_mesh_message_config_modle_subscription_check_value_address_loop:
+	ifetch 2,rega
+	arg 0xffff,regb
+	isub regb,null
+	branch enable_user,zero
+	isub temp,null
+	branch enable_user,zero
+ali_mesh_message_config_modle_subscription_check_value_address_loop_empty:
+	increase 2,rega
+	loop ali_mesh_message_config_modle_subscription_check_value_address_loop
+	branch disable_user
+
+
+ali_mesh_message_config_modle_subscription_status:
+	setarg MESH_CONFIGURATION_AND_HEALTH_MESSAGE_OPCODE_HEADER
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_MESSAGE_OPCODE_CONFIG_MODEL_SUBSCRIPTION_STATUS_NO_HEAD
+	istore 1,contw
+	setarg MESH_SUCCESS
+	istore 1,contw
+	fetch 6,mem_mesh_subscription_element_address
+	istore 6,contw
+	jam 9,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message_without_cleat_tx_buffer
+
+ali_mesh_message_config_modle_subscription_check_element:
+	call mesh_get_element_info_config
+	add rega,ELEMENT_DEVICE_SUBSCRIPTION_LABEL,rega
+	fetch 2,mem_mesh_subscription_element_address
+	fetcht 2,mem_mesh_Unicast_Address
+	byteswap temp,temp
+	isub temp,pdata
+	imul32 regb,pdata
+	iadd rega,rega
+	rtn
+
+ali_mesh_message_config_modle_subscription_add_value_address:
+	fetcht 2,mem_mesh_subscription_value_address
+	arg SUBSCRIPTION_MAX_COUNT,loopcnt
+ali_mesh_message_config_modle_subscription_add_value_address_loop:
+	ifetch 2,rega
+	branch ali_mesh_message_config_modle_subscription_add_value_address_in,blank
+	arg 0xffff,regb
+	isub regb,null
+	branch ali_mesh_message_config_modle_subscription_add_value_address_in,zero
+	increase 2,rega
+	loop ali_mesh_message_config_modle_subscription_add_value_address_loop
+	rtn
+
+ali_mesh_message_config_modle_subscription_add_value_address_in:
+	byteswap temp,temp	//access layer的数据为小端模式，切换为大端存储，方便network layer使用
+	istoret 2,rega
+	rtn
+
+
+

@@ -1,0 +1,642 @@
+
+/*
+	mesh协议中ali vendor message resolve
+	主要是阿里自定义attribute set 指令设置
+*/
+
+/*
+	主要是阿里定时设置模块指令解析
+	其他非标的指令设置
+*/
+
+ali_mesh_ali_vendor_message_attribute_set:
+	call ali_mesh_ali_vendor_message_attrbute_check_company_id_and_tid
+	nrtn user
+	bpatchx patch34_0,mem_patch34
+	fetch 2,mem_mesh_vendor_message_attr_type
+	arg VENDOR_MESSAGE_ATTR_TYPE_TIME,temp
+	isub temp,null	//设置设备的时间
+	branch ali_mesh_ali_vendor_message_opcode_timer_set_curr_time,zero
+
+	arg VENDOR_MSEEAGE_ATTR_TYPE_SET_TIME_REPEAT,temp
+	isub temp,null		//循环定时时间
+	branch ali_mesh_ali_vendor_message_opcode_timer_set_timing_cyclically,zero
+	
+	arg VENDOR_MSEEAGE_ATTR_TYPE_SET_TIME_SINGLE,temp
+	isub temp,null	//倒计时时间
+	branch ali_mesh_ali_vendor_message_opcode_timer_set_timing,zero
+
+	arg VENDOR_MESSAGE_ATTR_TYPE_TIMER_DELEATE,temp
+	isub temp,null
+	branch ali_mesh_ali_vendor_message_opcode_delete_timer,zero
+	arg VENDOR_MESSAGE_ATTR_TYPE_TIMER_INQUIRE,temp
+	isub temp,null
+	branch ali_mesh_ali_vendor_message_opcode_timer_inquire,zero
+	arg VENDOR_MSEEAGE_ATTR_TYPE_TIMER_ENABLE,temp
+	isub temp,null
+	branch ali_mesh_ali_vendor_message_opcode_timer_set_state,zero
+
+
+	arg VENDOR_MESSAGE_ATTR_TYPE_MAIN_LIGHT,temp
+	isub temp,null	
+	branch ali_mesh_ali_vendor_message_attribute_set_main_light,zero
+	arg VENDOR_MESSAGE_ATTR_TYPE_BACKGROUND_LIGHT,temp
+	isub temp,null	
+	branch ali_mesh_ali_vendor_message_attribute_set_background_light,zero
+	arg VENDOR_MESSAGE_ATTR_TYPE_COLOR,temp
+	isub temp,null	
+	branch ali_mesh_ali_vendor_message_attribute_set_color,zero
+	fetch 2,mem_mesh_cb_recv_vendor
+	branch callback_func
+
+ali_mesh_ali_vendor_message_opcode_attr_get:
+	rtn
+ali_mesh_ali_vendor_message_opcode_attr_confrimation:
+	ifetch 2,contr
+	arg VENDOR_MESSAGE_OPCODE_COMPANY_ID,temp
+	isub temp,null
+	nrtn zero
+	ifetch 1,contr
+	fetcht 1,mem_mesh_upper_tran_layer_packet_tid
+	isub temp,null
+	nrtn zero
+	branch ali_mesh_stop_send_indication_packet
+
+ali_mesh_ali_vendor_message_attrbute_check_company_id_and_tid:
+	call disable_user
+	fetch 2,mem_mesh_vendor_message_cid
+	arg VENDOR_MESSAGE_OPCODE_COMPANY_ID,temp
+	isub temp,null
+	nrtn zero
+	fetcht 1,mem_mesh_vendor_mesh_receive_tid
+	fetch 1,mem_mesh_vendor_message_tid
+	isub temp,null
+	rtn zero
+	store 1,mem_mesh_vendor_mesh_receive_tid
+	branch enable_user
+
+ali_mesh_ali_vendor_message_attribute_set_main_light:
+	call ali_mesh_ali_vendor_message_ack_attr_status_uint8
+	fetch 2,mem_mesh_cb_main_light_onoff_set
+	branch callback_func
+
+
+ali_mesh_ali_vendor_message_attribute_set_background_light:
+	call ali_mesh_ali_vendor_message_ack_attr_status_uint8
+	fetch 2,mem_mesh_cb_background_onoff_set
+	branch callback_func
+
+ali_mesh_ali_vendor_message_attribute_set_color:
+	call ali_mesh_ali_vendor_message_ack_attr_status_uint48
+	fetch 2,mem_mesh_cb_color_set
+	branch callback_func
+
+
+/*
+	阿里定时模块代码
+*/
+ali_mesh_ali_vendor_message_opcode_timer_set_curr_time:
+	call ali_mesh_ali_vendor_message_ack_attr_status_uint32
+
+	fetch 4,mem_mesh_vendor_message_current_time
+	store 4,mem_mesh_vendor_timer_current_time
+	branch ali_mesh_time_init_system_time
+
+
+
+/*
+	阿里mesh自定义status,被动回复SET或者GET状态
+*/
+ali_mesh_ali_vendor_message_status_add_head:
+	setarg VENDOR_MESSAGE_ATTR_STATUS
+	store 1,mem_mesh_access_layer_payload
+	setarg VENDOR_MESSAGE_OPCODE_COMPANY_ID
+	istore 2,contw
+	fetch 1,mem_mesh_vendor_mesh_receive_tid
+	istore 1,contw
+	istoret 2,contw
+	rtn
+
+/*
+	阿里mesh自定义indication，主动上报状态给天猫精灵
+	DST:0x00f0
+*/
+//开关上电
+ali_mesh_ali_vendor_message_opcode_device_power_on:
+	arg 0,queue
+	arg VENDOR_MESSAGE_EVENT_DEVICE_POWER_ON,temp
+	arg VENDOR_ATTR_TYPE_EVENT_TRIGGER,rega
+	branch ali_mesh_ali_vendor_message_opcode_para_uint8
+
+
+//上报开关状态
+//input:temp is generic onoff status
+//0 GENERIC_ONOFF_CMD_OFF
+//1 GENERIC_ONOFF_CMD_ON
+//input:queue is element number
+//e.g 灯queue0
+//风扇灯中灯0，风扇1
+//风扇:0
+ali_mesh_ali_vendor_message_opcode_generic_OnOff:
+	arg VENDOR_ATTR_GENERIC_ONOFF_SERVER,rega
+	branch ali_mesh_ali_vendor_message_opcode_para_uint8
+
+
+
+ali_mesh_ali_vendor_message_ack_attr_status_uint64:
+	arg 8,loopcnt
+	branch ali_mesh_ali_vendor_message_ack_attr_status
+
+ali_mesh_ali_vendor_message_ack_attr_status_uint56:
+	arg 8,loopcnt
+	branch ali_mesh_ali_vendor_message_ack_attr_status
+
+ali_mesh_ali_vendor_message_ack_attr_status_uint48:
+	arg 6,loopcnt
+	branch ali_mesh_ali_vendor_message_ack_attr_status
+
+ali_mesh_ali_vendor_message_ack_attr_status_uint32:
+	arg 4,loopcnt
+	branch ali_mesh_ali_vendor_message_ack_attr_status
+
+ali_mesh_ali_vendor_message_ack_attr_status_uint16:
+	arg 2,loopcnt
+	branch ali_mesh_ali_vendor_message_ack_attr_status
+
+ali_mesh_ali_vendor_message_ack_attr_status_uint8:
+	arg 1,loopcnt
+	branch ali_mesh_ali_vendor_message_ack_attr_status
+
+//input:loopcnt is attr length
+ali_mesh_ali_vendor_message_ack_attr_status:
+	add loopcnt,6,pdata
+	store 1,mem_mesh_access_layer_payload_len
+	call ali_mesh_ali_vendor_message_status_add_head
+	arg mem_mesh_vendor_attr_parameter,contr
+	call memcpy
+	branch ali_mesh_upper_transport_layer_send_access_message
+	
+
+
+//input:queue is element number
+//rega is vendor model attr
+//temp is vendor model attr parameter 
+ali_mesh_ali_vendor_message_opcode_para_uint8:
+	call ali_mesh_ali_vendor_message_indication_info_add_head
+	istorer rega,2,contw
+	istoret 1,contw
+	jam 7,mem_mesh_access_layer_payload_len
+	branch ali_mesh_ali_vendor_message_send_message
+
+
+//input:queue is element number
+//rega is vendor model attr
+//temp is vendor model attr parameter 
+ali_mesh_ali_vendor_message_opcode_para_uint16:
+	call ali_mesh_ali_vendor_message_indication_info_add_head
+	istorer rega,2,contw
+	istoret 2,contw
+	jam 8,mem_mesh_access_layer_payload_len
+	branch ali_mesh_ali_vendor_message_send_message
+
+
+//input:queue is element number
+ali_mesh_ali_vendor_message_send_message:
+	call ali_mesh_more_element_calc_queue_address
+	branch ali_mesh_upper_transport_layer_send_access_message_without_cleat_tx_buffer
+
+
+ali_mesh_ali_vendor_message_indication_info_add_head:
+	fetch 1,mem_mesh_transport_AID
+	store 1,mem_mesh_message_Transport_Head
+	setarg VENDOR_MESSAGE_TMALL_DST
+	store 2,mem_mesh_send_message_DST
+	fetch 1,mem_mesh_vendor_mesh_send_tid
+	pincrease 1
+	store 1,mem_mesh_vendor_mesh_send_tid
+	beq VENDOR_MESSAGE_SEND_TID_MAX,ali_mesh_ali_vendor_message_indication_info_reset_tid
+	setarg VENDOR_MESSAGE_ATTR_INDICATION
+	store 1,mem_mesh_access_layer_payload
+	setarg VENDOR_MESSAGE_OPCODE_COMPANY_ID
+	istore 2,contw
+	fetch 1,mem_mesh_vendor_mesh_send_tid
+	istore 1,contw
+	rtn
+
+ali_mesh_ali_vendor_message_indication_info_reset_tid:
+	jam VENDOR_MESSAGE_SEND_TID_MIN,mem_mesh_vendor_mesh_send_tid
+	rtn
+
+
+ali_mesh_ali_vendor_message_opcode_delete_timer:
+	copy contr,rega
+	fetch 1,mem_mesh_receive_model_message_payload_len
+	arg 6,temp
+	isub temp,pdata
+	store 1,mem_mesh_timer_index_buffer_len
+	copy pdata,loopcnt
+	copy rega,contr
+	arg mem_mesh_timer_index_buffer,contw
+	call memcpy
+	arg 0,regb
+ali_mesh_ali_vendor_message_opcode_delete_timer_loop:
+	arg mem_mesh_timer_index_buffer,pdata
+	iadd regb,temp
+	ifetch 1,temp
+	beq 0xff,ali_mesh_ali_vendor_aim_timer_buffer_clear_all
+	and pdata,0x7f,pdata
+	call ali_mesh_ali_vendor_aim_timer_buffer_clear
+	increase 1,regb
+	fetch 1,mem_mesh_timer_index_buffer_len
+	isub regb,null
+	branch ali_mesh_ali_vendor_message_opcode_delete_timer_loop,positive
+	call peripherals_write_mesh_timer_infmatn
+ali_mesh_access_layer_send_ali_vendor_message_delete_timer:
+	arg VENDOR_MESSAGE_ATTR_TYPE_TIMER_DELEATE, temp
+	call ali_mesh_ali_vendor_message_status_add_head
+	arg 0,temp
+	istoret 1,contw
+	copy contw,temp
+	call ali_mesh_get_all_timer_index_timer
+	pincrease 7
+	store 1,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+ali_mesh_ali_vendor_aim_timer_buffer_clear:
+	rtn blank
+	pincrease -1
+	mul32 pdata,18,pdata
+	arg mem_mesh_vendor_timer_timing_buffer,rega
+	iadd rega,rega
+	setarg 0
+	istore 1,rega
+	rtn
+
+ali_mesh_ali_vendor_aim_timer_buffer_clear_all:
+	arg 18,loopcnt
+	mul32 loopcnt,MESH_X_TIMERS,loopcnt
+	arg mem_mesh_vendor_timer_timing_buffer,contw
+	call clear_mem
+	call peripherals_write_mesh_timer_infmatn
+	branch ali_mesh_access_layer_send_ali_vendor_message_delete_timer
+
+ali_mesh_ali_vendor_message_opcode_timer_inquire:
+	ifetch 1,contr
+	beq 0xff,ali_mesh_ali_vendor_message_opcode_timer_inquire_all_timer
+	store 1,mem_mesh_vendor_timer_timing_temp
+	ifetch 1,contr
+	pincrease -1
+	mul32 pdata,18,pdata
+	arg mem_mesh_vendor_timer_timing_buffer,contr
+	iadd contr,contr
+	arg mem_mesh_vendor_timer_timing_palyload,contw
+	arg 18,loopcnt
+	call memcpy
+	arg VENDOR_MESSAGE_ATTR_TYPE_TIMER_INQUIRE,temp
+	call ali_mesh_ali_vendor_message_status_add_head
+	fetch 1,mem_mesh_vendor_timer_timing_index
+	branch ali_mesh_ali_vendor_message_opcode_timer_inquire_time_error,blank
+	arg 0,temp
+	istoret 1,contw
+ali_mesh_ali_vendor_message_opcode_timer_inquire_time:
+	fetch 1,mem_mesh_vendor_timer_timing_temp
+	istore 1,contw
+	fetch 1,mem_mesh_vendor_timer_timing_index
+	istore 1,contw
+	fetch 8,mem_mesh_vendor_timer_timing_time
+	istore 8,contw
+	jam 17,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+	
+
+ali_mesh_ali_vendor_message_opcode_timer_inquire_all_timer:
+	arg VENDOR_MESSAGE_ATTR_TYPE_TIMER_INQUIRE,temp
+	call ali_mesh_ali_vendor_message_status_add_head
+	arg 0xff,temp
+	istoret 2,contw
+//	arg,0xff,temp
+//	istoret 1,contw
+	copy contw,temp
+	call ali_mesh_get_all_timer_index_timer
+	pincrease 8
+	store 1,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+//	fetch 1,mem_mesh_verdor_timer_timing_flag_v2+1
+	
+//ali_mesh_ali_vendor_message_opcode_timer_inquire_timing_cyclically_v2:
+ali_mesh_ali_vendor_message_opcode_timer_inquire_time_error:
+	arg 0x80,temp
+	istore 1,contw
+	branch ali_mesh_ali_vendor_message_opcode_timer_inquire_time
+
+ali_mesh_ali_vendor_message_opcode_timer_set_state:
+	ifetch 1,contr
+	store 1,mem_mesh_vendor_timer_timing_temp
+	and pdata,0x7f,pdata
+	pincrease -1
+	mul32 pdata,18,pdata
+	arg mem_mesh_vendor_timer_timing_buffer,contw
+	iadd contw,contw
+	fetch 1,mem_mesh_vendor_timer_timing_temp
+	istore 1,contw
+	call peripherals_write_mesh_timer_infmatn
+	arg VENDOR_MSEEAGE_ATTR_TYPE_TIMER_ENABLE,temp
+	call ali_mesh_ali_vendor_message_status_add_head
+	setarg 0
+	istore 1,contw
+	copy contw,temp
+	call ali_mesh_get_all_timer_index_timer
+	pincrease 7
+	store 1,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+	
+	
+
+
+ali_mesh_time_function:
+	copy clkn_bt,temp
+	fetch 4,mem_system_time
+	isub temp,null
+	call ali_mesh_timer_timeout,positive
+	call ali_mesh_clkn_bt_add_1s
+	isub temp,null	
+	rtn positive
+	call ali_mesh_time_init_system_time_without_clk
+	fetch 4,mem_mesh_vendor_timer_current_time
+	pincrease 1
+	store 4,mem_mesh_vendor_timer_current_time
+	branch ali_mesh_ali_vendor_check_time
+
+
+ali_mesh_time_init_system_time:
+	copy clkn_bt,pdata
+ali_mesh_time_init_system_time_without_clk:
+	store 4,mem_system_time
+	fetch 1,mem_system_time+3
+	and_into 0x0f,pdata
+	store 1,mem_system_time+3
+	rtn
+
+ali_mesh_timer_timeout:
+	rtn zero
+	copy pdata,regb
+	setarg 0x100000
+	lshift8 pdata,pdata
+	iadd temp,temp
+	copy regb,pdata
+	rtn
+
+ali_mesh_clkn_bt_add_1s:
+	arg 20,loopcnt
+ali_mesh_time_loop:	
+	pincrease 160
+	loop ali_mesh_time_loop	
+	rtn
+
+ali_mesh_ali_vendor_check_time:
+	setarg MESH_X_TIMERS
+	store 1, mem_mesh_vendor_timer_check_loop
+	pincrease -1
+	mul32 pdata,18,pdata
+	arg mem_mesh_vendor_timer_timing_buffer,alarm
+	iadd alarm, alarm
+ali_mesh_ali_vendor_check_time_loop:
+	ifetch 1,alarm
+	ncall ali_mesh_ali_vendor_had_timing,blank 
+	increase -18,alarm
+
+	fetch 1, mem_mesh_vendor_timer_check_loop
+	pincrease -1
+	rtn blank
+	store 1, mem_mesh_vendor_timer_check_loop
+	branch ali_mesh_ali_vendor_check_time_loop
+
+ali_mesh_ali_vendor_had_timing:
+	arg 7,queue
+	qisolate0 pdata
+	rtn true
+	and pdata,0x7f,pdata
+	arg MESH_X_TIMERS, temp
+	isub temp, null
+	rtn positive
+	copy alarm,contr
+	arg mem_mesh_vendor_timer_timing_palyload,contw
+	arg 18,loopcnt
+	call memcpy
+	fetch 1,mem_mesh_vendor_timer_timing_palyload+17
+	beq 0x59,ali_mesh_ali_vendor_had_timing_cyclically
+ali_mesh_ali_vendor_had_timing_single_time:
+	fetcht 4,mem_mesh_vendor_timer_current_time
+	fetch 4, mem_mesh_vendor_timer_timing_time
+	isub temp,null
+	fetch 1, mem_mesh_vendor_timer_timing_attr_para
+	branch ali_mesh_ali_vendor_time_timeout,zero
+	nbranch ali_mesh_ali_vendor_time_out_of_date, positive
+	rtn	
+
+ali_mesh_ali_vendor_time_out_of_date:
+	setarg 0
+	istore 1,alarm
+	rtn
+
+ali_mesh_ali_vendor_had_timing_cyclically:
+
+	fetch 4, mem_mesh_vendor_timer_current_time
+	arg SECONDS_OF_MIN, temp
+	idiv temp
+	call wait_div_end
+	remainder pdata
+	nrtn blank
+	
+	fetch 4, mem_mesh_vendor_timer_current_time
+	arg SECONDS_OF_FOUR_DAYS, temp
+	isub temp, pdata
+
+	arg SECONDS_OF_WEEK, temp
+	idiv temp
+	call wait_div_end
+	remainder pdata
+	arg SECONDS_OF_DAY, temp
+	idiv temp
+	call wait_div_end
+	remainder rega
+	quotient queue
+	fetch 1,mem_mesh_vendor_timer_timing_weekdays_cyclic
+	branch ali_mesh_ali_vendor_had_timing_cyclically_continue,blank
+	qisolate1 pdata
+	nrtn true
+ali_mesh_ali_vendor_had_timing_cyclically_continue:
+//	call ice_break
+	deposit rega
+	arg SECONDS_OF_MIN, temp
+	idiv temp
+	call wait_div_end
+	quotient temp
+	setarg EIGHT_HOURS_TIME_ZONE_OFFSET
+	iadd temp, temp
+	fetch 2,mem_mesh_vendor_timer_timing_time_cyclic
+	arg 0xfff,rega
+	iand rega,pdata
+	isub temp, null
+	nrtn zero
+	fetch 1, mem_mesh_vendor_timer_timing_attr_para_cyclic
+	branch ali_mesh_ali_vendor_time_timeout
+
+ali_mesh_ali_vendor_time_timeout:
+	store 1,mem_mesh_generic_onoff_set_payload_OnOff
+	jam 1, mem_mesh_vendor_timer_check_loop
+	
+	copy alarm,pdata
+	store 2,mem_mesh_alarm_temp	
+
+	fetcht 1,mem_mesh_generic_onoff_set_payload_OnOff
+	fetchr queue,1,mem_mesh_receive_element_number
+	call ali_mesh_ali_vendor_message_opcode_generic_OnOff
+	
+	fetch 2,mem_mesh_alarm_temp
+	copy pdata,alarm
+	add alarm, 17, contr
+	ifetch 1, contr
+	beq TIMER_CYCLICAL_FALG,ali_mesh_ali_vendor_time_timeout_cyclic
+ali_mesh_ali_vendor_time_timeout_continue:
+	setarg 0
+	istore 1,alarm
+	fetchr queue,1,mem_mesh_receive_element_number
+	call ali_mesh_ali_vendor_message_opcode_timing_finish
+	branch peripherals_write_mesh_timer_infmatn
+	
+
+
+ali_mesh_ali_vendor_time_timeout_cyclic:
+	fetch 1,mem_mesh_vendor_timer_timing_weekdays_cyclic
+	branch ali_mesh_ali_vendor_time_timeout_continue,blank
+	arg VENDOR_ATTR_TYPE_EVENT_TRIGGER,temp
+	call ali_mesh_ali_vendor_message_status_add_head
+	setarg 0x11
+	istore 1,contw
+	ifetch 1,alarm
+	or pdata,0x80,pdata
+	istore 1,contw
+	jam 8,mem_mesh_access_layer_payload
+	branch ali_mesh_ali_vendor_message_send_message
+
+ali_mesh_ali_vendor_message_opcode_timing_finish:
+	arg VENDOR_ATTR_TYPE_EVENT_INDEX_REPORT,temp
+	call ali_mesh_ali_vendor_message_status_add_head
+	copy contw,temp
+	call ali_mesh_get_all_timer_index_timer
+	
+	pincrease 6
+	store 1,mem_mesh_access_layer_payload_len
+	jam VENDOR_MESSAGE_ATTR_STATUS,mem_mesh_access_layer_payload
+	branch ali_mesh_ali_vendor_message_send_message
+	
+
+ali_mesh_ali_vendor_message_opcode_timer_set_timing:
+	arg mem_mesh_vendor_timer_timing_index,contw
+	arg 16,loopcnt
+	call memcpy
+	fetch 1,mem_mesh_vendor_timer_timing_index
+	and pdata,0x7f,pdata
+	store 1,mem_mesh_vendor_timer_timing_temp
+	sub pdata, MESH_X_TIMERS, null
+	nrtn positive
+/*
+	定时为精度到分钟到时间，
+	故该数据到秒数部分（<60秒）
+	表示该定时执行的操作码数量。
+	减掉除以60的余数,是为了减掉操作码。
+	*/
+	fetch 4,mem_mesh_vendor_timer_timing_time
+	arg 60,temp
+	idiv temp
+	call wait_div_end
+	remainder temp
+	isub temp,pdata
+	store 4,mem_mesh_vendor_timer_timing_time
+	setarg 0
+	store 2,mem_mesh_vendor_timer_timing_flag
+	arg mem_mesh_vendor_timer_timing_index,rega
+	call ali_mesh_ali_vendor_store_mesh_timer_infmatn
+	arg VENDOR_MSEEAGE_ATTR_TYPE_SET_TIME_SINGLE,temp
+	branch ali_mesh_access_layer_send_ali_vendor_message_current_timing
+	
+
+	
+
+ali_mesh_ali_vendor_message_opcode_timer_set_timing_cyclically:
+	
+	arg mem_mesh_vendor_timer_timing_index_cyclic,contw
+	arg 17,loopcnt
+	call memcpy
+	
+	
+	fetch 1,mem_mesh_vendor_timer_timing_index_cyclic
+	and pdata,0x7f,pdata
+	store 1,mem_mesh_vendor_timer_timing_temp
+	sub pdata, MESH_X_TIMERS, null
+	nrtn positive
+
+	jam 0x59,mem_mesh_vendor_timer_timing_cyclic_flag
+	arg mem_mesh_vendor_timer_timing_index_cyclic, rega
+	call ali_mesh_ali_vendor_store_mesh_timer_infmatn
+	arg VENDOR_MSEEAGE_ATTR_TYPE_SET_TIME_REPEAT,temp
+
+	
+ali_mesh_access_layer_send_ali_vendor_message_current_timing:
+//	call ali_mesh_get_all_timer_index_timer
+	call ali_mesh_ali_vendor_message_status_add_head
+	setarg 0
+	store 1,mem_mesh_access_layer_payload+6
+	copy contw,temp
+	call ali_mesh_get_all_timer_index_timer
+	pincrease 7
+	store 1,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+	
+	
+ali_mesh_ali_vendor_store_mesh_timer_infmatn:
+	call ali_mesh_vendor_timer_buffer_offset_cal
+	copy rega,contr
+	arg mem_mesh_vendor_timer_timing_buffer,contw
+	iadd contw,contw
+	arg 18,loopcnt
+	call memcpy
+	branch peripherals_write_mesh_timer_infmatn
+
+ali_mesh_vendor_timer_buffer_offset_cal:
+	fetch 1,mem_mesh_vendor_timer_timing_temp
+	pincrease -1
+	mul32 pdata,18,pdata
+	rtn
+
+ali_mesh_get_all_timer_index_timer:
+	arg mem_mesh_vendor_timer_timing_buffer,rega
+	arg 0,regb
+	copy temp,contw
+	arg MESH_X_TIMERS,loopcnt
+	increase -1,loopcnt
+ali_mesh_get_all_timer_index_timer_loop:
+	ifetch 1,rega
+	beq 0xff,ali_mesh_get_all_timer_index_timer_loop_end
+	branch ali_mesh_get_all_timer_index_timer_loop_end,blank
+	increase 1,regb
+	istore 1,contw
+ali_mesh_get_all_timer_index_timer_loop_end:
+	setarg 18
+	iadd rega,rega
+	loop ali_mesh_get_all_timer_index_timer_loop
+	copy regb,pdata
+	rtn
+
+peripherals_write_mesh_timer_infmatn:
+	fetch 2,mem_mesh_cb_vendor_timing_changed
+	branch callback_func
+//	setarg FLASH_BLOCK_MESH_TIMER_INFOR
+//	arg mem_mesh_verdor_timer_timing_buffer, rega  //mem ptr
+//	arg 30,temp
+//	arg MESH_X_TIMERS,temp
+//	mul32 temp,18,temp	
+//	branch spi_write_flash_data
+

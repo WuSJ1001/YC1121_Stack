@@ -1,0 +1,276 @@
+
+ifdef COMPILE_WECHAT
+
+/*
+	function name:le_l2cap_att_receive_data_check_wechat_air_sync_protocol
+	依据微信蓝牙外设协议1.0.4
+	输入:
+		rega is le rx data address
+		regb is le rx data length
+		mem_le_att_handle is write handle
+	输出:
+		user enable 是微信协议
+		disable不是微信协议
+*/
+le_l2cap_att_receive_data_check_wechat_air_sync_protocol:
+	call enable_user
+	fetch 2,mem_le_wechat_air_sync_ptr
+	rtn blank
+	arg le_l2cap_att_receive_data_deal_wechat_air_sync_protocol,regc
+	branch wechat_air_sync_calc_function
+le_l2cap_att_receive_data_deal_wechat_air_sync_protocol:
+	fetcht 2,mem_le_att_handle
+	fetch 1,mem_wechat_indication_handle
+	pincrease 1
+	isub temp,null
+	branch wechat_air_sync_enable_indicate_chara,zero
+	fetch 1,mem_wechat_write_handle
+	isub temp,null
+	branch wechat_air_sync_receive_wechat_data,zero
+	branch disable_user
+	
+wechat_air_sync_enable_indicate_chara:
+	call wechat_air_sync_reset_nSeq
+wechat_air_sync_send_request_auth:
+	call wechat_air_sync_init_authreq_base_request
+	arg mem_wechat_authreq_base_request,rega
+	arg ECI_REQ_AUTH_MESSAGE_LENGTH,loopcnt
+	arg ECI_REQ_AUTH,temp
+	branch wechat_air_sync_send_message
+
+wechat_air_sync_receive_wechat_data:
+	fetch 1,mem_wechat_receive_push_data
+	beq 1,wechat_air_sync_receive_wechat_data_contiune_packet
+	ifetch 2,rega
+	arg WECHAT_RX_HEAD,temp
+	isub temp,null
+	branch wechat_air_sync_receive_wechat_data_head_packet,zero
+wechat_air_sync_receive_wechat_data_contiune_packet:
+	fetch 2,mem_wechat_rx_len
+	iadd regb,pdata
+	store 2,mem_wechat_rx_len	
+	fetch 2,mem_wechat_rx_address
+	copy pdata,contw
+	copy rega,contr
+	copy regb,loopcnt
+	call memcpy_fast
+	copy contw,pdata
+	store 2,mem_wechat_rx_address
+	branch wechat_air_sync_receive_wechat_packet_complete
+
+
+wechat_air_sync_receive_wechat_data_head_packet:
+	fetch 2,mem_wechat_rx_buffer_ptr
+	copy pdata,contw
+	copy rega,contr
+	copy regb,loopcnt
+	call memcpy_fast
+	copy contw,pdata
+	store 2,mem_wechat_rx_address
+	storer regb,2,mem_wechat_rx_len
+	fetchr regc,2,mem_wechat_rx_buffer_ptr
+	add regc,WECHAT_PROTOCOL_MESSAGE_N_CMD_ID,contr
+	ifetch 2,contr
+	arg ECI_PUSH_RECEIVE_DATA,temp
+	isub temp,null
+	call wechat_air_sync_receive_wechat_push_data,zero
+	branch wechat_air_sync_receive_wechat_packet_complete
+
+wechat_air_sync_receive_wechat_push_data:
+	jam 1,mem_wechat_receive_push_data
+	rtn
+
+wechat_air_sync_receive_wechat_packet_complete:
+	fetch 2,mem_wechat_rx_len
+	fetchr regc,2,mem_wechat_rx_buffer_ptr
+	add regc,WECHAT_PROTOCOL_MESSAGE_N_LENGTH,contr
+	ifetcht 2,contr
+	byteswap temp,temp
+	isub temp,null
+	nrtn positive
+	jam 0,mem_wechat_receive_push_data
+	fetchr regc,2,mem_wechat_rx_buffer_ptr
+	add regc,WECHAT_PROTOCOL_MESSAGE_N_CMD_ID,contr
+	ifetch 2,contr
+	arg ECI_RESPONSE_AUTH,temp
+	isub temp,null
+	branch wechat_air_sync_receive_wechat_data_auth_respone,zero
+	arg ECI_PUSH_RECEIVE_DATA,temp
+	isub temp,null
+	branch wechat_air_sync_receive_wechat_data_push_receive_data,zero
+	rtn
+
+wechat_air_sync_receive_wechat_data_auth_respone:
+wechat_air_sync_wechat_send_request_init:
+	call wechat_air_sync_init_authreq_base_request
+	arg mem_wechat_initreq_base_request,rega
+	arg ECI_REQ_INIT_MESSAGE_LENGTH,loopcnt
+	arg ECI_REQ_INIT,temp
+	branch wechat_air_sync_send_message
+
+
+//接收数据的回调，可以使用wechat_air_sync_check_push_data_struct解析函数
+wechat_air_sync_receive_wechat_data_push_receive_data:
+
+	fetch 2,mem_wechat_rx_push_data_cb
+	branch callback_func
+
+/*
+数据解析默认函数，不能保证全部数据格式都能解析
+输出:disable user is no data
+	loopcnt is data length
+	contr is data ptr
+*/
+wechat_air_sync_check_push_data_struct:
+	call disable_user
+	fetchr regc,2,mem_wechat_rx_buffer_ptr
+	add regc,WECHAT_PROTOCOL_MESSAGE_PAYLOAD,contr
+	ifetch 2,contr
+	rtnne TAG_RecvDataPush_BasePush
+	ifetch 1,contr
+	rtnne TAG_RecvDataPush_Data
+	ifetch 1,contr
+	rtn blank
+	copy pdata,loopcnt
+	copy contr,regc
+	branch enable_user
+
+
+wechat_air_sync_send_message:
+	call enable_user2
+wechat_air_sync_send_message_without_payload:
+	fetch 2,mem_wechat_tx_buffer_ptr
+	store 2,mem_wechat_tx_address
+	copy pdata,contw
+	setarg WECHAT_HEAD_MAGIC_NUMBER
+	istore 1,contw			//bMagicNumber
+	setarg WECAHT_HEAD_VERSION
+	istore 1,contw			//bVer
+	add loopcnt,8,regd	//nLength
+	byteswap regd,pdata
+	istore 2,contw			//nLength
+	istoret 2,contw			//nCmdId
+	fetcht 2,mem_wechat_tx_nSeq
+	istoret 2,contw			//Tx nSeq
+	copy contw,regc
+	copy rega,contr
+	call memcpy_fast,user2
+	storer regd,2,mem_wechat_tx_len
+	branch wechat_air_sync_update_nSeq
+	
+wechat_air_sync_update_nSeq:
+	byteswap temp,pdata
+	pincrease 1
+	byteswap pdata,pdata
+	nbranch wechat_air_sync_store_nSeq,blank
+wechat_air_sync_reset_nSeq:
+	setarg 0x0100
+wechat_air_sync_store_nSeq:
+	store 2,mem_wechat_tx_nSeq
+	rtn
+
+
+wechat_air_sync_init_authreq_base_request:
+	setarg 0x000a
+	store 2,mem_wechat_authreq_base_request
+	setarg 0x048084
+	lshift8 pdata,pdata
+	or pdata,0x18,pdata
+	store 4,mem_wechat_authreq_protocol_version
+	setarg 0x0120
+	store 2,mem_wechat_authreq_auth_protocol
+	setarg 0x0228
+	store 2,mem_wechat_authreq_eam_mac_no_encrypt
+	setarg 0x063a
+	store 2,mem_wechat_authreq_mac_address
+	fetch 6,mem_le_lap
+	call inverse_data_6Byte
+	store 6,mem_wechat_authreq_device_address
+	rtn
+
+wechat_air_sync_ble_transmit_wechat_message:
+	fetch 1,mem_le_l2cap_att_states
+	rtnbit1 BLE_L2CAP_RECV_CONFIRMATION_PACKET
+	call le_fifo_check_nearly_full
+	nrtn blank				//no fifo
+	fetch 2,mem_le_wechat_air_sync_ptr
+	rtn blank
+	arg wechat_air_sync_ble_send_wechat_message,regc
+	branch wechat_air_sync_calc_function
+
+wechat_air_sync_ble_send_wechat_message:
+	call module_get_le_remote_mtu
+	fetch 2,mem_wechat_tx_len
+	rtn blank
+	add temp,-3,pdata		//sub handle and opcode
+	fetcht 2,mem_wechat_tx_len
+	call not_greater_than
+	copy pdata,rega
+	copy temp,pdata
+	isub rega,pdata
+	store 2,mem_wechat_tx_len
+	fetcht 1,mem_wechat_indication_handle
+	call le_att_malloc_tx_indication
+	fetch 2,mem_wechat_tx_address
+	copy pdata,contr
+	copy rega,loopcnt
+	call memcpy_fast
+	copy contr,pdata
+	store 2,mem_wechat_tx_address
+	rtn
+
+
+wechat_air_sync_calc_function:
+	call wechat_air_sync_load_in_local_buffer
+	copy regc,pdata
+	call callback_func
+	branch wechat_air_sync_store_in_global_buffer
+
+
+wechat_air_sync_load_in_local_buffer:
+	fetch 2,mem_le_wechat_air_sync_ptr
+	rtn blank
+	copy pdata,contr
+	arg WECHAT_AIR_SYNC_STRUCT_SIZE,loopcnt
+	arg mem_wechat_indication_handle,contw
+	branch memcpy_fast
+
+wechat_air_sync_store_in_global_buffer:
+	fetch 2,mem_le_wechat_air_sync_ptr
+	rtn blank
+	copy pdata,contw
+	arg WECHAT_AIR_SYNC_STRUCT_SIZE,loopcnt
+	arg mem_wechat_indication_handle,contr
+	branch memcpy_fast
+
+
+//input:rega is data ptr
+//regb is data length
+wechat_air_sync_send_wechat_packet:
+	call enable_user
+	fetch 2,mem_le_wechat_air_sync_ptr
+	rtn blank
+	arg wechat_air_sync_send_wechat_packet_cb,regc
+	branch wechat_air_sync_calc_function
+
+wechat_air_sync_send_wechat_packet_cb:
+	fetch 2,mem_wechat_tx_len
+	nrtn blank
+	call disable_user
+	call disable_user2
+	add regb,6,loopcnt
+	arg ECI_REQ_SEND_DATA,temp
+	call wechat_air_sync_send_message_without_payload
+	copy regc,contw
+	setarg 0x12000a
+	istore 3,contw
+	istorer regb,1,contw
+	copy rega,contr
+	copy regb,loopcnt
+	call memcpy_fast
+	setarg 0x0018
+	istore 2,contw
+	rtn
+
+endif
+

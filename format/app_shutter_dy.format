@@ -1,0 +1,266 @@
+
+
+xmemalloc shutter_dy(
+
+////////////////////////////////////
+//shutter common config
+
+//timers
+1 mem_shutter_1s_timer
+2 mem_shutter_timer_625us
+
+//patch variable
+11 mem_rf_init_data_new
+2 mem_key_value_xmem
+290 mem_shutter_le_hid_map
+//420 mem_shutter_dy_le_uuid_sup
+2 mem_shutter_le_map_len_android
+2 mem_shutter_le_map_len_ios
+16 mem_dy_le_search_service_uuid
+1 mem_iphone_flag
+1 mem_send_data_delay
+4 mem_key_send_clk
+10 mem_shutter_key_state0
+10 mem_shutter_key_state1
+10 mem_shutter_key_state2
+10 mem_shutter_key_state3
+10 mem_shutter_key_state4
+10 mem_shutter_key_state5
+10 mem_shutter_key_state6
+
+15 mem_key0_release_new	
+15 mem_key1_release_new
+15 mem_key2_release_new
+15 mem_key3_release_new
+15 mem_key4_release_new
+15 mem_key5_release_new
+15 mem_key6_release_new
+
+3 mem_key0_long_press
+3 mem_key1_long_press
+3 mem_key2_long_press
+3 mem_key3_long_press
+3 mem_key4_long_press
+3 mem_key5_long_press
+3 mem_key6_long_press
+
+3 mem_key0_long_release	
+3 mem_key1_long_release
+3 mem_key2_long_release
+3 mem_key3_long_release
+3 mem_key4_long_release
+3 mem_key5_long_release
+3 mem_key6_long_release
+
+2 mem_combine_key0
+2 mem_combine_key1
+2 mem_combine_key2
+2 mem_combine_key3
+2 mem_combine_key4
+2 mem_combine_key5
+
+2 mem_combine_key_state0
+
+10 mem_combine_key0_press
+10 mem_combine_key1_press
+10 mem_combine_key2_press
+10 mem_combine_key3_press
+10 mem_combine_key4_press
+10 mem_combine_key5_press
+10 mem_combine_key_release
+
+4 mem_shutter_move_data
+
+10 mem_key0_press_i
+10 mem_key1_press_i
+10 mem_key2_press_i
+10 mem_key3_press_i
+10 mem_key4_press_i
+10 mem_key5_press_i
+
+15 mem_key0_release_new_i
+15 mem_key1_release_new_i
+15 mem_key2_release_new_i
+15 mem_key3_release_new_i
+15 mem_key4_release_new_i
+15 mem_key5_release_new_i
+15 mem_key6_release_new_i
+
+3 mem_key0_long_press_i
+3 mem_key1_long_press_i
+3 mem_key2_long_press_i
+3 mem_key3_long_press_i
+3 mem_key4_long_press_i
+3 mem_key5_long_press_i
+3 mem_key6_long_press_i
+
+3 mem_key0_long_release_i
+3 mem_key1_long_release_i
+3 mem_key2_long_release_i
+3 mem_key3_long_release_i
+3 mem_key4_long_release_i
+3 mem_key5_long_release_i
+3 mem_key6_long_release_i
+
+
+10 mem_key3_release_new_t
+10 mem_key3_release_new_i_t
+1 mem_key3_press_count
+1 mem_shutter_like_timeout
+1 mem_shutter_key_pressed
+1 mem_shutter_combine_key_release
+680 mem_shutter_mousekey_value_list
+1 mem_shutter_back_count
+1 mem_shutter_le_conned
+
+0 mem_move_config
+1 mem_shutter_iphone_beyond_x_count
+1 mem_shutter_iphone_beyond_y_count
+2 mem_shutter_move_data_x
+2 mem_shutter_move_data_y
+1 mem_last_shutter_le_iphone_flag
+0 mem_move_config_end
+1 mem_shutter_back_count_cache
+1 mem_shutter_iphone_beyond_x_cache
+1 mem_shutter_iphone_beyond_y_cache
+10 mem_shutter_iphone_move_mid
+1 mem_shutter_long_key_released_flag
+1 mem_shutter_move_mid_timer
+1 mem_shutter_pairing_success
+2 mem_combine_key_release_value
+1 mem_last_press_key_value
+1 mem_shutter_first_move
+1 mem_move_mode_set
+1 mem_move_mode_key_index
+1 mem_move_mode_trigger_enable
+5 mem_shutter_android_move_mid
+10 mem_shutter_iphone_up_mid
+10 mem_shutter_iphone_like_mid
+1 mem_shutter_key_num_conf
+7 mem_shutter_dy_key_conf
+11 mem_le_dy_adv_data
+12 mem_le_dy_scan_data
+8 mem_ble_shutter_dy_interval_min_new
+8 mem_shutter_ble_discovery_time_conf
+2 mem_queue_dy_each_size
+10 mem_dy_key0_press
+10 mem_dy_key1_press
+10 mem_dy_key2_press
+10 mem_dy_key3_press
+10 mem_dy_key4_press
+10 mem_dy_key5_press
+10 mem_dy_key6_press
+7 mem_shutter_led_on_light_dark_led_conf
+7 mem_shutter_led_off_light_dark_led_conf
+4 mem_shutter_reconn_blink_on_time_conf
+4 mem_shutter_discovery_blink_on_time_conf
+2 mem_shutter_efuse_start_offset
+2 mem_shutter_efuse_end_offset
+
+0 mem_initial_move_conf
+2 mem_android_initial_move_x
+2 mem_android_initial_move_y
+2 mem_iphone_initial_move_x
+2 mem_iphone_initial_move_y
+//修改增加保存参数
+0 mem_otp_move_config
+2 mem_otp_shutter_move_data_x
+2 mem_otp_shutter_move_data_y
+1 mem_otp_last_shutter_le_iphone_flag
+0 mem_otp_move_config_end
+2 mem_otp_write_offset_addr
+2 mem_otp_read_offset_addr
+2 mem_otp_read_ios_android_addr
+2 mem_shutter_le_pairing_handle
+2 mem_shutter_temp_count
+1 mem_shutter_first_read_flag
+1 mem_shutter_valid_data_flag
+1 mem_shutter_volume_timer
+1 mem_shutter_link_timer
+8 mem_shutter_link_data
+8 mem_shutter_link_data_i
+1 mem_shutter_link_loop_flag
+0 mem_shutter_end
+)
+
+
+(
+10 MAX_QUEUE_NUM_COMBINEKEY
+15 MAX_QUEUE_NUM_RELEASE
+3 MAX_QUEUE_NUM_LONG
+3 MAX_QUEUE_NUM_LONG_RELEASE
+10 MAX_QUEUE_NEW_PRESS
+
+10 EVERY_PAYLOAD_LEN
+)
+
+
+(
+0x24	GATT_KEYBOARD_WRITE_HANDLE_NEW
+)
+
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+(//Data Rom Buffer Addr
+640		BT_DY_KEY_VALUE_LIST_SIZE
+)
+
+//otp address offset
+(
+0x05   SHUTTER_PARA_TOTAL_NUM
+//0x7b0  SHUTTER_EFUSE_START_OFFECT	//起始地址
+//0x680  SHUTTER_EFUSE_END_OFFECT	       //结束地址
+)
+
+
+(
+//uart config
+115200 UART_BAUD
+)
+
+(
+10 SHUTTER_KEY_CONF_SATE_BYTES
+0 KEY_STATE_PRESS_CLK_OFFSET
+4 KEY_STATE_PRESS_COUNT_OFFSET
+5 KEY_STATE_RELEASE_CLK_OFFSET
+9 KEY_STATE_LONGPRESS_OFFSET
+4 KEY_STATE_PRESS_CLK_LENGTH
+1 KEY_STATE_PRESS_COUNT_LENGTH
+4 KEY_STATE_RELEASE_CLK_LENGTH
+1 KEY_STATE_LONGPRESS_LENGTH
+)
+
+(
+0  SHUTTER_RIGHT_KEY_NUM
+1  SHUTTER_LIKE_KEY_NUM
+2  SHUTTER_DOWN_KEY_NUM
+3  SHUTTER_PHOTO_KEY_NUM
+4  SHUTTER_UP_KEY_NUM
+5  SHUTTER_LEFT_KEY_NUM
+6  SHUTTER_MOVE_KEY_NUM
+7  SHUTTER_FUN_KEY_NUM
+)
+
+(
+//0xaa ANDROID_INITIAL_MOVE_X //170
+//0x78 ANDROID_INITIAL_MOVE_Y //120
+//0x69 IPHONE_INITIAL_MOVE_X
+//0x38 IPHONE_INITIAL_MOVE_Y
+0X0a ANDROID_EVERY_MOVE_SIZE
+0x07 IPHONE_EVERY_MOVE_SIZE
+0x62 IPHONE_ONCE_MAX_MOVE_VALUE
+)
+
+(
+0x00 MOVE_COMBINE_KEY
+0x01 MOVE_SINGLE_KEY
+)
+
+(
+//6key or 7key conf
+6 SHUTTER_SIX_KEY
+7 SHUTTER_SEVEN_KEY
+8 SHUTTER_EIGHT_KEY
+)
+

@@ -1,0 +1,248 @@
+
+memalloc module(
+	//ble
+	2 mem_module_le_rx_data_len
+	2 mem_module_le_rx_data_address
+	2 mem_module_le_rx_data_handle
+
+ifdef COMPILE_WECHAT
+	0 mem_wechat_tx_buffer
+	1 mem_wechat_tx_bMagicNumber
+	1 mem_wechat_tx_bVer
+	2 mem_wechat_tx_nLength
+	2 mem_wechat_tx_nCmdId
+	2 mem_wechat_tx_nSeq1
+	255 mem_wechat_tx_payload
+
+	0 mem_wechat_rx_buffer
+	1 mem_wechat_rx_bMagicNumber
+	1 mem_wechat_rx_bVer
+	2 mem_wechat_rx_nLength
+	2 mem_wechat_rx_nCmdId
+	2 mem_wechat_rx_nSeq
+	255 mem_wechat_rx_payload
+
+	255 mem_module_wechat_local_data_buffer
+
+endif
+)
+
+xmemalloc module(	
+	2 mem_soft_version_num
+	1 mem_module_wake_up_gpio
+	1 mem_module_state_gpio
+	1 mem_module_connect_state_gpio
+
+	2 mem_current_packet_length
+	1 mem_module_state
+	
+	1 mem_module_mcu_wake_pin
+	4 mem_module_mcu_wake_delay_us
+
+	1 mem_module_le_lpm_mult	
+	1 mem_module_bluetooth_stauts_by_command
+
+	//uart
+	2 mem_module_uart_rx_buffer
+	2 mem_module_uart_rx_buffer_end
+	2 mem_module_uart_tx_buffer
+	2 mem_module_uart_tx_buffer_end
+	2 mem_module_uarta_baud_rate
+
+	//ADC
+	1 mem_module_read_vdd_flag
+	1 mem_module_read_vdd_count
+	1 mem_module_vdd_quotient
+	1 mem_module_vdd_remainder
+
+	//ble
+	1 mem_module_ble_data_uart_max_length
+
+	//flag
+	2 mem_module_flag
+
+	1 mem_module_hci_notify_len
+	2 mem_module_hci_notify_handle
+	2 mem_module_hci_nofiy_addr
+	1 mem_module_hci_notify_type
+
+	1 mem_le_conn_flag
+
+ifdef COMPILE_WECHAT
+	1 mem_module_wechat_indication_handle
+	1 mem_module_wechat_write_handle
+	2 mem_module_wechat_tx_buffer_ptr
+	2 mem_module_wechat_rx_buffer_ptr
+	2 mem_module_wechat_rx_push_data_cb
+	2 mem_module_wechat_tx_nSeq
+	2 mem_module_wechat_tx_len
+	2 mem_module_wechat_tx_address
+	2 mem_module_wechat_rx_len
+	2 mem_module_wechat_rx_address
+	1 mem_module_wechat_receive_push_data
+endif
+	
+	600 mem_module_le_att_list
+	0 mem_module_le_att_list_end
+	0 mem_module_nv_data
+	34 mem_module_nv_data0
+	34 mem_module_nv_data1
+	34 mem_module_nv_data2
+	34 mem_module_nv_data3
+	34 mem_module_nv_data4
+	0 mem_module_nv_data_end
+)
+
+
+(//mem_module_flag
+//bit0~bit7 config module function
+0 MODULE_FLAG_UART_FLOW_CONTROL
+1 MODULE_FLAG_BLE_SEND_MTU23
+2 MODULE_FLAG_BLE_DATA_ENCRYPT
+
+//bit8~bit15 module states change
+8 MODULE_FLAG_BLE_DATA_FINISH
+
+)
+
+(
+34 NV_DATA_LEN
+-1 DECREASED_ONE
+)
+
+
+
+(
+	5 FLAG_MODULE_READ_VDD_COUNT
+)
+
+(
+0x01 HCI_DISCARD_PACKET
+0x00 HCI_NOT_DISCARD_PACKET
+)
+
+
+
+(//Command
+0x01 HCI_CMD_SET_LE_ADDR_REQ
+0x02 HCI_CMD_SET_VISIBILITY_REQ
+0x04 HCI_CMD_SET_LE_NAME_REQ
+0x09 HCI_CMD_LE_DATA_REQ
+0x0b HCI_CMD_STATUS_IRQ
+0x0e HCI_CMD_SET_UARTCONTROL_REQ
+0x0f HCI_CMD_SET_UART_BAUD_REQ
+0x10 HCI_CMD_VERSION_REQ
+0x12 HCI_CMD_BLE_DISCONNECT
+0x13 HCI_CMD_DELETE_DEVICE
+0x14 HCI_CMD_CREATE_CONNECT
+0x26 HCI_CMD_SET_NVRAM_REQ
+0x27 HCI_CMD_SLEEP
+0x28 HCI_CMD_CONFIRM_GKEY
+0x2a HCI_CMD_AUTO_ADV_SCAN
+0x2b HCI_CMD_POWER_REQ
+0x2c HCI_CMD_POWER_SET
+0x30 HCI_CMD_PASSKEY_ENTRY
+0x31 HCI_CMD_SET_GPIO
+0x32 HCI_CMD_READ_GPIO
+0x33 HCI_CMD_LE_SET_PAIRING
+0x34 HCI_CMD_LE_SET_ADV_DATA
+0x35 HCI_CMD_LE_SET_SCAN_DATA
+0x36 HCI_CMD_LE_SEND_CONN_UPDATE_REQ
+0x37 HCI_CMD_LE_SET_ADV_PARM
+0x38 HCI_CMD_LE_START_PAIRING
+0x40 HCI_CMD_SET_WAKE_GPIO
+0x42 HCI_CMD_SET_TX_POWER
+0x43 HCI_CMD_BOOT_VERSION_REQ
+0x48 HCI_CMD_LE_CONFIRM_GKEY
+0x49 HCI_CMD_REJECT_JUSTWORK
+0x51 HCI_CMD_RESET_CHIP_REQ
+
+0x61 HCI_CMD_LE_SET_FIXED_PASSKEY
+
+0x76 HCI_CMD_DELETE_CUSTOMIZE_SERVICE
+0x77 HCI_CMD_ADD_SERVICE_UUID
+0x78 HCI_CMD_ADD_CHARACTERISTIC_UUID
+0x7a HCI_CMD_PASSKEY_ENTRY_INPUT
+0x7b HCI_CMD_LE_CREAT_CONN
+
+0x90 HCI_CMD_BLE_SET_PHY
+0x91 HCI_CMD_BLE_READ_CURRENT_PHY
+0x92 HCI_CMD_BLE_SET_DLE
+0x93 HCI_CMD_READ_CHIP_DATA
+0x94 HCI_CMD_WRITE_CHIP_DATA
+ifdef COMPILE_WECHAT
+0x95 HCI_CMD_WECHAT_SEND_DATA
+endif
+0xff HCI_CMD_CLOSE_LPM
+)
+
+(//event
+0x00 HCI_EVENT_SPP_CONN_REP
+0x01 HCI_EVENT_HID_CONN_REP
+0x02 HCI_EVENT_LE_CONN_REP
+0x03 HCI_EVENT_SPP_DIS_REP
+0x04 HCI_EVENT_HID_DIS_REP
+0x05 HCI_EVENT_LE_DIS_REP
+0x06 HCI_EVENT_CMD_RES
+0x07 HCI_EVENT_SPP_DATA_REP
+0x08 HCI_EVENT_LE_DATA_REP
+0x09 HCI_EVENT_STANDBY_REP
+
+0x0a HCI_EVENT_STATUS_RES
+
+0x0D HCI_EVENT_NVRAM_REP
+0x0e HCI_EVENT_GKEY
+0x0F HCI_EVENT_INVALID_PACKET
+0x10 HCI_EVENT_GET_PASSKEY
+0x11 HCI_EVENT_LE_TK
+0x12 HCI_EVENT_REMOTE_MTU
+0x14 HCI_EVENT_LE_PAIRING_STATE
+0X15 HCI_EVENT_LE_ENCRYPTION_STATE
+0x17 HCI_EVENT_LE_CONNECTION_UPDATE
+0x1d HCI_EVENT_LE_GKEY
+0x29 HCI_EVENT_UUID_HANDLE
+0x2b HCI_EVENT_LE_INPUT_GKEY
+
+0x40 HCI_BLE_UPDATE_PHY_EVENT
+ifdef COMPILE_WECHAT
+0x41 HCI_BLE_WECHAT_RECEIVE_PUSH_DATA
+endif
+)
+
+
+(//command HCI_CMD_SET_GPIO
+//byte 0
+0x00 HCI_CMD_CONFIG_GPIO_INPUT
+0x01 HCI_CMD_CONFIG_GPIO_OUTPUT
+//byte 1 input state
+0x00 GPIO_INPUT_PULLUP
+0x01 GPIO_INPUT_PULLDOWN
+0x02 GPIO_INPUT_HIGH_IMPEDANCE
+)
+
+
+
+
+
+(
+0x0080	FLAG_BLE_PAIRING_SUCCESS
+0x0180	FLAG_BLE_PAIRING_FAIL
+)
+
+
+(
+1	FLAG_EVENT_START_ENC
+0	FLAG_EVENT_PAUSE_ENC
+)
+
+(
+0 MOUDLE_STATE_BT_BIT
+1 MOUDLE_STATE_BLE_BIT
+)
+
+(
+5 BIT_OF_NOTIFY_AUTHENTICATED
+6 BIT_OF_READ_AUTHENTICATED
+7 BIT_OF_WRITE_AUTHENTICATED
+)
+

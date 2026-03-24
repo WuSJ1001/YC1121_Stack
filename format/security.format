@@ -1,0 +1,63 @@
+
+memalloc (
+16 mem_input_store
+
+2 mem_ec_loopc
+1 mem_aes_cmac_data_length
+
+96 mem_dat
+
+/* ecc calculation */
+32 mem_ax_256 //32 bytes
+32 mem_ay_256 // 32 bytes
+32 mem_az_256 // 32 bytes
+32 mem_bx_256 // 32 bytes
+32 mem_by_256 // 31 bytes
+
+0 mem_bz_256  //32 bytes
+0 mem_tmp1
+24 memahbak
+8 mem_tmp5
+32 mem_cx_256  //32 bytes
+31 mem_cy_256  // 32 bytes
+1 mem_cy5_256 // 1 byte
+32 mem_cz_256 // 32 bytes
+32 mem_k_256 //32 bytes
+32  mem_tmp1_256 //32 bytes
+
+32 mem_tmp5_256
+32  mem_tmp2_256
+0 mem_tmp3_256
+32 mem_t1_256
+0 mem_tmp0_256
+32 mem_t0_256
+32 mem_t2_256
+32 mem_t3_256
+32 mem_t7_256
+
+24 mem_p
+24 mem_a
+24 mem_b
+24 mem_gx
+24 mem_gy
+32 memh0
+
+32 mem_p_256		
+32 mem_a_256
+32 mem_gx_256
+32 mem_gy_256
+16 mem_le_slat
+
+)
+
+xmemalloc(
+5 mem_ccm_pcnt_tx
+5 mem_ccm_pcnt_rx
+4 mem_ccm_last_mic
+0 mem_ccm_iv
+4 mem_ccm_ivm
+4 mem_ccm_ivs
+2 mem_ccm_len
+2 mem_ccm_rx_ptr
+)
+

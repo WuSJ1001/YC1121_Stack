@@ -1,0 +1,5303 @@
+
+ifdef COMPILE_MOUSE
+mouse_init:
+	call enable_authrom
+	call mouse_setting_config
+	call mouse_init_sunt
+	rtn wake
+	call mouse_setting_sensor_type
+	call mouse_drawing_optima_init
+	call mouse_cb_fuction
+	call mouse_sensor_powerdown
+mouse_init_wireless:	
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BTN_DOWN,mouse_start_discovery
+	call mouse_check_select_device_by_switch
+	branch mouse_start_work
+
+
+mouse_cb_fuction:
+	bpatch patch0d_0,mem_patch0d
+	setarg mouse_24g_short_sleep
+	store 2,mem_cb_24g_transmit_short_sleep
+	setarg mouse_24g_long_sleep
+	store 2,mem_cb_24g_transmit_long_sleep
+	setarg mouse_24g_before_lpm_sleep
+	store 2,mem_cb_before_lpm_sleep
+	setarg mouse_24g_package_data
+	store 2,mem_cb_24g_transmit_data
+	setarg mouse_24g_search_dongle
+	store 2,mem_cb_24g_search_receiver
+	setarg mouse_lpm_before_common
+	store 2,mem_cb_24g_lpm_before
+	setarg mouse_le
+	store 2,mem_cb_le_process
+	setarg mouse_process_lpm_before
+	store 2,mem_cb_before_lpm
+	setarg mouse_priority_bb_event
+	store 2,mem_cb_bb_event_process
+	setarg mouse_idle
+	store 2,mem_cb_idle_process
+	setarg mouse_before_hibernate
+	store 2,mem_cb_before_hibernate
+	setarg mouse_le_bb_event_connect_complete
+	store 2,mem_cb_att_write	
+	setarg mouse_bb_event_timer
+	store 2,mem_cb_event_timer
+	setarg mouse_spi_write_flash_cb
+	store 2,mem_cb_spi_flash_write_complate
+	setarg mouse_lpm_check_wake_lock
+	store 2,mem_cb_check_wakelock
+	setarg mouse_le_transmit
+	store 2,mem_cb_ble_transmit
+	setarg mouse_set_lpm_mult
+	store 2,mem_cb_bt_set_mult
+	rtn
+
+
+mouse_setting_config:
+	rtn wake
+	call g24_transmit_init
+	call g24_chmap_param_init
+	call mouse_24g_send_time_long_wake
+	call mouse_gpio_init
+	call mouse_le_name_modify
+	call mouse_param_init
+	call mouse_device_multi_led_parm_init
+	call le_set_fixed_ltk_justwork
+mouse_load_device_info_check:
+	bpatch patch0d_1,mem_patch0d
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_EEPROM,mouse_load_eeprom_info_check
+	bbit1 MOUSE_ENABLE_FLASH,mouse_load_flash_info_check
+	bbit1 MOUSE_ENABLE_OTP,mouse_load_otp_info_check
+	rtn
+	
+mouse_xtal_init:
+	jam XTAL_16M,mem_fcomp_div		// 0x08--16M 
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_16M
+	jam XTAL_24M,mem_fcomp_div		// 0x18--24M
+	rtn
+
+mouse_24g_phy_select:
+	call g24_enable_1M
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_24G_2M_PHY
+	branch g24_enable_2M
+
+mouse_default_init:
+	bpatch patch0d_2,mem_patch0d
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	isolate1 MOUSE_KEYBOARD_ENABLE,pdata
+	call mouse_customer_key_enable,true
+	
+mouse_default_parm_init:
+	fetch 2,mem_mouse_24g_pair_timeout_init
+	store 2,mem_24g_pair_timeout_init
+
+	fetch 1,mem_mouse_24g_reconn_timeout_init
+	store 2,mem_24g_reconn_timeout_init
+
+	fetch 5,mem_rssi_dis_min_24g_init
+	store 5,mem_rssi_dis_min_24g
+
+	fetch 1,mem_mouse_24g_pair_tx_power
+	store 1,mem_24g_pair_tx_power
+
+	fetch 1,mem_24g_ch_map_update
+	ncall g24_chamap_param_update,blank
+mouse_default_parm_init_next:
+	bpatch patch0d_3,mem_patch0d
+	call mouse_xtal_init
+	call mouse_24g_phy_select
+	call mouse_24g_long_sleep_set
+	branch g24_pair_param_init
+
+mouse_param_common_init:
+	setarg MOUSE_BLE_ATT_LIST_ADDR				//ble attlist start address
+	store 2,mem_ui_le_uuid_table
+	jam 3,mem_lpm_mult_timeout
+	jam 8,mem_lpm_overhead
+	jam PB_BUTTON_STATE_UP,mem_select_device_button_statue
+	jam COMMBINATION_KEY_STATE_UP,mem_commbination_key_statue	
+	setarg 0x0200
+	store 2,mem_lpm_interval
+	jam 0x17,mem_le_local_mtu
+	jam 0x17,mem_le_remote_mtu
+
+	setarg mem_le_tx_buffer0_omemalloc
+	store 2,mem_ble_l2cap_tx_buff0_ptr
+	setarg MOUSE_BLE_L2CAP_TXBUFF_SIZE
+	store 2,mem_ble_l2cap_tx_buff_size_ptr
+	branch mouse_adc_gpio_mux_init
+	
+mouse_param_init:
+	bpatch patch0d_4,mem_patch0d
+	call mouse_param_common_init
+	jam DPI_BUTTON_STATE_UP,mem_mouse_dpi_button_state	
+//===========init spi param==============================
+	setarg 0x0a77
+	store 2,mem_spi_init_clk
+	setsect 0,0x1224
+	setsect 1,0x4000
+	setsect 2,0x0
+	istore 5,contw
+//======================================================	
+	
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_BT_125Hz,mouse_param_init_intervl_end
+	setarg LE_INTERVAL_7_5MS
+	store 2,mem_le_interval_min
+	store 2,mem_le_interval_min+2
+mouse_param_init_intervl_end:
+	call mouse_g24_interval_param_8ms
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_24G_250Hz,mouse_24g_short_sleep_set_end
+	call mouse_g24_interval_param_4ms
+mouse_24g_short_sleep_set_end:
+	fetch 3,mem_24g_short_sleep_set
+	store 3,mem_mouse_24g_short_sleep_set_init
+	fetch 1,mem_device_flag
+	store 1,mem_device_flag_temp
+	fetch 3,mem_le_lap+3
+	store 3,mem_mouse_le_lap_temp
+	setarg 0
+	store 7,mem_mouse_key
+	fetch 1,mem_ui_button_timeout
+	store 1,mem_bt_discovery_count
+	store 1,mem_select_device_count
+	call le_modified_name_adv
+mouse_sensor_set_angle:
+	bpatch patch0d_5,mem_patch0d
+	fetch 1,mem_sensor_angle_default
+	store 1,mem_config_sensor_angle
+	fetch 1,mem_select_sensor_angle_gpio
+	rtneq GPIO_DISABLE
+	fetcht 1,mem_select_sensor_angle_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_select_sensor_angle_gpio
+	call gpio_get_bit
+	call mouse_sensor_switch_angle,true
+	branch mouse_gpio_config_input_pd
+mouse_sensor_switch_angle:
+	fetch 1,mem_sensor_angle_switch
+	store 1,mem_config_sensor_angle
+	rtn
+
+mouse_g24_interval_param_4ms:
+	fetch 3,mem_mouse_24g_short_sleep_set_4ms
+	store 3,mem_24g_short_sleep_set
+	fetch 3,mem_mouse_24g_long_sleep_set_4ms
+	store 3,mem_24g_long_sleep_set
+	fetch 1,mem_mouse_24g_fast_hop_count_4ms
+	store 1,mem_24g_fast_hop_count
+	fetch 4,mem_mouse_24g_tsniff_4ms
+	store 4,mem_mouse_24g_tsniff	
+mouse_report_rate_set_250hz:
+	setarg 0x100c0c
+	store 3,mem_24g_interval
+	rtn
+
+mouse_g24_interval_param_8ms:
+	fetch 3,mem_mouse_24g_short_sleep_set_8ms
+	store 3,mem_24g_short_sleep_set
+	fetch 3,mem_mouse_24g_long_sleep_set_8ms
+	store 3,mem_24g_long_sleep_set
+	fetch 1,mem_mouse_24g_fast_hop_count_8ms
+	store 1,mem_24g_fast_hop_count
+	fetch 4,mem_mouse_24g_tsniff_8ms
+	store 4,mem_mouse_24g_tsniff
+mouse_report_rate_set_125hz:
+	setarg 0x1c1919
+	store 3,mem_24g_interval
+	rtn
+
+//mouse_report_rate_set_500hz:
+//	setarg 0x080606
+//	store 3,mem_24g_interval
+//	rtn
+//mouse_report_rate_set_1000hz:
+//	setarg 0x040303
+//	store 3,mem_24g_interval
+//	rtn
+
+
+mouse_start_work:
+	bpatch patch0d_6,mem_patch0d
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING, mouse_24g_first_start_auto_pair_mode
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_24g_start_mode
+mouse_le_fast_conn_judge:
+	call mouse_bluetooth_fast_conn_disable
+	fetch 1,mem_device_flag
+	beq MODE_BT_DEVICE1,mouse_le_device1_judge
+	beq MODE_BT_DEVICE2,mouse_le_device2_judge
+	rtn
+mouse_le_device1_judge:
+	fetch 6,mem_device1_addr
+	fetcht 6,mem_mouse_compare_addr
+	isub temp,null
+	branch mouse_bluetooth_fast_conn_init,zero
+	branch mouse_start_reconnect_device
+	
+mouse_le_device2_judge:
+	fetch 6,mem_device2_addr
+	fetcht 6,mem_mouse_compare_addr
+	isub temp,null
+	branch mouse_bluetooth_fast_conn_init,zero
+	branch mouse_start_reconnect_device
+	
+mouse_start_reconnect_device:
+	bpatch patch0d_7,mem_patch0d
+	call mouse_device_le_reconn_led_config
+	arg mem_device1_type,rega
+	fetch 1,mem_device_flag
+	increase -1,pdata
+	mul32 pdata,29,pdata
+	iadd rega,rega
+	ifetch 1,rega
+	store 1,mem_xrecord_mode
+mouse_start_reconnect:	
+	fetch 1,mem_xrecord_mode
+	beq REC_4_MODE,mouse4_0_check_reconn_target
+	branch mouse_bluetooth_fast_conn_init
+
+mouse_wakeup_from_power_check:
+	bpatch patch0e_0,mem_patch0e
+	disable user
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_WAKEUP_FROM_POWER,mouse_wakeup_from_poweron
+	fetch 1,core_lpm_isogate
+	bbit1 cold_wake,mouse_wakeup_from_poweron
+	enable user	//wake from hibernate
+mouse_wakeup_from_poweron:
+	fetch 1,mem_reconn_times_init
+	store 1,mem_reconn_times
+	rtn
+
+mouse4_0_check_reconn_target:
+	jam 1,mem_mouse_le_reconnect_flag
+	fetcht 1,mem_mouse_fast_direct_timeout
+	fetch 1,mem_mouse_bluetooth_fast_conn_flag
+	beq 0xff,mouse4_0_check_reconn_target_next
+	fetcht 1,mem_mouse_direct_timeout
+mouse4_0_check_reconn_target_next:	
+	storet 1,mem_mouse_direct_timer
+	call app_lpm_mult_disable
+	fetch 3,mem_le_adv_direct_ind
+	store 3,mem_le_adv_data+4
+	call mouse_le_check_adv_flag
+	setarg ADV_FLAG_BREDR_NOT_SUPPORTED
+	istore 1,contr
+	arg mem_le_scan_data,contr
+	call mouse_le_adv_data_update
+	branch check_51cmd_adv
+
+
+/**********************system clk**********************************/
+mouse_lpm_check_wake_lock:
+	bmark1 mark_24g,app_get_lpm_wake_lock
+	fetch 1,mem_mouse_clear_sensor_data_flag
+	branch app_get_lpm_wake_lock,blank
+	fetch 1,mem_mouse_le_conn_param_reject
+	beq LE_LPM_DISABLE,app_get_lpm_wake_lock
+	fetch 1,mem_mouse_wheel_trigger
+	nbranch app_get_lpm_wake_lock,blank
+	branch app_put_lpm_wake_lock
+
+/**********************system clk end*****************************/
+
+//mouse_delay_enter_hibernata:
+//	fetch 1,mem_mouse_direct_timeout
+//	store 1,mem_mouse_bluetooth_reconnect_timeout
+//	rtn
+ 
+mouse_app_enter_hibernate:
+	bpatch patch0e_1,mem_patch0e
+	setarg PAN_REG_CONFIG
+	call twspi_read
+	bbit1 3,mouse_app_enter_hibernate_next
+	call mouse_sensor_reset
+	call mouse_sensor_powerdown
+mouse_app_enter_hibernate_next:
+	call mouse_setgpio_hibernate
+	branch app_enter_hibernate
+
+mouse_before_hibernate:
+	bpatch patch0e_2,mem_patch0e
+	call disable_authrom 
+	call mouse_before_hibernate_wheel_gpio_set
+	call mouse_setgpio_hibernate
+	call mouse_flash_power_down
+	fetcht 1,mem_sensor_motion_gpio
+	branch gpio_clr_wake
+
+
+mouse_setgpio_hibernate:
+	bpatch patch0e_3,mem_patch0e
+	call mouse_set_sdio_high
+	call clear_wake
+	call mouse_logo_led_off
+	call mouse_lpm_before_common
+	call mouse_gpio_pd_idle
+	fetcht 1,mem_mouse_reuse_2ice_gpio
+	call mouse_gpio_config_input_pu
+	call mouse_gpio_set_high_impedance
+	call mouse_device_multi_led_all_off
+	call mouse_adc_gpio_set_before_hibernate
+	branch mouse_wheel_gpio_set_before_hibernate
+
+mouse_wheel_gpio_set_before_hibernate:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_WHEEL_WAKE_UP_CANCEL
+mouse_wheel_gpio_clr_wakeup:	
+	fetcht 1,mem_whee_a_data_gpio
+	call gpio_clr_wake
+	fetcht 1,mem_whee_b_data_gpio
+	call gpio_clr_wake
+	fetcht 1,mem_whee_a_data_gpio
+	call mouse_gpio_config_input_pd
+	fetcht 1,mem_whee_b_data_gpio
+	branch mouse_gpio_config_input_pd
+	
+mouse_adc_gpio_set_before_hibernate:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_ADC
+	fetch 1,mem_adc_config_flag
+	rtnne ADC_CONFIG_GPIO
+	fetch 1,mem_adc_channel_gpio
+	arg gpcfg_no_ie,temp
+ 	branch gpio_config_function_int
+	
+
+//set all unused gpio to pull down mode to save power	
+mouse_gpio_pd_idle:
+	arg core_gpio_conf,contr
+	arg GPIO_NUMBER,loopcnt
+mouse_gpio_pd_idle_loop:
+	ifetch 1,contr
+	nbranch mouse_gpio_pd_idle_configured,blank
+	setarg gpcfg_pulldown
+	add contr,-1,contw
+	istore 1,contw
+mouse_gpio_pd_idle_configured:
+	loop mouse_gpio_pd_idle_loop
+	arg core_gpio_conf_hi+GPIO_NUMBER_EXT,pdata
+	isub contr,null
+	rtn zero
+mouse_gpio_pd_idle_ext:
+	arg GPIO_NUMBER_EXT,loopcnt
+	arg core_gpio_conf_hi,contr
+	branch mouse_gpio_pd_idle_loop
+	
+mouse_process_lpm_before:
+	rtnmark1 mark_24g
+	call mouse_lpm_before_common
+	fetch 1,mem_lpm_current_mult
+	nrtn blank					// 7.5ms, no gpio wakeup
+	branch gpio_clr_wake
+
+mouse_lpm_before_common:
+	bpatch patch0e_4,mem_patch0e
+	fetcht 1,mem_whee_a_data_gpio		//reinit gpio pu after disable wheel wakeup
+	call gpio_config_input
+	fetcht 1,mem_whee_b_data_gpio
+	call gpio_config_input
+	
+	call mouse_wheel_check
+	fetch 1,mem_mouse_sensor_sclk_gpio		//set sdio high
+ 	call mouse_gpio_config_output_high
+	call twspi_disable
+	
+	fetcht 1,mem_lbutton_gpio
+	call gpio_set_wake
+	fetcht 1,mem_rbutton_gpio
+	call gpio_set_wake
+	fetcht 1,mem_mbutton_gpio
+	call gpio_set_wake
+
+	fetcht 1,mem_bk_button_gpio
+	call gpio_set_wake
+	fetcht 1,mem_fw_button_gpio
+	call gpio_set_wake
+	fetcht 1,mem_dpi_button_gpio
+	call gpio_set_wake
+	fetcht 1,mem_config_select_device_button_gpio
+	call gpio_set_wake
+
+	fetcht 1,mem_customer_key_gpio
+	call gpio_set_wake
+	
+	fetcht 1,mem_whee_a_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_whee_b_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_whee_ta_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_whee_tb_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_sensor_motion_gpio
+	branch gpio_set_wake
+
+
+//short mult: no key 
+mouse_set_mult:
+	fetch 2,mem_ui_state_map
+	rtnbit0 UI_STATE_BLE_CONNECTED
+	copy rega,pdata
+	nbranch le_set_config_short_mult,blank
+	branch le_clr_config_short_mult
+	
+	
+/****************************adc**************************************/	
+mouse_adc_gpio_set:
+	bpatch patch0e_5,mem_patch0e
+	fetch 1,mem_adc_config_flag
+	rtnne ADC_CONFIG_GPIO
+	fetcht 1,mem_adc_channel_gpio
+	branch gpio_set_high_impedance
+
+mouse_adc_gpio_mux_init:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_ADC
+	jam MOUSE_ADC_CHECK_MULTIPLE,mem_adc_mux_status
+	rtn
+
+mouse_adc_read:
+	bpatch patch0e_6,mem_patch0e
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_ADC
+	call mouse_adc_gpio_set
+	fetch 1,mem_adc_config_flag
+	beq ADC_CONFIG_GPIO,mouse_adc_read_gpio_mux_start	// gpio + dpi/switch
+	jam MOUSE_ADC_CHECK_HVIN_MULTIPLE,mem_adc_mux_status
+	branch mouse_adc_read_start
+
+mouse_adc_read_gpio_mux_start:
+	jam MOUSE_ADC_CHECK_GPIO_MULTIPLE,mem_adc_mux_status
+	branch mouse_adc_read_start
+	
+mouse_adc_read_start:
+	bpatch patch0e_7,mem_patch0e
+	call enable_adc
+	call vdd_calculate_by_mode
+	store 2,mem_mouse_vdd_now_vol
+	fetch 1,mem_adc_config_flag
+	bne ADC_CONFIG_GPIO, mouse_adc_data_process
+	fetcht 2,mem_mouse_vdd_now_vol	// BAT= 1.5V, R = 200k, a = a*1.8
+	mul32 temp,8,pdata
+	div pdata,10
+	call get_div_result
+	iadd temp,pdata
+	store 2,mem_mouse_vdd_now_vol
+mouse_adc_data_process:	
+	arg mem_mouse_vdd_calculate_set,rega
+	call mouse_adc_bat_percent_lowpower_out
+	fetch 1,mem_adc_power_flag
+	bbit1 1,mouse_app_enter_hibernate
+	bbit0 0,mouse_adc_no_low_voltage
+	jam 1,mem_mouse_adc_last_low_voltage_flag
+	branch mouse_adc_low_voltage
+	
+mouse_adc_low_voltage:
+	arg MOUSE_LOW_VOLTAGE_FLAG,queue
+	branch mouse_enable_function_flag
+mouse_adc_no_low_voltage:
+	arg MOUSE_LOW_VOLTAGE_FLAG,queue
+	call mouse_disable_function_flag
+	jam 1,mem_adc_low_volatage_led_timer_count
+	fetch 1,mem_mouse_adc_last_low_voltage_flag
+	rtn blank
+	jam 0,mem_mouse_adc_last_low_voltage_flag
+	branch mouse_low_voltage_led_off_judge
+	
+
+mouse_adc_bat_percent_lowpower_out:
+	bpatch patch0f_0,mem_patch0f
+	ifetch 8,rega
+	store 8,mem_pdatatemp
+	fetch 1,mem_adc_mux_status
+	beq MOUSE_ADC_CHECK_BATTERY_ONLY,mouse_adc_bat_percent_lowpower_out_battery
+	beq MOUSE_ADC_CHECK_GPIO_MULTIPLE,mouse_adc_bat_percent_lowpower_out_battery
+	beq MOUSE_ADC_CHECK_HVIN_MULTIPLE,mouse_adc_bat_percent_lowpower_out_hvin_multiple
+mouse_adc_bat_percent_lowpower_out_battery:
+	call adc_clear_no_power_flag
+	call adc_clear_low_power_flag
+	fetch 2,mem_pdatatemp+6
+	fetcht 2,mem_pdatatemp+2	        //shutdown voltage
+	isub temp,null
+	ncall adc_set_no_power_flag,positive
+	fetcht 2,mem_pdatatemp+4		//low voltage
+	isub temp,null
+	ncall adc_set_low_power_flag,positive
+mouse_adc_bat_level_set:
+	fetch 2,mem_pdatatemp+6		//now voltage	
+	fetcht 2,mem_pdatatemp		//full voltage
+	isub temp,null
+	branch mouse_adc_bat_level_100_percent,positive		// now >= full
+	fetcht 2,mem_pdatatemp+2	        //shutdown voltage
+	isub temp,pdata
+	nbranch mouse_adc_bat_level_0_percent,positive		// now < shutdown
+	branch mouse_adc_bat_level_0_percent,blank			// now = shutdown
+	mul32 pdata,100,rega								// (now - shutdown)*100 /(full - shutdown)
+	fetch 2,mem_pdatatemp
+	fetcht 2,mem_pdatatemp+2
+	isub temp,temp
+	copy rega,pdata
+	idiv temp
+	call get_div_result
+	store 1,mem_le_battery_level_percentage
+	rtn
+
+mouse_adc_bat_level_100_percent:
+	jam 100,mem_le_battery_level_percentage
+	rtn
+mouse_adc_bat_level_0_percent:	
+	jam 0,mem_le_battery_level_percentage
+	rtn
+
+mouse_adc_bat_percent_lowpower_out_hvin_multiple:
+	branch mouse_adc_bat_percent_lowpower_out_battery
+	
+/****************************adc end********************************/	
+
+
+/****************************gpio******************************************/
+mouse_gpio_init:
+	fetcht 1,mem_eeprom_wp_gpio
+	call gpio_config_output
+//	call usb_offline_check_init
+	fetcht 1,mem_lbutton_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_rbutton_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_mbutton_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_bk_button_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_fw_button_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_dpi_button_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_matrix_public_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_config_select_device_button_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_customer_key_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_whee_a_data_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_whee_b_data_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_whee_ta_data_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_whee_tb_data_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_sensor_motion_gpio
+	call mouse_gpio_config_input_pu
+
+	fetcht 1,mem_device_switch_gpio
+	call mouse_gpio_config_input_pu
+	
+	fetcht 1,mem_select_sensor_angle_gpio
+	branch mouse_gpio_config_input_pu
+
+
+mouse_gpio_set_pupd_by_input:
+	sub temp,UI_BUTTON_GPIO_DISABLE,null
+	rtn zero
+	and temp,0x7f,queue
+	fetch 4,core_gpio_in
+	qisolate1 pdata
+	branch mouse_gpio_config_input_pu,true
+mouse_gpio_config_input_pd:
+	sub temp,UI_BUTTON_GPIO_DISABLE,null
+	rtn zero
+	set1 GPIO_ACTIVE_BIT,temp
+	branch gpio_config_input
+
+mouse_gpio_config_input_pu:
+	sub temp,UI_BUTTON_GPIO_DISABLE,null
+	rtn zero 
+	set0 GPIO_ACTIVE_BIT,temp
+	branch gpio_config_input
+
+mouse_gpio_set_high_impedance:
+	fetch 3,mem_mouse_set_high_impedance_bit_set
+	store 3,mem_pdatatemp
+	arg 13,loopcnt
+	arg 0,temp
+mouse_gpio_set_high_impedance_bit_loop:	
+	fetch 3,mem_pdatatemp
+	isolate1 0,pdata
+	call gpio_set_high_impedance,true
+	fetch 3,mem_pdatatemp
+	lshift pdata,pdata
+	store 3,mem_pdatatemp
+	increase 1,temp
+	loop mouse_gpio_set_high_impedance_bit_loop
+	rtn
+
+/****************************gpio end*******************************/
+
+
+/***********************le device info modify*****************************/
+mouse_le_name_modify:
+	bpatch patch0f_1,mem_patch0f
+	fetch 8,mem_le_name_patch
+	rtn blank
+	fetch 1,mem_le_name_patch_len
+	copy pdata,rega
+	sub pdata,11,null
+	nbranch mouse_le_name_patch_len_overflow,positive
+	
+	call mouse_le_name_clear
+	
+	arg mem_le_adv_swift_pair+9,contw
+	call mouse_le_name_modify_next
+	
+	arg mem_le_scan_data+2,contw
+	call mouse_le_name_modify_next
+	
+	arg mem_le_name,contw
+mouse_le_name_modify_next:
+	arg mem_le_name_patch,contr
+	copy rega,loopcnt
+	branch memcpy
+
+mouse_le_name_clear:
+	arg mem_le_adv_swift_pair+9,contw
+	call mouse_le_name_clear_next
+	
+	arg mem_le_scan_data+2,contw
+	call mouse_le_name_clear_next
+
+	arg mem_le_name,contw
+mouse_le_name_clear_next:
+	arg 11,loopcnt
+	branch clear_mem	
+
+mouse_le_name_patch_len_overflow:
+	call mouse_le_swift_pair_disable
+	
+	fetch 1,mem_le_name_patch_len
+	increase 1,pdata
+	store 1,mem_le_adv_swift_pair
+	jam 9,mem_le_adv_swift_pair+1
+	arg mem_le_name_patch,contr
+	arg mem_le_adv_swift_pair+2,contw
+	copy rega,loopcnt
+	call memcpy
+
+	fetch 1,mem_le_name_patch_len
+	increase 1,pdata
+	store 1,mem_le_scan_data
+	jam 9,mem_le_scan_data+1
+	arg mem_le_name_patch,contr
+	arg mem_le_scan_data+2,contw
+	copy rega,loopcnt
+	call memcpy
+
+	arg mem_le_name_patch_len,contr
+	arg mem_le_name_len,contw
+	copy rega,loopcnt
+	increase 1,loopcnt
+	branch memcpy
+
+mouse_le_swift_pair_disable:
+	arg mem_le_adv_swift_pair,contw
+	arg 20,loopcnt
+	branch clear_mem
+
+/***********************le device info modify end*************************/
+
+
+/*******************spi*****************************/
+mouse_sensor_spi_init:
+	call mouse_spid_init_pin
+	jam 0x73,mem_spi_init_clk
+//	jam 0x1e,mem_spi_init_delay_time
+	call mouse_spi_init
+	branch twspi_enable
+	
+mouse_spi_write_flash_cb:
+mouse_spi_init:
+	branch spid_init
+	
+mouse_spid_init_pin:
+	fetch 1,mem_mouse_sensor_sclk_gpio
+ 	arg gpcfg_spid_sck,temp
+ 	call gpio_config_function_int
+ 	fetch 1,mem_mouse_sensor_sdio_gpio
+ 	arg gpcfg_spid_sdio,temp
+ 	branch gpio_config_function_int
+
+
+/*******************spi end**************************/
+
+mouse_motion:
+	bpatch patch0f_2,mem_patch0f
+	disable user
+	setarg 0
+	store 6,mem_mouse_x
+	call mouse_check_sensor_data
+	setarg 0x0089
+	call twspi_write	
+	call mouse_setting_sensor_type
+	call mouse_zwheel
+	call mouse_t_zwheel
+	call mouse_key
+	fetch 1,mem_mouse_key
+	and_into 0x1f,pdata
+	store 1,mem_mouse_key
+	nbranch mouse_drawing_optima_init,user
+	call mouse_drawing_optima
+	branch mouse_no_data_timer_init
+
+
+/*******************wheel*************************/
+mouse_zwheel:
+	fetch 1,mem_mouse_z_data
+	rtn blank	
+	store 1,mem_mouse_z
+	jam 0,mem_mouse_z_data
+	branch enable_user
+	
+mouse_t_zwheel:
+	fetch 1,mem_mouse_tz_data
+	rtn blank	
+	store 1,mem_mouse_tz
+	jam 0,mem_mouse_tz_data
+	branch enable_user
+
+mouse_wheel_check:
+	call mouse_t_wheel_scan
+	call mouse_wheel_scan
+	fetch 1,mem_wheel_tb_new_pinlevel
+	fetcht 1,mem_wheel_tb_old_pinlevel
+	store 1,mem_wheel_tb_old_pinlevel
+	isub temp,null
+	nbranch app_lpm_wake_auto_lock,zero
+	fetch 1,mem_mwheel_b_new_pinlevel
+	fetcht 1,mem_mwheel_b_old_pinlevel
+	store 1,mem_mwheel_b_old_pinlevel
+	isub temp,null
+	nbranch app_lpm_wake_auto_lock,zero
+	rtn
+mouse_t_wheel_scan:
+	fetch 1,mem_whee_ta_data_gpio
+	rtneq GPIO_DISABLE
+	arg 0,rega
+	fetcht 1,mem_whee_ta_data_gpio
+	call gpio_get_bit
+	setflag true,0,rega
+	fetcht 1,mem_whee_tb_data_gpio
+	call gpio_get_bit
+	setflag true,1,rega
+	copy rega,pdata
+	store 1,mem_wheel_tb_new_pinlevel
+	beq 0x01,mouse_t_wheel_scan_judge1
+	beq 0x02,mouse_t_wheel_scan_judge2
+	fetch 1,mem_wheel_tog
+	bbit1 7,mouse_t_wheel_scan_judge3
+	rtn
+
+mouse_t_wheel_scan_judge1:
+	fetch 1,mem_wheel_tb_old_pinlevel
+	beq 0,mouse_t_wheel_scan_judge11
+	beq 3,mouse_t_wheel_scan_judge12
+	rtn
+mouse_t_wheel_scan_judge2:
+	fetch 1,mem_wheel_tb_old_pinlevel
+	beq 0,mouse_t_wheel_scan_judge21
+	beq 3,mouse_t_wheel_scan_judge22
+	rtn
+mouse_t_wheel_scan_judge11:
+	jam 0x82,mem_wheel_tog
+	rtn
+mouse_t_wheel_scan_judge12:
+	jam 0x81,mem_wheel_tog
+	rtn
+mouse_t_wheel_scan_judge21:
+	jam 0x80,mem_wheel_tog
+	rtn
+mouse_t_wheel_scan_judge22:
+	jam 0x83,mem_wheel_tog
+	rtn
+mouse_t_wheel_scan_judge3:
+	fetch 1,mem_wheel_tog
+	set0 7,pdata
+	store 1,mem_wheel_tog
+	beq 0,mouse_t_wheel_scan_judge30
+	beq 1,mouse_t_wheel_scan_judge31
+	beq 2,mouse_t_wheel_scan_judge32
+	beq 3,mouse_t_wheel_scan_judge33
+	rtn
+mouse_t_wheel_scan_judge30:
+	fetch 1,mem_wheel_tb_new_pinlevel
+	beq 3,mouse_wheel_t_forward
+	rtn
+mouse_t_wheel_scan_judge31:
+	fetch 1,mem_wheel_tb_new_pinlevel
+	beq 0,mouse_wheel_t_forward
+	rtn
+mouse_t_wheel_scan_judge32:
+	fetch 1,mem_wheel_tb_new_pinlevel
+	beq 3,mouse_wheel_t_back
+	rtn
+mouse_t_wheel_scan_judge33:
+	fetch 1,mem_wheel_tb_new_pinlevel
+	beq 0,mouse_wheel_t_back
+	rtn
+mouse_wheel_t_forward:
+	fetch 1,mem_mouse_tz_data
+	increase 1,pdata
+	store 1,mem_mouse_tz_data
+	rtn
+mouse_wheel_t_back:
+	fetch 1,mem_mouse_tz_data
+	increase -1,pdata
+	store 1,mem_mouse_tz_data
+	rtn
+
+
+mouse_wheel_scan:
+	fetch 1,mem_whee_a_data_gpio
+	rtneq GPIO_DISABLE
+	arg 0,rega
+	fetcht 1,mem_whee_a_data_gpio
+	call gpio_get_bit
+	setflag true,0,rega
+	fetcht 1,mem_whee_b_data_gpio
+	call gpio_get_bit
+	setflag true,1,rega
+	copy rega,pdata
+	store 1,mem_mwheel_b_new_pinlevel
+	beq 0x01,mouse_wheel_scan_judge1
+	beq 0x02,mouse_wheel_scan_judge2
+	fetch 1,mem_mwheel_tog
+	bbit1 7,mouse_wheel_scan_judge3
+	rtn
+
+mouse_wheel_scan_judge1:
+	fetch 1,mem_mwheel_b_old_pinlevel
+	beq 0,mouse_wheel_scan_judge11
+	beq 3,mouse_wheel_scan_judge12
+	rtn
+mouse_wheel_scan_judge2:
+	fetch 1,mem_mwheel_b_old_pinlevel
+	beq 0,mouse_wheel_scan_judge21
+	beq 3,mouse_wheel_scan_judge22
+	rtn
+mouse_wheel_scan_judge11:
+	jam 0x82,mem_mwheel_tog
+	rtn
+mouse_wheel_scan_judge12:
+	jam 0x81,mem_mwheel_tog
+	rtn
+mouse_wheel_scan_judge21:
+	jam 0x80,mem_mwheel_tog
+	rtn
+mouse_wheel_scan_judge22:
+	jam 0x83,mem_mwheel_tog
+	rtn
+mouse_wheel_scan_judge3:
+	fetch 1,mem_mwheel_tog
+	set0 7,pdata
+	store 1,mem_mwheel_tog
+	beq 0,mouse_wheel_scan_judge30
+	beq 1,mouse_wheel_scan_judge31
+	beq 2,mouse_wheel_scan_judge32
+	beq 3,mouse_wheel_scan_judge33
+	rtn
+mouse_wheel_scan_judge30:
+	fetch 1,mem_mwheel_b_new_pinlevel
+	beq 3,mouse_wheel_forward
+	rtn
+mouse_wheel_scan_judge31:
+	fetch 1,mem_mwheel_b_new_pinlevel
+	beq 0,mouse_wheel_forward
+	rtn
+mouse_wheel_scan_judge32:
+	fetch 1,mem_mwheel_b_new_pinlevel
+	beq 3,mouse_wheel_back
+	rtn
+mouse_wheel_scan_judge33:
+	fetch 1,mem_mwheel_b_new_pinlevel
+	beq 0,mouse_wheel_back
+	rtn
+mouse_wheel_forward:
+	fetch 1,mem_mouse_z_data
+	increase 1,pdata
+	store 1,mem_mouse_z_data
+	rtn
+mouse_wheel_back:
+	fetch 1,mem_mouse_z_data
+	increase -1,pdata
+	store 1,mem_mouse_z_data
+	rtn
+
+
+mouse_wheel_gpio_set_wake:
+	fetcht 1,mem_whee_a_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_whee_b_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_whee_ta_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_whee_tb_data_gpio
+	branch gpio_set_wake_by_current_state
+	
+mouse_before_hibernate_wheel_gpio_set:
+	fetcht 1,mem_whee_a_data_gpio
+	call mouse_gpio_set_pupd_by_input
+	fetcht 1,mem_whee_b_data_gpio
+	call mouse_gpio_set_pupd_by_input
+	fetcht 1,mem_whee_ta_data_gpio
+	call mouse_gpio_set_pupd_by_input
+	fetcht 1,mem_whee_tb_data_gpio
+	branch mouse_gpio_set_pupd_by_input
+
+mouse_wheel_trigger:
+	fetch 2,mem_mouse_z
+	rtn blank
+	jam 1,mem_mouse_wheel_trigger
+	jam 10,mem_mouse_wheel_trigger_timer
+	rtn
+
+mouse_wheel_trigger_timer:
+	arg mem_mouse_wheel_trigger_timer,regc
+	arg mouse_wheel_trigger_disable,regb
+	branch timer_single_step
+mouse_wheel_trigger_disable:
+	jam 0,mem_mouse_wheel_trigger
+	rtn
+
+
+/*
+mouse_set_qdecoder_x:
+	arg MOUSE_DEFAULT_XA_GPIO,temp
+	call mouse_gpio_config_input_pu
+	arg MOUSE_DEFAULT_XA_GPIO,temp
+	call gpio_get_bit
+	rtn true
+	fetch 1,core_qdec_cntx
+	set1 4,pdata
+	store 1,core_qdec_cntx
+	rtn
+*/	
+	
+/*******************wheel end**********************/
+
+
+/********************dpi******************************/
+mouse_dpi_check:
+	fetch 1,mem_dpi_button_gpio
+	rtneq GPIO_DISABLE
+	arg 0,rega
+	jam MOUSE_DPI_KEY,mem_mouse_key_temp
+	fetcht 1,mem_dpi_button_gpio
+	call mouse_dpi_key_check
+mouse_dpi_check_next:
+	store 1,mem_mouse_dpikey_press_status
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,mouse_3io6key_dpi_check_end
+	call mouse_matrix_public_gpio_reset
+mouse_dpi_check_exit:	
+	copy rega,pdata
+	bbit1 MOUSE_DPI_KEY,mouse_dpi_down
+	branch mouse_dpi_up
+	
+mouse_dpi_key_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_DPI_KEY_CONNECT_GND,mouse_dpi_key_connect_gnd
+	fetch 1,mem_mouse_dpikey_press_status
+	copy pdata,regc
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,mouse_3io6key_check
+mouse_dpi_key_check_next:
+	fetch 1,mem_mouse_ghost_flag
+	nbranch mouse_dpi_check_end,blank
+mouse_dpi_key_connect_matrix:
+	call gpio_get_bit
+	fetcht 1,mem_matrix_public_gpio
+	branch mouse_dpi_key_connect_gnd,true
+	fetcht 1,mem_matrix_public_gpio
+	call gpio_out_active
+	fetcht 1,mem_dpi_button_gpio
+	fetch 1,mem_mouse_dpikey_press_status
+	branch mouse_check_key_connect_gnd
+
+mouse_3io6key_dpi_check_end:
+	fetcht 1,mem_dpi_button_gpio
+	call mouse_gpio_config_input_pu
+	branch mouse_dpi_check_exit
+
+mouse_dpi_check_end:
+	jam DPI_BUTTON_STATE_UP,mem_mouse_dpi_button_state
+	jam 0,mem_mouse_dpikey_press_status
+	rtn
+
+mouse_dpi_key_connect_gnd:
+	fetch 1,mem_mouse_dpikey_press_status
+	branch mouse_check_key_connect_gnd
+
+mouse_dpi_down:
+	fetch 1,mem_mouse_dpi_button_state
+	rtneq DPI_BUTTON_STATE_DOWN
+	jam DPI_BUTTON_STATE_DOWN,mem_mouse_dpi_button_state
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_SELECT_DEVICE_BY_DPI_BUTTON
+	rtnbit1 MOUSE_ENABLE_DPI_KEY_LONG_PRESS_DISCONVERY
+	branch mouse_dpi_process
+
+mouse_dpi_up:
+	fetch 1,mem_mouse_dpi_button_state
+	rtneq DPI_BUTTON_STATE_UP
+	jam DPI_BUTTON_STATE_UP,mem_mouse_dpi_button_state
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_SELECT_DEVICE_BY_DPI_BUTTON,mouse_dpi_up_next
+	bbit1 MOUSE_ENABLE_DPI_KEY_LONG_PRESS_DISCONVERY,mouse_dpi_up_next
+	rtn
+mouse_dpi_up_next:	
+	fetch 1,mem_mouse_dpi_long_press_flag
+	nbranch mouse_dpi_up_after_long_press,blank
+	fetch 1,mem_select_device_count
+	ncall mouse_dpi_process,blank
+mouse_dpi_up_after_long_press:	
+	jam 0,mem_mouse_dpi_long_press_flag
+	fetch 1,mem_ui_button_timeout
+	store 1,mem_select_device_count	
+	store 1,mem_bt_discovery_count	
+	rtn
+	
+mouse_dpi_process:	
+	bpatch patch0f_3,mem_patch0f
+	call mouse_dpi_ghost_check
+	rtn user
+	fetch 1,mem_mouse_dpi
+	
+	copy pdata,temp
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_DOUBLE_DPI_KEY,mouse_double_dpi_check
+	copy temp,pdata
+	
+	increase 1,pdata
+	and pdata,0x03,pdata
+mouse_dpi_level_store:	
+	store 1,mem_mouse_dpi
+	call mouse_setting_dpi
+	branch mouse_store_dpi_info_check
+
+
+/***************************another dpi key dpi**********************/
+
+mouse_double_dpi_check:
+	fetch 1,mem_dpi_another_button_down_enable
+	nbranch mouse_another_dpi_button_down,blank
+mouse_dpi_increase:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_DPI_LEVEL_4,mouse_dpi_increase_level_4
+	copy temp,pdata
+	rtneq MOUSE_DPI_LEVEL2
+mouse_dpi_increase_level:
+	beq MOUSE_DPI_LEVEL1,mouse_dpi_level_3	//1600
+	beq MOUSE_DPI_LEVEL3,mouse_dpi_level_2 	//1200
+	rtn
+
+mouse_dpi_level_1:		//800
+	setarg 2
+	branch mouse_dpi_level_store
+mouse_dpi_level_2:		//1200
+	setarg 0
+	branch mouse_dpi_level_store
+mouse_dpi_level_3:		//1600
+	setarg 1
+	branch mouse_dpi_level_store
+mouse_dpi_level_4:		//1000
+	setarg 3
+	branch mouse_dpi_level_store	
+
+mouse_dpi_increase_level_4:
+	copy temp,pdata			//0->1,2->3,3->0
+	rtneq MOUSE_DPI_LEVEL2
+	beq MOUSE_DPI_LEVEL1,mouse_dpi_level_3
+	beq MOUSE_DPI_LEVEL3,mouse_dpi_level_4
+	beq MOUSE_DPI_LEVEL4,mouse_dpi_level_2
+	rtn
+mouse_dpi_decrease_level_4:
+	copy temp,pdata			//0->3,1->0,3->2
+	rtneq MOUSE_DPI_LEVEL3
+	beq MOUSE_DPI_LEVEL1,mouse_dpi_level_4
+	beq MOUSE_DPI_LEVEL2,mouse_dpi_level_2
+	beq MOUSE_DPI_LEVEL4,mouse_dpi_level_1
+	rtn
+
+mouse_another_dpi_button_down:
+mouse_dpi_decrease:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_DPI_LEVEL_4,mouse_dpi_decrease_level_4
+	copy temp,pdata
+	rtneq MOUSE_DPI_LEVEL3
+mouse_dpi_decrease_level:
+	beq MOUSE_DPI_LEVEL1,mouse_dpi_level_1
+	beq MOUSE_DPI_LEVEL2,mouse_dpi_level_2
+	rtn
+	
+
+/*************************another dpi key dpi end********************/
+
+mouse_dpi_ghost_check:
+	disable user
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_DPI_KEY_CONNECT_GND
+	branch mouse_ghost_key_value_check
+	
+mouse_dpi_key_check_long_press:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_SELECT_DEVICE_BY_DPI_BUTTON,mouse_select_device_by_dpi_button
+	bbit1 MOUSE_ENABLE_DPI_KEY_LONG_PRESS_DISCONVERY,mouse_discovery_by_dpi_button
+	rtn
+
+mouse_select_device_by_dpi_button:
+	fetch 1,mem_mouse_dpi_button_state
+	rtnne DPI_BUTTON_STATE_DOWN	
+	arg mem_select_device_count,regc
+	arg mouse_ready_reconnection_by_dpi_button,regb
+	branch timer_single_step
+
+mouse_ready_reconnection_by_dpi_button:
+	jam 1,mem_mouse_dpi_long_press_flag
+	branch mouse_ready_reconnection_by_button
+
+mouse_discovery_by_dpi_button:
+	fetch 1,mem_mouse_dpi_button_state
+	rtnne DPI_BUTTON_STATE_DOWN	
+	arg mem_bt_discovery_count,regc
+	arg mouse_long_dpi_button_bt_discovery,regb
+	branch timer_single_step
+
+mouse_long_dpi_button_bt_discovery:
+	jam 1,mem_mouse_dpi_long_press_flag
+	branch mouse_long_button_bt_discovery
+
+mouse_setting_dpi_4_level:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_DPI_LEVEL_4
+	fetch 1,mem_mouse_dpi
+	rtnne MOUSE_DPI_LEVEL4
+	jam MOUSE_DPI_LEVEL1,mem_mouse_dpi
+	rtn
+	
+mouse_setting_dpi:
+	bpatch patch0f_4,mem_patch0f
+	call mouse_setting_dpi_4_level
+	call mouse_dpi_led_blink_delay
+mouse_setting_sensor_type:
+	bpatch patch0f_5,mem_patch0f
+	fetch 1,mem_config_sensor_type
+	beq S201X,mouse_seting_S201_dpi
+	beq P3212,mouse_seting_3212_dpi
+	beq KA8G2,mouse_seting_ka8g2_dpi
+	fetch 1,mem_mouse_dpi
+	beq MOUSE_DPI_LEVEL1,mouse_set_cpi0		//1200
+	beq MOUSE_DPI_LEVEL2,mouse_set_cpi1		//1600
+	beq MOUSE_DPI_LEVEL3,mouse_set_cpi2		//800
+	beq MOUSE_DPI_LEVEL4,mouse_set_cpi3		//1000
+mouse_set_cpi1:	//320x+8009
+	fetcht 1,mem_320x_dpi_1
+	branch mouse_dpi_store
+mouse_set_cpi0:
+	fetcht 1,mem_320x_dpi_0
+	branch mouse_dpi_store
+mouse_set_cpi2:
+	fetcht 1,mem_320x_dpi_2
+	branch mouse_dpi_store
+mouse_set_cpi3:
+	fetcht 1,mem_320x_dpi_3
+mouse_dpi_store:
+	fetch 1,mem_config_sensor_type
+	beq P3065_XY,mouse_3065xy_set_dpi
+	beq MX8650,mouse_3065xy_set_dpi
+	beq KA8,mouse_ka8_set_dpi
+	beq P6520,mouse_ka8_set_dpi
+	beq P8009,mouse_3065xy_set_dpi
+mouse_dpi_write:		// 3205  1  2  3  4
+	storet 1,mem_mouse_cpi_count
+	setarg MOUSE_DPI_ADDRESS
+	call twspi_read
+	and pdata,0xf8,temp
+	fetch 1,mem_mouse_cpi_count
+	iadd temp,pdata
+	lshift8 pdata,pdata
+	add pdata,MOUSE_DPI_ADDRESS,pdata
+	branch twspi_write
+
+mouse_3065xy_set_dpi:	// 0 1 2 3
+	increase -1,temp
+	branch mouse_dpi_write
+
+mouse_ka8_set_dpi:	// 3 4 5 6
+	increase 2,temp
+	branch mouse_dpi_write
+
+mouse_seting_S201_dpi:
+	fetch 1,mem_mouse_dpi
+	beq MOUSE_DPI_LEVEL1,mouse_set_S201_dpi_0	//1200
+	beq MOUSE_DPI_LEVEL2,mouse_set_S201_dpi_2	//2400
+	beq MOUSE_DPI_LEVEL3,mouse_set_S201_dpi_3	//3200
+mouse_set_S201_dpi_0:	//1200
+	fetch 1,mem_sensor_s201_dpi_0
+	copy pdata,rega
+	branch mouse_dpi_S201_store
+
+mouse_set_S201_dpi_1:	//1600
+	fetch 1,mem_sensor_s201_dpi_1
+	copy pdata,rega
+	branch mouse_dpi_S201_store
+	
+mouse_set_S201_dpi_2:	//2400
+	fetch 1,mem_sensor_s201_dpi_2
+	copy pdata,rega
+	branch mouse_dpi_s201_store
+
+mouse_set_S201_dpi_3:	//3200
+	fetch 1,mem_sensor_s201_dpi_3
+	copy pdata,rega
+	branch mouse_dpi_s201_store
+
+mouse_set_S201_dpi_4:	//800
+	fetch 1,mem_sensor_s201_dpi_4
+	copy pdata,rega
+mouse_dpi_s201_store:
+	setarg 0xc309
+	call twspi_write
+	copy rega,pdata
+	lshift8 pdata,pdata
+	add pdata,0x23,pdata
+	call twspi_write
+	setarg 0x0009
+	branch twspi_write
+
+mouse_seting_3212_dpi:
+	fetch 1,mem_mouse_dpi
+	beq MOUSE_DPI_LEVEL1,mouse_set_p3212_cpi0	//1200
+	beq MOUSE_DPI_LEVEL2,mouse_set_p3212_cpi1	//1600
+	beq MOUSE_DPI_LEVEL3,mouse_set_p3212_cpi2	//2400
+	beq MOUSE_DPI_LEVEL4,mouse_set_p3212_cpi3	//800
+mouse_set_p3212_cpi1:
+	fetch 1,mem_3212_dpi_1
+	branch mouse_p3212_dpi
+mouse_set_p3212_cpi0:
+	fetch 1,mem_3212_dpi_0
+	branch mouse_p3212_dpi
+mouse_set_p3212_cpi2:
+	fetch 1,mem_3212_dpi_2
+	branch mouse_p3212_dpi
+mouse_set_p3212_cpi3:
+	fetch 1,mem_3212_dpi_3
+mouse_p3212_dpi:
+	store 1,mem_mouse_cpi_count
+	lshift8 pdata,pdata
+	copy pdata,rega
+	add pdata,MOUSE_P3212_DPI_XADDRESS,pdata
+  	call twspi_write
+ 	copy rega,pdata
+  	add pdata,MOUSE_P3212_DPI_YADDRESS,pdata
+	branch twspi_write
+
+mouse_seting_ka8g2_dpi:
+	fetch 1,mem_mouse_dpi
+	beq MOUSE_DPI_LEVEL1,mouse_set_pka8g2_cpi0		//1600
+	beq MOUSE_DPI_LEVEL2,mouse_set_pka8g2_cpi1		//2400
+	beq MOUSE_DPI_LEVEL3,mouse_set_pka8g2_cpi2		//3200
+	beq MOUSE_DPI_LEVEL4,mouse_set_pka8g2_cpi3		//800
+mouse_set_pka8g2_cpi1:
+	fetch 1,mem_ka8g2_dpi_1
+	branch mouse_p3212_dpi
+
+mouse_set_pka8g2_cpi0:
+	fetch 1,mem_ka8g2_dpi_0
+	branch mouse_p3212_dpi
+	
+mouse_set_pka8g2_cpi2:
+	fetch 1,mem_ka8g2_dpi_2
+	branch mouse_p3212_dpi
+
+mouse_set_pka8g2_cpi3:
+	fetch 1,mem_ka8g2_dpi_3
+	branch mouse_p3212_dpi
+
+		
+/********************dpi end***************************/		
+
+
+/***********************key******************************/
+
+mouse_key:
+	call mouse_check_firekey_gpio
+	fetch 1,mem_fire_key_flag
+	nbranch fire_key_press,blank
+	fetch 1,mem_fire_key_status
+	nbranch fire_key_process,blank
+	
+	call mouse_check_key_gpio
+	call mouse_ghost_key_check
+	call mouse_set_mult
+	call mouse_24g_key
+	copy rega,pdata
+	fetcht 1,mem_mouse_key_last
+	store 1,mem_mouse_key_last
+	store 1,mem_mouse_key
+	ixor temp,pdata
+	sub pdata,0,null
+	rtn zero
+	branch enable_user
+
+mouse_24g_key:
+	rtnmark0 mark_24g
+	copy rega,pdata
+	rtn blank
+	store 1,mem_mouse_key
+	branch enable_user
+
+	
+/************************************ghost key******************************/
+
+mouse_ghost_key_check:
+	jam 0,mem_mouse_matrix_key_cow_count
+	jam 0,mem_mouse_matrix_key_row_count
+	jam 0,mem_mouse_ghost_flag
+	copy pdata,regb
+	fetcht 1,mem_lbutton_gpio
+	fetch 1,mem_bk_button_gpio
+	isub temp,null
+	branch mouse_matrix_ghost_key_L_BK,zero
+	fetch 1,mem_fw_button_gpio
+	isub temp,null
+	branch mouse_matrix_ghost_key_L_FW,zero
+	fetcht 1,mem_mbutton_gpio
+	fetch 1,mem_bk_button_gpio
+	isub temp,null
+	branch mouse_ghost_key_MBK_RFW,zero
+	branch mouse_ghost_key_MFW_RBK
+
+mouse_matrix_ghost_key_L_BK:
+	fetcht 1,mem_mbutton_gpio
+	fetch 1,mem_fw_button_gpio
+	isub temp,null
+	branch mouse_ghost_key_LBK_MFW,zero
+	branch mouse_ghost_key_LBK_RFW
+
+mouse_matrix_ghost_key_L_FW:
+	fetcht 1,mem_mbutton_gpio
+	fetch 1,mem_bk_button_gpio
+	isub temp,null
+	branch mouse_ghost_key_LFW_MBK,zero
+	branch mouse_ghost_key_LFW_RBK
+
+mouse_ghost_key_LBK_MFW:
+	call mouse_ghost_key_check_L_BK
+	call mouse_ghost_key_check_M_FW
+	branch mouse_ghost_key_check_next
+
+mouse_ghost_key_LBK_RFW:
+	call mouse_ghost_key_check_L_BK
+	branch mouse_ghost_key_RFW
+
+mouse_ghost_key_LFW_MBK:
+	call mouse_ghost_key_check_L_FW
+	call mouse_ghost_key_check_M_BK
+	branch mouse_ghost_key_check_next
+	
+mouse_ghost_key_LFW_RBK:
+	call mouse_ghost_key_check_L_FW
+	branch mouse_ghost_key_RBK
+	
+mouse_ghost_key_MBK_RFW:
+	call mouse_ghost_key_check_M_BK
+mouse_ghost_key_RFW:
+	call mouse_ghost_key_check_R_FW
+	branch mouse_ghost_key_check_next
+	
+mouse_ghost_key_MFW_RBK:
+	call mouse_ghost_key_check_M_FW
+mouse_ghost_key_RBK:
+	call mouse_ghost_key_check_R_BK
+mouse_ghost_key_check_next:
+	call mouse_ghost_key_check_BK_FW
+	call mouse_ghost_key_check_LMR
+	fetch 1,mem_mouse_matrix_key_row_count
+	rtn blank
+	fetch 1,mem_mouse_matrix_key_cow_count
+	rtn blank
+	jam 1,mem_mouse_ghost_flag
+	fetch 1,mem_mouse_key_last		// matrix have ghost key
+	copy pdata,rega
+	rtn
+
+mouse_ghost_key_check_L_BK:
+	and regb,MOUSE_L_BK_BUTTON,pdata
+	beq MOUSE_L_BK_BUTTON,mouse_matrix_cow_more_than_one_key
+	rtn
+mouse_ghost_key_check_M_BK:
+	and regb,MOUSE_L_BK_BUTTON,pdata
+	beq MOUSE_M_BK_BUTTON,mouse_matrix_cow_more_than_one_key
+	rtn
+mouse_ghost_key_check_R_BK:
+	and regb,MOUSE_L_BK_BUTTON,pdata
+	beq MOUSE_R_BK_BUTTON,mouse_matrix_cow_more_than_one_key
+	rtn
+mouse_ghost_key_check_L_FW:
+	and regb,MOUSE_L_BK_BUTTON,pdata
+	beq MOUSE_L_FW_BUTTON,mouse_matrix_cow_more_than_one_key
+	rtn
+mouse_ghost_key_check_M_FW:
+	and regb,MOUSE_M_FW_BUTTON,pdata
+	beq MOUSE_M_FW_BUTTON,mouse_matrix_cow_more_than_one_key
+	rtn
+mouse_ghost_key_check_R_FW:
+	and regb,MOUSE_M_FW_BUTTON,pdata
+	beq MOUSE_R_FW_BUTTON,mouse_matrix_cow_more_than_one_key
+	rtn
+
+mouse_ghost_key_check_BK_FW:
+	and regb,MOUSE_BK_FW_BUTTON,pdata
+	beq MOUSE_BK_FW_BUTTON,mouse_matrix_row_more_than_one_key
+	rtn	
+
+mouse_ghost_key_check_LMR:
+	and temp,MOUSE_LMR_BUTTON,pdata	// key LMR press
+	beq MOUSE_LR_BUTTON,mouse_matrix_row_more_than_one_key
+	beq MOUSE_LM_BUTTON,mouse_matrix_row_more_than_one_key
+	beq MOUSE_RM_BUTTON,mouse_matrix_row_more_than_one_key
+	beq MOUSE_LMR_BUTTON,mouse_matrix_row_more_than_one_key
+	rtn
+
+
+mouse_matrix_row_more_than_one_key:
+	jam 1,mem_mouse_matrix_key_row_count
+	rtn
+
+mouse_matrix_cow_more_than_one_key:
+	jam 1,mem_mouse_matrix_key_cow_count
+	rtn
+
+/************************************ghost key end******************************/
+
+
+
+/************************************double dpi key******************************/
+
+mouse_dpi_another_gpio_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_DOUBLE_DPI_KEY
+	bbit0 MOUSE_ENABLE_ANOTHER_DPI_KEY_CONNECT_GND,mouse_dpi_another_gpio_connect_vin_check
+mouse_dpi_another_gpio_connect_gnd_check:	
+	fetch 1,mem_dpi_another_button_gpio
+	call mouse_gpio_config_output_high
+	call mouse_dpi_another_check
+	fetcht 1,mem_dpi_another_button_gpio
+	branch mouse_gpio_config_input_pu	
+
+mouse_dpi_another_gpio_connect_vin_check:
+	fetch 1,mem_dpi_another_button_gpio
+	call mouse_gpio_config_output_low
+	jam MOUSE_DPI_ANOTHER_KEY,mem_mouse_key_temp_patch
+	fetcht 1,mem_dpi_another_button_gpio
+	fetch 1,mem_dpi_another_press_status
+	call mouse_check_key_connect_vin_new
+	call mouse_dpi_another_state_check
+	fetcht 1,mem_dpi_another_button_gpio
+	branch mouse_gpio_config_input_pu	
+
+mouse_dpi_another_down_new:
+	call mouse_gpio_config_input_pu	
+	fetch 1,mem_dpi_another_button_state
+	rtneq DPI_BUTTON_STATE_DOWN
+	jam DPI_BUTTON_STATE_DOWN,mem_dpi_another_button_state
+	branch mouse_dpi_process
+
+mouse_dpi_another_check:
+	jam MOUSE_DPI_ANOTHER_KEY,mem_mouse_key_temp_patch
+	fetcht 1,mem_dpi_another_button_gpio
+	fetch 1,mem_dpi_another_press_status	
+	call mouse_check_key_connect_gnd_new
+mouse_dpi_another_state_check:
+	store 1,mem_dpi_another_press_status
+	fetch 1,mem_dpi_another_button_down_enable
+	branch mouse_dpi_another_up,blank	
+mouse_dpi_another_down:
+	fetch 1,mem_dpi_another_button_state
+	rtneq DPI_BUTTON_STATE_DOWN
+	jam DPI_BUTTON_STATE_DOWN,mem_dpi_another_button_state
+	branch mouse_dpi_process
+
+mouse_dpi_another_up:
+	fetch 1,mem_dpi_another_button_state
+	rtneq DPI_BUTTON_STATE_UP
+	jam DPI_BUTTON_STATE_UP,mem_dpi_another_button_state
+	rtn
+
+mouse_check_key_connect_gnd_new:	
+	lshift pdata,pdata
+	copy pdata,regb
+	call gpio_get_bit
+	setflag true,0,regb
+	and regb,0x07,pdata
+	fetcht 1,mem_mouse_key_temp_patch
+	copy temp,queue
+	beq 0x07,mouse_another_dpi_key_press		//  about 17~22ms three times
+	beq 0x00,mouse_another_dpi_key_release
+	rtn
+
+mouse_check_key_connect_vin_new:	
+	lshift pdata,pdata
+	copy pdata,regb
+	call mouse_gpio_config_input_pd
+	call gpio_get_bit
+	setflag true,0,regb
+	and regb,0x07,pdata
+	fetcht 1,mem_mouse_key_temp_patch
+	copy temp,queue
+	beq 0x07,mouse_another_dpi_key_press		//  about 17~22ms three times
+	beq 0x00,mouse_another_dpi_key_release
+	rtn
+
+mouse_another_dpi_key_press:
+	jam 1,mem_dpi_another_button_down_enable
+	rtn
+mouse_another_dpi_key_release:
+	jam 0,mem_dpi_another_button_down_enable
+	rtn
+
+/************************************double dpi key end******************************/
+
+
+
+/************************************fire key************************************/
+
+mouse_check_firekey_gpio:
+	arg 0,regb
+	fetch 1,mem_firebutton_gpio
+	rtneq GPIO_DISABLE
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_FIRE_KEY_CONNECT_GND,mouse_check_firekey_connect_vin
+mouse_check_firekey_connect_gnd:
+	fetcht 1,mem_firebutton_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_firebutton_gpio
+	call gpio_get_bit
+	setflag true,0,regb
+mouse_firekey_state_store:	
+	copy regb,pdata
+	store 1,mem_fire_key_flag
+	rtn
+
+mouse_check_firekey_connect_vin:
+	fetcht 1,mem_firebutton_gpio
+	call mouse_gpio_config_input_pd
+	fetcht 1,mem_firebutton_gpio
+	call gpio_get_bit
+	nsetflag true,0,regb
+	branch mouse_firekey_state_store
+
+fire_key_process: 
+	beq 4,fire_key_process_end
+fire_key_press:
+	call firekey_clkn_bt_timer_check 
+	fetch 4,mem_fire_key_delay
+	arg 0xa0,temp      
+	iadd temp,temp
+	copy clkn_bt,pdata
+	isub temp,null
+	nrtn positive
+	store 4,mem_fire_key_delay 
+	fetch 1,mem_fire_key_status
+	beq 0,fire_key_process_start
+	beq 1,fire_key_process_release1
+	beq 2,fire_key_process_start2
+	beq 3,fire_key_process_release2
+	rtn
+
+fire_key_process_start:
+	jam 1,mem_fire_key_status
+fire_key_down:
+	jam 1,mem_mouse_key
+	branch enable_user
+
+fire_key_process_release1:
+	jam 2,mem_fire_key_status
+fire_key_release:
+	jam 0,mem_mouse_key
+	branch enable_user
+
+fire_key_process_start2:
+	jam 3,mem_fire_key_status
+	branch fire_key_down
+
+fire_key_process_release2:
+	jam 0,mem_fire_key_status
+	branch fire_key_release
+
+fire_key_process_end:
+	jam 0,mem_fire_key_status
+	jam 0,mem_mouse_key
+	rtn
+
+firekey_clkn_bt_timer_check:
+	fetcht 4,mem_fire_key_delay
+	copy clkn_bt,pdata
+	isub temp,null
+	ncall firekey_clkn_bt_timer_timeout,positive
+	rtn
+firekey_clkn_bt_timer_timeout:
+	setarg 0
+	store 4,mem_fire_key_delay
+	rtn
+
+/*********************************fire key end*****************************/
+
+
+
+/*********************************matrix key*****************************/
+
+mouse_key_check_once:
+	call mouse_check_key_gpio_once
+	call mouse_check_key_gpio
+	setarg 0x00
+	store 3,mem_mouse_lkey_press_status
+	rtn
+	
+mouse_check_key_gpio:
+	bpatch patch0f_6,mem_patch0f
+	fetch 1,mem_sensor_shutdown_flag
+	ncall mouse_check_key_gpio_once,blank
+	arg 0,rega
+	call mouse_check_lkey_gpio
+	call mouse_check_rkey_gpio
+	call mouse_check_mkey_gpio
+	call mouse_check_bkkey_gpio
+	call mouse_check_fwkey_gpio
+	call mouse_check_firekey_gpio
+	call mouse_check_customerkey_gpio
+	copy rega,pdata
+	rtn
+
+mouse_check_key_gpio_once:
+	setarg 0x030303
+	store 3,mem_mouse_lkey_press_status
+	rtn
+
+mouse_check_lkey_gpio:
+	fetch 1,mem_lbutton_gpio
+	call mouse_gpio_config_output_high
+	jam MOUSE_L_KEY,mem_mouse_key_temp
+	fetcht 1,mem_lbutton_gpio
+	fetch 1,mem_mouse_lkey_press_status
+	call mouse_check_key_connect_gnd
+	store 1,mem_mouse_lkey_press_status
+	fetcht 1,mem_lbutton_gpio
+	branch mouse_gpio_config_input_pu
+
+mouse_check_rkey_gpio:
+	fetch 1,mem_rbutton_gpio
+	call mouse_gpio_config_output_high
+	jam MOUSE_R_KEY,mem_mouse_key_temp
+	fetcht 1,mem_rbutton_gpio
+	fetch 1,mem_mouse_rkey_press_status
+	call mouse_check_key_connect_gnd
+	store 1,mem_mouse_rkey_press_status
+	fetcht 1,mem_rbutton_gpio
+	branch mouse_gpio_config_input_pu
+	
+mouse_check_mkey_gpio:
+	fetch 1,mem_mbutton_gpio
+	call mouse_gpio_config_output_high
+	jam MOUSE_M_KEY,mem_mouse_key_temp
+	fetcht 1,mem_mbutton_gpio
+	fetch 1,mem_mouse_mkey_press_status
+	call mouse_check_key_connect_gnd
+	store 1,mem_mouse_mkey_press_status
+	fetcht 1,mem_mbutton_gpio
+	branch mouse_gpio_config_input_pu
+
+mouse_check_bkkey_gpio:
+	fetch 1,mem_bk_button_gpio
+	rtneq GPIO_DISABLE
+	jam MOUSE_BK_KEY,mem_mouse_key_temp
+	fetch 1,mem_mouse_bkkey_press_status
+	copy pdata,regc
+	fetcht 1,mem_bk_button_gpio
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,mouse_3io6key_bk_check
+	call gpio_get_bit
+	branch mouse_check_bk_button_connect_gnd,true
+	fetcht 1,mem_matrix_public_gpio
+	call gpio_out_active
+	fetcht 1,mem_bk_button_gpio
+	fetch 1,mem_mouse_bkkey_press_status
+	call mouse_check_key_connect_gnd
+mouse_check_bkkey_gpio_end:	
+	store 1,mem_mouse_bkkey_press_status
+	branch mouse_matrix_public_gpio_reset
+
+mouse_check_bk_button_connect_gnd:
+	fetcht 1,mem_matrix_public_gpio
+	fetch 1,mem_mouse_bkkey_press_status
+	call mouse_check_key_connect_gnd
+	branch mouse_check_bkkey_gpio_end
+
+mouse_3io6key_bk_check:
+	fetch 1,mem_bk_button_gpio
+	call mouse_gpio_config_output_low
+	fetcht 1,mem_bk_button_gpio
+	call mouse_3io6key_check
+	store 1,mem_mouse_bkkey_press_status
+	fetcht 1,mem_bk_button_gpio
+	branch mouse_gpio_config_input_pu
+
+
+mouse_check_fwkey_gpio:
+	fetch 1,mem_fw_button_gpio
+	rtneq GPIO_DISABLE
+	jam MOUSE_FW_KEY,mem_mouse_key_temp
+	fetch 1,mem_mouse_fwkey_press_status
+	copy pdata,regc
+	fetcht 1,mem_fw_button_gpio
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,mouse_3io6key_fw_check
+	call gpio_get_bit
+	branch mouse_check_fw_button_connect_gnd,true
+	fetcht 1,mem_matrix_public_gpio
+	call gpio_out_active
+	fetcht 1,mem_fw_button_gpio
+	fetch 1,mem_mouse_fwkey_press_status
+	call mouse_check_key_connect_gnd
+mouse_check_fwkey_gpio_end:	
+	store 1,mem_mouse_fwkey_press_status
+mouse_matrix_public_gpio_reset:	
+	fetcht 1,mem_matrix_public_gpio
+	branch mouse_gpio_config_input_pu
+
+mouse_check_fw_button_connect_gnd:
+	fetcht 1,mem_matrix_public_gpio
+	fetch 1,mem_mouse_fwkey_press_status
+	call mouse_check_key_connect_gnd
+	branch mouse_check_fwkey_gpio_end	
+
+mouse_3io6key_fw_check:
+	fetch 1,mem_fw_button_gpio
+	call mouse_gpio_config_output_low
+	fetcht 1,mem_fw_button_gpio
+	call mouse_3io6key_check
+	store 1,mem_mouse_fwkey_press_status
+	fetcht 1,mem_fw_button_gpio
+	branch mouse_gpio_config_input_pu
+
+mouse_check_customerkey_gpio:
+	jam 0,mem_customer_key
+	fetch 1,mem_customer_key_gpio
+	rtneq GPIO_DISABLE
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_KEYBOARD
+	bbit1 MOUSE_ENABLE_CUSTOMER_KEY_CONNECT_VIN_OR_MATRIX,mouse_customer_key_connect_vin
+mouse_customer_key_connect_gnd:
+	jam MOUSE_CUSTOMER_KEY,mem_mouse_key_temp
+	fetcht 1,mem_customer_key_gpio
+	fetch 1,mem_mouse_customerkey_press_status
+	call mouse_check_key_connect_gnd
+	store 1,mem_mouse_customerkey_press_status
+mouse_check_customerkey_gpio_next:
+	copy rega,pdata
+	bbit1 MOUSE_CUSTOMER_KEY,mouse_customerkey_press
+	call mouse_customerkey_release
+mouse_check_customerkey_gpio_exit:
+	fetch 1,mem_customer_data_trigger
+	store 1,mem_customer_data_trigger_last
+	rtn
+
+mouse_customer_key_connect_vin:
+	jam MOUSE_CUSTOMER_KEY,mem_mouse_key_temp
+	fetch 1,mem_mouse_customerkey_press_status
+	copy pdata,regc
+	fetcht 1,mem_customer_key_gpio
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,mouse_3io6key_customer_key_check_vin
+	call gpio_get_bit
+	branch mouse_check_customer_button_connect_gnd,true
+	fetcht 1,mem_matrix_public_gpio
+	call gpio_out_active
+	fetcht 1,mem_customer_key_gpio
+	fetch 1,mem_mouse_customerkey_press_status
+	call mouse_check_key_connect_gnd
+	branch mouse_check_customerkey_gpio_over
+
+mouse_check_customer_button_connect_gnd:
+	fetcht 1,mem_matrix_public_gpio
+	fetch 1,mem_mouse_customerkey_press_status
+	call mouse_check_key_connect_gnd
+	branch mouse_check_customerkey_gpio_over
+
+mouse_3io6key_customer_key_check_vin:
+	fetch 1,mem_customer_key_gpio
+	call mouse_gpio_config_output_low
+	fetcht 1,mem_customer_key_gpio
+	call mouse_3io6key_check
+mouse_check_customerkey_gpio_over:	
+	store 1,mem_mouse_customerkey_press_status
+	call mouse_check_customerkey_gpio_next
+	fetcht 1,mem_customer_key_gpio
+	branch mouse_gpio_config_input_pu
+	
+
+mouse_customerkey_press:
+	jam 1,mem_customer_data_trigger
+	call mouse_customer_key_need_send
+	branch mouse_check_customerkey_gpio_exit
+
+mouse_customerkey_release:
+	jam 0,mem_customer_data_trigger
+	fetch 1,mem_customer_data_trigger_last
+	rtn blank
+mouse_customer_key_need_send:	
+	jam 1,mem_customer_key
+	rtn	
+
+/*******************************matrix key end***************************/
+
+mouse_check_matrix_button_connect_gnd:	
+	call gpio_get_bit
+	fetcht 1,mem_mouse_key_temp
+	copy temp,queue	
+	branch  mouse_key_press,true
+mouse_key_release:
+	qset0 rega
+	rtn	
+
+mouse_check_key_connect_gnd:	
+	lshift pdata,pdata
+	copy pdata,regb
+	call gpio_get_bit
+	setflag true,0,regb
+mouse_check_key_connect_gnd_1:
+	and regb,0x07,pdata
+mouse_check_key_connect_gnd_next:
+	fetcht 1,mem_mouse_key_temp
+	copy temp,queue
+	beq 0x07,mouse_key_press		//  about 17~22ms three times
+	beq 0x00,mouse_key_release
+	rtn
+
+mouse_key_press:
+	qset1 rega
+	rtn
+
+mouse_3io6key_check:
+	bpatch patch0f_7,mem_patch0f
+	copy regc,pdata
+	store 1,mem_mouse_key_status
+	lshift pdata,pdata
+	copy pdata,regb
+	copy temp,regc
+	call mouse_gpio_config_input_pd
+	copy regc,temp
+	call gpio_get_bit
+	nsetflag true,0,regb
+	call mouse_check_press
+	branch mouse_check_key_connect_gnd_next
+
+mouse_check_press:
+	fetcht 1,mem_mouse_key_status
+	and_into 0x01,temp
+	and regb,0x01,pdata
+	isub temp,null
+	nbranch mouse_current_mult_update,zero
+	rtn
+	
+	
+//input:pdata gpio number
+mouse_gpio_config_output_high:
+	rtneq GPIO_DISABLE
+	arg gpcfg_output_high,temp
+	branch gpio_config_function_int
+
+//input:pdata gpio number
+mouse_gpio_config_output_low:
+	rtneq GPIO_DISABLE
+	arg gpcfg_output_low,temp
+	branch gpio_config_function_int	
+	
+/*************************key***************************************/
+
+/**********************sensor******************************/	
+mouse_init_sunt:
+	bpatch patch10_0,mem_patch10
+	call mouse_sensor_spi_init
+	rtn wake
+mouse_init_sensor_wakeup:	
+	call mouse_sensor_poweron
+mouse_init_sensor:
+	bpatch patch10_1,mem_patch10
+	call mouse_read_sensor_id
+	beq P32XX_ID1,mouse_init_p32xx_id2_judge
+	beq P3065_ID1,mouse_init_p3065
+	beq PKA8G2_ID1,mouse_ka8g2_id2_judge
+	call mouse_twspi_reset
+	nop 6900
+	branch mouse_init_sensor
+mouse_twspi_reset:
+	fetcht 1,mem_mouse_sensor_sclk_gpio
+	call twspi_reset
+	branch mouse_spid_init_pin
+
+mouse_read_sensor_id:
+	setarg PAN_REG_PID_H
+	call twspi_read
+	store 1,mem_sensor_id2
+	setarg PAN_REG_PID_L
+	call twspi_read
+	store 1,mem_sensor_id1
+	rtn
+
+mouse_init_p32xx_id2_judge:
+	fetch 1,mem_sensor_id2
+	beq P_MX8650,mouse_mx8650_init_param
+	beq P8009_ID2,mouse_8009_init_param
+	beq P3205_TJ3T_ID2,mouse_S210X_3205_3t_judge
+	beq P3204_TJ3L_ID2,mouse_3204_3l_init_param
+	beq P3212_ID2,mouse_3212_init_param
+	beq PKA8_ID2,mouse_ka8_init_param_check
+	beq P6520A_ID2,mouse_p6520_init_param
+	branch mouse_init_sensor
+
+mouse_S210X_3205_3t_judge:
+	setarg 0x49		// id3
+	call twspi_read
+	beq 0xa1,mouse_S201X_init_param
+	branch mouse_3205_3t_init_param
+
+mouse_S201X_init_param:
+	jam S201X,mem_config_sensor_type
+	rtn
+	
+mouse_mx8650_init_param:
+	jam MX8650,mem_config_sensor_type
+	call mouse_sensor_reset
+	call delay_10ms
+	arg mem_sensor_8650_init,regc
+	call mouse_sensor_wr_seq
+	branch mouse_setting_sensor_type
+
+mouse_8009_init_param:
+	setarg 0x16
+	call twspi_read
+	sub pdata,0xbd,null 
+	nbranch mouse_init_sunt,zero
+	setarg 0x19
+	call twspi_read
+	sub pdata,0x55,null 
+	nbranch mouse_init_sunt,zero
+	setarg 0x1b
+	call twspi_read
+	sub pdata,0x1d,null 
+	nbranch mouse_init_sunt,zero
+	jam P8009,mem_config_sensor_type
+	arg mem_sensor_8009_init,regc
+	branch mouse_sensor_wr_seq
+
+mouse_3205_3t_init_param:
+	jam P3205,mem_config_sensor_type
+	arg mem_sensor_3205_init,regc
+	call mouse_sensor_wr_seq
+	arg mem_sensor_32xx_init,regc
+	call mouse_sensor_wr_seq
+	setarg 0x0943
+	call twspi_write
+	arg mem_sensor_32xx_init_1,regc
+	branch mouse_sensor_wr_seq	
+
+mouse_3204_3l_init_param:
+	jam P3204,mem_config_sensor_type
+	arg mem_sensor_3204_init,regc
+	call mouse_sensor_wr_seq
+	arg mem_sensor_32xx_init,regc
+	call mouse_sensor_wr_seq
+	arg mem_sensor_32xx_init_1,regc
+	branch mouse_sensor_wr_seq	
+
+mouse_3212_init_param:
+	jam P3212,mem_config_sensor_type
+	arg mem_sensor_3212_init,regc
+mouse_sensor_wr_seq:
+	ifetch 2,regc
+	arg 0xffff,temp
+	isub temp,null
+	rtn zero
+	call twspi_write
+	increase 2,regc
+	branch mouse_sensor_wr_seq
+
+mouse_ka8_init_param_check:	
+	call mouse_sensor_disable_wp
+	setarg 0x9a5b
+	call twspi_write
+	setarg 0x0d
+	call twspi_read
+	sub pdata,0x12,null
+	branch mouse_ka8ul_init_param,zero
+	sub pdata,0x0a,null
+	nbranch mouse_ka8hd_sensor_judge,zero
+	setarg 0x0e
+	call twspi_read
+	sub pdata,0xe5,null
+	nbranch mouse_init_sensor,zero
+	setarg 0x10
+	call twspi_read
+	sub pdata,0xa5,null
+	branch mouse_ka8ul_init_param,zero
+	call mouse_enable_ka8_sensor_wp
+mouse_ka8_init_param:
+	jam KA8,mem_config_sensor_type	
+	rtn
+mouse_ka8ul_init_param:
+	jam KA8_UL,mem_config_sensor_type	
+	arg mem_sensor_ka8ul_init,regc
+	branch mouse_sensor_wr_seq
+mouse_ka8hd_sensor_judge:
+	sub pdata,0x10,null
+	nbranch mouse_init_sensor,zero
+	setarg 0x0e
+	call twspi_read
+	sub pdata,0xc5,null
+	nbranch mouse_init_sensor,zero
+	setarg 0x10
+	call twspi_read
+	sub pdata,0x38,null
+	nbranch mouse_init_sensor,zero
+mouse_ka8hd_init_param:
+	call mouse_enable_ka8_sensor_wp
+	jam KA8_HD,mem_config_sensor_type
+	rtn
+mouse_enable_ka8_sensor_wp:
+	setarg 0x005b
+	call twspi_write
+	branch mouse_sensor_enable_wp
+	
+mouse_p6520_init_param:
+	jam P6520,mem_config_sensor_type
+	arg mem_sensor_p6520_init,regc
+	branch mouse_sensor_wr_seq
+	
+mouse_init_p3065:
+	call mouse_sensor_poweron
+	fetch 1,mem_sensor_id2
+	beq P3065_XY_ID2,mouse_p3065xy_init_param
+	beq P3065_ID2,mouse_p3065_init_param
+	branch mouse_init_sensor
+	
+mouse_p3065_init_param:	
+	jam P3065,mem_config_sensor_type
+	rtn
+
+mouse_p3065xy_init_param:
+	jam P3065_XY,mem_config_sensor_type
+	rtn
+	
+mouse_ka8g2_id2_judge:
+	call mouse_sensor_poweron
+	fetch 1,mem_sensor_id2
+	beq PKA8G2_ID2,mouse_ka8g2_init_param
+	branch mouse_init_p32xx_id2_judge
+mouse_ka8g2_init_param:
+	jam KA8G2,mem_config_sensor_type
+	arg mem_sensor_ka8g2_init,regc
+	branch mouse_sensor_wr_seq
+	
+mouse_sensor_enable_wp:
+	setarg 0x0009
+	branch twspi_write
+mouse_sensor_disable_wp:
+	setarg 0x5a09
+	branch twspi_write
+
+mouse_sensor_reset:	
+	arg 0x8006,temp
+	fetch 1,mem_config_sensor_type
+	bne KA8G2,mouse_sensor_reset_end
+	arg 0x9706,temp
+mouse_sensor_reset_end:
+	copy temp,pdata
+	call twspi_write
+	nop 12000
+	rtn
+
+mouse_sensor_poweron_init:
+	arg mem_sensor_poweron_init,regc
+	fetch 1,mem_config_sensor_type
+	rtnne KA8G2
+	arg mem_sensor_ka8g2_poweron_init,regc
+	rtn
+	
+mouse_sensor_poweron:
+	bpatch patch10_2,mem_patch10
+	call mouse_sensor_spi_init
+	call mouse_sensor_reset
+	call mouse_sensor_poweron_init
+	call mouse_sensor_wr_seq
+	branch mouse_setting_sensor_type
+
+mouse_sensor_powerdown:
+	bpatch patch10_3,mem_patch10
+	call mouse_init_sunt
+	call mouse_sensor_spi_init
+	arg 0x0806,temp
+	fetch 1,mem_config_sensor_type
+	bne KA8G2,mouse_sensor_powerdown_end
+	arg 0x1f06,temp
+mouse_sensor_powerdown_end:
+	copy temp,pdata
+	branch twspi_write
+/*********sensor init*************/	
+
+
+
+/*********sensor motion*************/
+mouse_check_sensor_data:
+	fetch 1,mem_spi_write_flash_sm
+	rtnne FLASH_SM_NO_BUYS
+	fetch 1,mem_config_sensor_type
+	beq P3205,mouse_p32xx_sensor_motion
+	beq P3065,mouse_p32xx_sensor_motion
+	beq KA8,mouse_p32xx_sensor_motion
+	beq P3204,mouse_p32xx_sensor_motion
+	beq P3212,mouse_p3212_sensor_motion
+	beq P3065_xy,mouse_p32xx_sensor_motion
+	beq P8009,mouse_p8009_sensor_motion	
+	beq KA8G2,mouse_pka8g2_sensor_motion
+	branch mouse_p32xx_sensor_motion
+
+
+mouse_p32xx_sensor_motion:
+	call mouse_clear_sensor_data
+	disable user
+	fetch 1,mem_sensor_motion_gpio
+	beq GPIO_DISABLE,mouse_p32xx_sensor_motion_2
+	fetcht 1,mem_sensor_motion_gpio
+	call gpio_get_bit
+	nrtn true
+mouse_p32xx_sensor_motion_2:
+	setarg PAN_REG_PID_L
+	call twspi_read
+	bne P32XX_ID1,mouse_p3065_judge   
+mouse_p32xx_sensor_motion_1:
+	setarg PAN_REG_MOTION_STAUS
+	call twspi_read
+	rtnbit0 7
+	call mouse_read_sensor_common
+	fetch 1,mem_mouse_x
+	call mouse_data_extsign
+	store 2,mem_mouse_x
+	fetch 1,mem_mouse_y
+	call mouse_data_extsign
+	store 2,mem_mouse_y
+	fetch 1,mem_config_sensor_angle
+	beq MOUSE_6CLK_ANGLE,mouse_motion32xx_6clk_direction_selection
+	beq MOUSE_9CLK_ANGLE,mouse_motion32xx_9clk_direction_selection
+	beq MOUSE_12CLK_ANGLE,mouse_motion32xx_12clk_direction_selection
+	beq MOUSE_3CLK_ANGLE,mouse_motion32xx_3clk_direction_selection
+	rtn
+
+mouse_p3065_judge:
+	beq P3065_ID1,mouse_p32xx_sensor_motion_1
+	branch mouse_twspi_reset
+	
+mouse_motion32xx_6clk_direction_selection:
+	call mouse_motion_6clk_direction_dispose
+	branch mouse_sensor_sdio_low
+mouse_motion32xx_9clk_direction_selection:
+	call mouse_motion_9clk_direction_dispose
+	branch mouse_sensor_sdio_low
+mouse_motion32xx_12clk_direction_selection:
+	call mouse_motion_12clk_direction_dispose
+	branch mouse_sensor_sdio_low
+mouse_motion32xx_3clk_direction_selection:
+	call mouse_motion_3clk_direction_dispose
+	branch mouse_sensor_sdio_low
+
+
+	
+mouse_p3212_sensor_motion:
+	call mouse_clear_sensor_data
+	fetch 1,mem_sensor_motion_gpio
+	beq GPIO_DISABLE,mouse_p3212_sensor_motion_1
+	fetcht 1,mem_sensor_motion_gpio
+	call gpio_get_bit
+	nrtn true
+mouse_p3212_sensor_motion_1:	
+	setarg PAN_REG_PID_L
+	call twspi_read
+	bne P32XX_ID1,mouse_twspi_reset
+mouse_p3212_sensor_motion_2:
+	setarg PAN_REG_MOTION_STAUS
+	call twspi_read
+	rtnbit0 7
+	call mouse_read_sensor_common
+	call mouse_read_3212sensor_xy_high
+	store 1,mem_mouse_xy_h
+	rshift4 pdata,pdata
+	call mouse_data_extsign_bit3
+	store 1,mem_mouse_x+1
+	fetch 1,mem_mouse_xy_h
+	and pdata,0x0f,pdata
+	call mouse_data_extsign_bit3
+	store 1,mem_mouse_y+1
+	fetch 1,mem_config_sensor_angle
+	beq MOUSE_6CLK_ANGLE,mouse_motion_6clk_direction_dispose
+	beq MOUSE_9CLK_ANGLE,mouse_motion_9clk_direction_dispose
+	beq MOUSE_12CLK_ANGLE,mouse_motion_12clk_direction_dispose
+	beq MOUSE_3CLK_ANGLE,mouse_motion_3clk_direction_dispose
+	rtn
+
+mouse_read_3212sensor_xy_high:
+	setarg 0x12
+	branch twspi_read
+
+mouse_pka8g2_sensor_motion:
+	call mouse_clear_sensor_data
+	fetch 1,mem_sensor_motion_gpio
+	beq GPIO_DISABLE,mouse_pka8g2_sensor_motion_1
+	fetcht 1,mem_sensor_motion_gpio
+	call gpio_get_bit
+	nrtn true
+mouse_pka8g2_sensor_motion_1:
+	branch mouse_p3212_sensor_motion_2
+
+
+mouse_p8009_sensor_motion:
+	call mouse_clear_sensor_data
+	disable user
+	setarg PAN_REG_MOTION_STAUS
+	call twspi_read
+	rtnbit0 7
+	setarg PAN_REG_OPRATION_STATE
+	call twspi_read
+	branch mouse_p32xx_sensor_motion_1+3,blank
+	setarg 0
+	store 6,mem_mouse_x
+	rtn
+
+mouse_motion_6clk_direction_dispose:
+	fetch 2,mem_mouse_x
+	sub pdata,0,pdata
+	store 2,mem_mouse_x
+	branch enable_user
+mouse_motion_12clk_direction_dispose:
+	fetch 2,mem_mouse_y
+	sub pdata,0,pdata
+	store 2,mem_mouse_y
+	branch enable_user
+mouse_motion_9clk_direction_dispose:
+	fetch 2,mem_mouse_y
+	sub pdata,0,pdata
+	store 2,mem_mouse_y
+	fetch 2,mem_mouse_x
+	sub pdata,0,pdata
+	store 2,mem_mouse_x
+	call mouse_sensor_data_swap_places
+	branch enable_user
+mouse_motion_3clk_direction_dispose:
+	call mouse_sensor_data_swap_places
+	branch enable_user
+
+mouse_sensor_data_swap_places:
+	fetch 2, mem_mouse_y
+	fetcht 2,mem_mouse_x
+	store 2,mem_mouse_x
+	storet 2,mem_mouse_y
+	rtn
+
+	
+mouse_clear_sensor_data:
+	fetch 1,mem_mouse_move_flag
+	call mouse_read_sensor_common,blank
+	jam 1,mem_mouse_move_flag
+	rtn
+
+mouse_clear_sensor_data_by_reset:
+	jam 1,mem_mouse_clear_sensor_data_flag
+	call le_set_config_more_data
+mouse_init_sensor_reset:
+	branch mouse_init_sunt
+
+mouse_data_xy_release:
+	fetch 1,mem_sensor_motion_gpio
+	rtnne GPIO_DISABLE
+	fetch 1,mem_mouse_long_mult_flag
+	rtnne 1
+	setarg 0
+	store 1,mem_mouse_long_mult_flag
+	store 4,mem_mouse_x
+	branch mouse_init_sensor_reset
+
+mouse_data_extsign:
+	rtnbit0 7
+	arg 0xff00,temp
+	ior temp,pdata
+	rtn
+
+mouse_data_extsign_bit3:
+	rtnbit0 3
+	arg 0xf0,temp
+	ior temp,pdata
+	rtn
+
+mouse_read_sensor_common:
+	arg PAN_REG_DELTA_X,pdata
+	call twspi_read
+	store 2,mem_mouse_x
+	arg PAN_REG_DELTA_Y,pdata
+	call twspi_read
+	store 2,mem_mouse_y
+	rtn
+
+	/* sdio high will cost extra 9mA */
+mouse_sensor_sdio_low:
+	fetcht 1,mem_mouse_sensor_sdio_gpio
+	call gpio_get_bit
+	rtn true
+	setarg 0x0a
+	call twspi_read
+	nop 1000
+	branch mouse_sensor_sdio_low
+
+mouse_set_sdio_high:		// make sdio high to make 100uA less
+	setarg 0x8100
+	branch twspi_write
+	
+/****************************sensor*************************/
+
+/*******************mouse fast connect******************/
+mouse_bluetooth_fast_conn_init:
+	jam 0xff,mem_mouse_bluetooth_fast_conn_flag
+mouse_ble_fast_conn_init:	
+	jam 0x34,mem_xrecord_mode
+	setarg 0x0f0f0f
+	store 3,mem_le_lap
+	store 3,mem_le_lap+3
+	branch mouse_start_reconnect
+
+mouse_buletooth_fast_conn_end:
+	bpatch patch10_4,mem_patch10
+	call mouse_select_reconn_device
+	call mouse_bluetooth_fast_conn_disable
+	fetch 1,mem_device_flag
+	beq MODE_BT_DEVICE1,mouse_device1_check_auto_discover
+	beq MODE_BT_DEVICE2,mouse_device2_check_auto_discover
+	rtn
+mouse_device1_check_auto_discover:
+	fetch 6,mem_device1_addr
+	branch mouse_device_check_auto_discover
+mouse_device2_check_auto_discover:
+	fetch 6,mem_device2_addr
+mouse_device_check_auto_discover:	
+	fetcht 6,mem_mouse_compare_addr
+	isub temp,null
+	branch mouse_start_discovery ,zero
+	branch mouse_start_reconnect_device
+
+mouse_bluetooth_fast_conn_disable:
+	jam 0x5a,mem_mouse_bluetooth_fast_conn_flag
+	rtn	
+/*******************mouse fast connect******************/
+
+mouse_stop_bluetooth_mode:
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,app_ble_disconnect
+	branch mouse_stop_discovery
+mouse_disconnect:
+	setarg 0
+	store 2,mem_mouse_no_data_timer
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,app_ble_disconnect
+	rtn
+	
+mouse_check_125Hz:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_BT_125Hz
+mouse_bluetooth_125Hz:
+	nbranch mouse_bluetooth_125hz_clear,user
+	fetch 1,mem_bluetooth_125hz_cnt
+	increase 1,pdata
+	and_into 0x0f,pdata
+	store 1,mem_bluetooth_125hz_cnt
+	nrtn blank
+mouse_bluetooth_125hz_clear:
+	jam 0,mem_bluetooth_125hz_cnt
+	branch disable_user
+
+mouse_current_mult_update:
+	fetch 1,mem_sensor_motion_gpio
+	rtnne GPIO_DISABLE
+	jam 0,mem_lpm_mult
+	jam 30,mem_mouse_current_mult_timer
+	rtn
+
+
+mouse_priority_bb_event:	
+	bpatch patch10_5,mem_patch10
+	copy regc,pdata
+	beq BT_EVT_LE_CONNECTED,mouse_le_bb_event_connected
+	beq BT_EVT_LE_DISCONNECTED,mouse_le_bb_disconnected
+	beq BT_EVT_BUTTON_LONG_PRESSED,mouse_bb_event_discovery_btn
+	beq BT_EVT_LE_PAIRING_SUCCESS,mouse_le_pairing_success
+	beq BT_EVT_LE_ENC_INFO,mouse_le_enc_info
+	beq BT_EVT_LE_START_ENC,mouse_le_ll_start_encryt
+	beq BT_EVT_LE_PAIRING_COMPLETE,app_ble_store_reconn_info
+	beq BT_EVT_LE_PARSE_CONN_PAPA_UPDATE_RSP,mouse_le_conn_param_update_rsp_recieved
+	beq BT_EVT_24G_PAIRING_COMPLETE,mouse_24g_pairing_complete
+	beq BT_EVT_24G_ATTEMPT_FAIL,mouse_24g_attempt_fail
+	beq BT_EVT_24G_ATTEMPT_SUCCESS,mouse_24g_attempt_success
+	beq BT_EVT_LE_PARSE_CONN_PARAM_ACCEPTED,mouse_le_parse_conn_param_accepted
+	rtn
+
+/***************************le*************************/
+mouse_le_bb_event_connected:
+	call mouse_device_poweron_led_config
+	jam 0,mem_mouse_long_mult_flag
+	call mouse_init_sensor_reset
+	jam 1,mem_mouse_le_bb_connected_flag
+	call mouse_24g_first_store_reconn_info
+	fetch 1,mem_mouse_le_reconnect_flag
+	nbranch mouse_le_bb_event_connected_next,blank
+	jam 0x14,mem_mouse_send_secutiry_request_timer
+mouse_le_bb_event_connected_next:
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	set0 APP_DISC_BY_BUTTON ,pdata
+	store APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	jam 0,mem_mouse_direct_timer
+	fetch 2,mem_le_battery_level_updata_timer_init
+	store 2,mem_le_battery_level_updata_timer
+	call mouse_no_data_timer_init
+	branch mouse_stop_discovery
+
+mouse_le_bb_disconnected:
+	setarg 0
+	store 2,mem_le_battery_level_updata_timer
+	jam 0,mem_mouse_le_bb_connected_flag
+	arg LE_INTERVAL_7_5MS,temp
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_BT_125Hz,mouse_le_bb_disconnected_next
+	arg LE_INTERVAL_8_75MS,temp
+mouse_le_bb_disconnected_next:	
+	storet 2,mem_le_interval_min
+	storet 2,mem_le_interval_min+2
+	jam LE_LPM_ENABLE,mem_mouse_le_conn_param_reject
+	jam 0,mem_mouse_clear_sensor_data_flag
+	call le_clr_config_more_data
+	branch mouse_bb_disconnected
+
+mouse_le_pairing_success:
+	arg LL_PAIRING_SUCCESS_FLAG,queue
+	branch mouse_le_enable_connect_flag
+
+mouse_le_enc_info:
+mouse_updata_le_param:
+	jam BT_CMD_LE_UPDATE_CONN,mem_fifo_temp
+	branch ui_ipc_send_cmd
+	
+mouse_le_ll_start_encryt:
+	fetch 1,mem_mouse_le_reconnect_flag
+	beq 1,mouse_le_ll_reconn_start_encryt
+	branch mouse_le_ll_enable_start_enc_flag
+mouse_le_ll_reconn_start_encryt:
+	call mouse_updata_le_param
+	jam 20,mem_le_start_encrypt_timer
+mouse_le_ll_enable_start_enc_flag:
+	arg LL_START_ENC_FLAG,queue
+	branch mouse_le_enable_connect_flag
+
+mouse_le_enable_connect_flag:
+	fetch 1,mem_le_connect_status_flag
+	qset1 pdata
+	store 1,mem_le_connect_status_flag
+	rtn
+
+mouse_le_conn_param_update_rsp_recieved:
+	fetch 2,mem_le_l2cap_signaling_conn_param_update_rsp_result
+	rtneq BLE_SIGNALING_CONNECT_PARAMETER_UPDATE_ACCEPTED
+	fetch 1,mem_le_tsniff
+	rshift2 pdata,pdata
+	sub pdata,LE_INTERVAL_15MS,null
+	rtn positive
+	setarg LE_INTERVAL_11_25MS
+	store 2,mem_le_interval_min
+	store 2,mem_le_interval_min+2
+	call mouse_updata_le_param
+mouse_le_conn_param_lpm_disable:
+	jam LE_LPM_DISABLE,mem_mouse_le_conn_param_reject
+	rtn
+
+mouse_le_bb_event_connect_complete:
+	fetch 1,mem_mouse_le_reconnect_flag
+	nrtn blank
+	fetch 1,mem_le_att_handle
+	sub pdata,34,pdata
+	nrtn zero
+	jam 0,mem_le_start_encrypt_timer
+mouse_le_write_enable:	
+	arg WRITE_REQ_ENABLE_FLAG,queue
+	branch mouse_le_enable_connect_flag
+
+mouse_le_parse_conn_param_accepted:
+	fetch 1,mem_le_new_conninterval
+	sub pdata,LE_INTERVAL_15MS,null
+	nbranch mouse_le_conn_param_lpm_disable,positive
+	store 2,mem_le_interval_min
+	store 2,mem_le_interval_min+2
+	fetch 1,mem_le_new_connslavelatency
+	branch mouse_le_lpm_mult_reinit,blank
+	fetcht 1,mem_lpm_mult_init
+	isub temp,null
+	branch mouse_le_lpm_mult_reinit,positive
+	fetch 1,mem_le_new_connslavelatency
+	store 1,mem_lpm_mult
+	branch mouse_le_conn_param_lpm_enable
+mouse_le_lpm_mult_reinit:
+	fetch 1,mem_lpm_mult_init
+	store 1,mem_lpm_mult
+mouse_le_conn_param_lpm_enable:
+	jam LE_LPM_ENABLE,mem_mouse_le_conn_param_reject
+	rtn
+	
+/*
+mouse_le_disable_connect_flag:
+	fetch 1,mem_le_connect_status_flag
+	qset0 pdata
+	store 1,mem_le_connect_status_flag
+	rtn
+*/
+mouse_le_clean_connect_flag:
+	jam 0,mem_le_connect_status_flag
+	rtn
+
+/*
+mouse_le_reconn_write_enable_timer_reinit:
+	fetch 1,mem_mouse_le_reconnect_flag
+	rtn blank
+	fetch 1,mem_le_connect_status_flag
+	and pdata,0x03,pdata
+	rtneq 0x03
+	jam 2,mem_le_start_encrypt_timer
+	rtn
+*/
+mouse_le:
+	bpatch patch10_6,mem_patch10
+	call le_fifo_check_nearly_full
+	nrtn blank
+	fetch 1,mem_mouse_bluetooth_fast_conn_flag
+	beq 0xff,mouse_le_next
+	fetch 1,mem_le_connect_status_flag
+	and pdata,0x03,pdata
+	rtnne 0x03
+mouse_le_next:	
+	fetch 1,mem_mouse_clear_sensor_data_flag
+	call mouse_clear_sensor_data_by_reset,blank
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_24G_PAIRING_FLAG,mouse_le_send_empty_packet
+	bbit1 MOUSE_SELECT_DEVICE_FLAG,mouse_le_send_empty_packet
+	bbit1 MOUSE_BT_DISCOVERY_BUTTON_DOWN_FLAG,mouse_le_send_empty_packet
+	bbit1 MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG,mouse_le_send_empty_packet
+	call mouse_motion
+	call mouse_check_125Hz
+	nrtn user
+	call mouse_current_mult_update
+	call mouse_data_xy_release
+	call mouse_wheel_trigger
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_KEYBOARD,mouse_le_send_mouse_data
+	fetch 1,mem_customer_key
+	beq 1,mouse_le_send_keyboard_package_data		
+mouse_le_send_mouse_data:
+	branch mouse_fill_mouse_data_le
+
+
+mouse_le_send_keyboard_package_data:
+	fetch 1,mem_customer_data_trigger
+	branch mouse_le_release_keyboard_data,blank
+	fetch 8,mem_customer_key_press+1
+mouse_fill_keyboard_package_data_le:
+	store 8,mem_pdatatemp
+	fetch 1,mem_customer_key_press
+	beq KB_MULTIKEY_REPORT_ID,mouse_fill_multimedia_key_data_le
+	beq KB_SYSTEM_CONCTRL_REPORT_ID,mouse_fill_systemctrl_key_data_le
+	jam 8,mem_le_data_len
+	fetcht 2,mem_le_keyboard_handle
+mouse_fill_data_le:
+	fetch 1,mem_le_data_len
+	copy pdata,rega
+	call le_att_malloc_tx_notify
+	fetcht 1,mem_le_data_len
+	copy temp,loopcnt
+	arg mem_pdatatemp,contr
+	branch memcpy
+	
+mouse_le_release_keyboard_data:
+	fetch 8,mem_customer_key_release+1
+	branch mouse_fill_keyboard_package_data_le
+
+mouse_fill_multimedia_key_data_le:
+	jam 3,mem_le_data_len
+	fetcht 2,mem_le_multimedia_handle
+	branch mouse_fill_data_le
+
+mouse_fill_systemctrl_key_data_le:
+	jam 2,mem_le_data_len
+	fetcht 2,mem_le_systemctrl_handle
+	branch mouse_fill_data_le
+
+mouse_fill_battery_level_le:
+	arg 1,rega
+	fetcht 2,mem_le_battery_level_handle
+	call le_att_malloc_tx_notify
+	fetch 1,mem_le_battery_level_percentage
+	istore 1,contw
+	rtn
+
+mouse_le_send_empty_packet:
+	setarg 0
+	store 7,mem_mouse_key
+mouse_fill_mouse_data_le:
+	jam 7,mem_le_data_len
+	fetch 7,mem_mouse_key
+	store 7,mem_pdatatemp
+	fetcht 2,mem_le_notify_handle
+	branch mouse_fill_data_le
+
+mouse_check_51cmd_adv:
+	jam 0,mem_mouse_le_reconnect_flag
+	fetch 3,mem_le_adv_ind
+	store 3,mem_le_adv_data+4
+	call mouse_le_check_adv_flag
+	setarg ADV_FLAG_BREDR_NOT_SUPPORTED |ADV_FLAG_LIMITED_DISCOVERABLE
+	istore 1,contr
+	arg mem_le_adv_swift_pair,contr
+	call mouse_le_adv_data_update
+	branch check_51cmd_adv
+
+mouse_le_check_adv_flag:
+	arg mem_le_adv_data,rega
+mouse_le_check_adv_flag_loop:
+	ifetch 1,rega	//length
+	rtn blank
+	iadd contr,rega
+	ifetch 1,contr	//type
+	rtneq 0x01
+	branch mouse_le_check_adv_flag_loop
+	
+mouse_le_adv_data_update:
+	arg mem_le_adv_data+11,contw
+	arg 19,loopcnt
+	call memcpy
+	branch le_modified_name_adv
+	
+/***************************le*************************/
+
+
+
+mouse_bb_disconnected:
+	call mouse_bb_discon_clear_stack
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason
+	bbit1 APP_DISC_BLE,mouse4_0_event_bb_disconn
+	bbit1 APP_DISC_BY_BUTTON,app_disconn_reason_clear
+	branch mouse_start_discovery
+	
+mouse_bb_discon_clear_stack:
+	setarg 0
+	store 8,mem_wheel_tb_old_pinlevel
+	istore 4,contw             //clean wheel statue
+	jam 0,mem_mouse_move_flag
+	jam 0,mem_ltk_exists
+	rtn
+
+mouse4_0_event_bb_disconn:
+	call mouse_le_clean_connect_flag
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason
+	bbit1 APP_DISC_BY_BUTTON,app_disconn_reason_clear
+	branch mouse_app_enter_hibernate
+
+
+/********************mouse 100ms timer*****************/
+mouse_bb_event_timer:
+	bpatch patch10_7,mem_patch10
+	//adc
+	call mouse_low_voltage_led_timer
+	call mouse_adc_read
+	//led
+	call mouse_logo_led_on_timer
+	call mouse_led_multi_timer
+	call mouse_dpi_led_blink_delay_timer
+	//24g
+	call g24_pair_timeout_timer
+	call g24_reconn_timeout_timer
+	call mouse_24g_long_sleep_param_update_timer
+	//poll
+	call mouse_dpi_key_check_long_press
+	call mouse_bt_discovery_check
+	call mouse_commbination_key_process
+	call mouse_check_discovery_timeout_timer
+	//ble
+	call mouse_check_direct_timeout_timer
+	call mouse_le_enable_att_list_timer
+	call mouse_le_battery_updata_timer
+	call mouse_le_send_smp_security_request_timer
+	//bt
+	call mouse_check_reconnect_delay_long_sleep		//delete 3.0,reconnect fail
+	call mouse_current_mult_update_timer
+	call mouse_wheel_trigger_timer
+	call mouse_store_information_delay_timer
+	branch mouse_check_no_data_timeout_timer
+
+mouse_bt_discovery_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_PB_BUTTON_LONG_PRESS_DISCONVERY,mouse_bt_discovery_by_pb_button
+	rtn
+
+mouse_bt_discovery_by_pb_button:
+	fetch 1,mem_select_device_button_statue
+	rtnne PB_BUTTON_STATE_DOWN
+	arg mem_bt_discovery_count,regc
+	arg mouse_long_button_bt_discovery,regb
+	branch timer_single_step
+		
+mouse_long_button_bt_discovery:
+	fetch 1,mem_device_flag
+	rtneq MODE_24G_DEVICE
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG
+	arg MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG,queue
+	call mouse_enable_function_flag
+	call app_evt_button_long_pressed
+	branch mouse_bb_event_discovery_btn
+		
+mouse_commbination_key_process:
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_24g_commbination_key_process
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_COMMBINATION_KEY_BY_BT_DISCOVERY
+	fetcht 1,mem_mouse_commbination_key_bt
+	branch mouse_commbination_key_start
+
+mouse_24g_commbination_key_process:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_COMMBINATION_KEY_BY_24G_PAIRING
+	fetcht 1,mem_mouse_commbination_key_24g
+mouse_commbination_key_start:
+	storet 1,mem_mouse_commbination_key
+	call mouse_check_key_gpio
+	and pdata,0x07,pdata
+	fetcht 1,mem_mouse_commbination_key
+	isub temp,null
+	branch mouse_commbination_key_down,zero
+mouse_commbination_key_up:
+	fetch 1,mem_ui_button_timeout
+	store 1,mem_combination_ui_button_count	//combination key timer init 
+	fetch 1,mem_commbination_key_statue
+	rtneq COMMBINATION_KEY_STATE_UP
+	jam COMMBINATION_KEY_STATE_UP,mem_commbination_key_statue	
+	rtn
+		
+mouse_commbination_key_down:
+	call mouse_combination_ui_timer
+	fetch 1,mem_commbination_key_statue
+	rtneq COMMBINATION_KEY_STATE_DOWN
+	jam COMMBINATION_KEY_STATE_DOWN,mem_commbination_key_statue
+	rtn
+
+mouse_combination_ui_timer:
+	arg mouse_24g_start_pair_mode,regb
+	arg mem_combination_ui_button_count,regc
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,timer_single_step
+	arg mouse_long_button_bt_discovery,regb
+	call timer_single_step
+	fetch 1,mem_combination_ui_button_count
+	beq 1,mouse_bt_discovery_button_down_enable	// ble release key press
+	rtn
+
+mouse_check_discovery_timeout_timer:	
+	arg mem_mouse_discovery_timer,regc
+	arg mouse_check_discovery_timeout,regb
+	branch timer_single_step_2B
+
+mouse_check_discovery_timeout:
+	call mouse_stop_discovery
+	branch mouse_app_enter_hibernate
+
+mouse_check_direct_timeout_timer:	
+	arg mem_mouse_direct_timer,regc
+	arg mouse_check_direct_timeout,regb
+	call timer_single_step
+	fetch 1,mem_mouse_direct_timer
+	beq 1,app_ble_stop_direct_adv
+	rtn
+
+mouse_check_direct_timeout:
+	fetch 1,mem_mouse_bluetooth_fast_conn_flag
+	beq 0xff,mouse_buletooth_fast_conn_end
+	fetch 1,mem_reconn_times
+	nbranch mouse_polling_device,blank
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_BT_RECONNECT_TIMEOUT_ENTER_DISCOVERY,mouse_start_discovery
+	bbit1 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING,mouse_24g_first_bb_event_reconn_timeout
+	branch mouse_app_enter_hibernate
+	
+mouse_le_enable_att_list_timer:
+	arg mem_le_start_encrypt_timer,regc
+	arg mouse_le_write_enable,regb
+	branch timer_single_step
+
+mouse_le_send_smp_security_request_timer:
+	fetch 1,mem_mouse_le_bb_connected_flag
+	rtn blank
+	arg mem_mouse_send_secutiry_request_timer,regc
+	arg mouse_le_pairing_sm_start_check,regb
+	branch timer_single_step
+mouse_le_pairing_sm_start_check:
+	fetch 1,mem_mouse_le_reconnect_flag
+	nrtn blank
+	fetch 1,mem_le_pairing_state
+	rtnne FLAG_LE_PAIRING_NULL
+	branch le_pairing_sm_start
+
+mouse_le_battery_updata_timer:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_LE_BATTERY_SERVICE_CANCEL
+	arg mem_le_battery_level_updata_timer,regc
+	arg mouse_le_battery_level_updata,regb
+	branch timer_single_step
+
+mouse_le_battery_level_updata:
+	fetch 2,mem_le_battery_level_updata_timer_init
+	store 2,mem_le_battery_level_updata_timer
+	branch mouse_fill_battery_level_le
+	
+mouse_le_enable_att_list:	
+	fetch 1,mem_le_connect_status_flag
+	rtnbit1 LL_PAIRING_SUCCESS_FLAG
+	call mouse_updata_le_param
+	arg WRITE_REQ_ENABLE_FLAG,queue
+	branch mouse_le_enable_connect_flag
+
+mouse_check_reconnect_delay_long_sleep:
+	arg mem_mouse_bluetooth_reconnect_timeout,regc
+	arg mouse_app_enter_hibernate,regb
+	branch timer_single_step
+
+mouse_current_mult_update_timer:
+	arg mem_mouse_current_mult_timer,regc
+	arg mouse_current_mult_reinit,regb
+	branch timer_single_step
+mouse_current_mult_reinit:
+	fetch 1,mem_lpm_mult_init
+	store 1,mem_lpm_mult
+	jam 1,mem_mouse_long_mult_flag
+	rtn
+
+
+mouse_check_no_data_timeout_timer:	
+	arg mem_mouse_no_data_timer,regc
+	arg mouse_check_no_data_timeout,regb
+	branch timer_single_step_2B
+
+mouse_check_no_data_timeout:
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_24g_hibernate_set
+	branch mouse_disconnect
+	
+mouse_no_data_timer_init:
+	fetch 2,mem_mouse_no_data_timeout
+	store 2,mem_mouse_no_data_timer
+	rtn
+
+mouse_store_information_delay_timer:
+	arg mem_store_information_delay_timer,regc
+	arg mouse_store_device_info_check,regb
+	branch timer_single_step
+
+mouse_store_device_info_check:
+	call mouse_store_device_info
+	fetch 1,mem_mouse_need_soft_reset
+	nbranch mouse_soft_reset,blank
+	rtn
+
+mouse_bb_event_discovery_btn:
+	isolate1 mark_24g,mark
+	call mouse_24g_stop,true
+	call mouse_disconnect
+	call mouse_le_clean_connect_flag
+	branch mouse_start_discovery
+	
+mouse_start_discovery:
+	bpatch patch11_0,mem_patch11
+	call mouse_device_discovery_led_config
+	fetch 2,mem_ui_state_map
+	isolate1 UI_STATE_BLE_ADV,pdata
+	call mouse_stop_le_adv,true		//reconnect adv
+	call mouse_bluetooth_fast_conn_disable
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_ADV,mouse_start_discovery_norandom
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_BLE_RANDOM_ADDRE,mouse_start_discovery_norandom
+	fetcht 2,mem_random_addr_increase_count
+	increase 1,temp
+	storet 2,mem_random_addr_increase_count
+	storet 2,mem_le_lap+1
+	random pdata					//random ble addr
+	store 1,mem_le_lap
+mouse_start_discovery_norandom:
+	fetch 3,mem_mouse_le_lap_temp
+	store 3,mem_le_lap+3
+	call app_lpm_mult_disable
+	fetch 2,mem_mouse_discovery_timeout
+	store 2,mem_mouse_discovery_timer
+	setarg 0
+	store 2,mem_mouse_no_data_timer
+	store 2,mem_le_battery_level_updata_timer
+	store 1,mem_mouse_direct_timer
+	store 1,mem_mouse_bluetooth_reconnect_timeout
+	store 1,mem_mouse_clear_sensor_data_flag
+	arg MOUSE_STORE_EEPROM_FLAG,queue
+	call mouse_enable_function_flag
+	call mouse_bt_discovery_button_down_disable
+	branch mouse_check_51cmd_adv
+
+mouse_stop_discovery:
+	bpatch patch11_1,mem_patch11
+	arg MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG,queue
+	call mouse_disable_function_flag
+	jam 0,mem_mouse_bluetooth_reconnect_timeout
+	branch mouse_stop_le_adv
+mouse_stop_le_adv:
+	setarg 0
+	store 1,mem_mouse_direct_timer
+	store 2,mem_mouse_discovery_timer
+	branch check_51cmd_stop_adv
+
+mouse_store_remote_bdaddr:
+	bpatch patch11_2,mem_patch11
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_STORE_EEPROM_FLAG
+	arg MOUSE_STORE_EEPROM_FLAG,queue
+	call mouse_disable_function_flag
+	call mouse_check_device_addr
+mouse_unplug_clean_bdaddr:
+	call mouse_before_store_reconn_info
+	branch mouse_store_device_info_delay
+
+mouse_check_device_addr:
+	fetch 1,mem_record_bt_mode
+	beq REC_4_MODE,mouse_check_le_device_addr
+	rtn
+mouse_check_le_device_addr:
+	store 1,mem_device_addr_temp
+	fetch 6,mem_le_plap
+mouse_check_bt_device_addr_common:
+	store 6,mem_device_addr_temp+1
+	fetch 7,mem_device_addr_temp
+	arg mem_device1_type,contr
+	arg 3,loopcnt
+mouse_check_device_addr_end:
+	ifetcht 7,contr
+	isub temp,null
+	branch mouse_clean_addr,zero
+	increase 22,contr
+	loop mouse_check_device_addr_end
+	rtn
+mouse_before_store_reconn_info:
+	arg mem_device1_type,rega
+	fetch 1,mem_device_flag
+	increase -1,pdata
+	mul32 pdata,29,pdata
+	iadd rega,rega
+	fetch 1,mem_record_bt_mode
+	istore 1,rega
+	beq REC_4_MODE,mouse_store_le_device
+	rtn
+	
+mouse_store_le_device:
+	fetch 6,mem_le_plap
+	istore 6,contw
+	arg mem_le_ltk,contr
+	call memcpy16
+	fetch 6,mem_le_lap
+	istore 6,contw
+	rtn
+
+mouse_clean_addr:
+	increase -6,contr
+	copy contr,contw
+	fetcht 6,mem_device_addr_temp+1
+	increase 3,temp
+	istoret 6,contw
+	rtn
+	
+mouse_select_reconn_device:
+	arg mem_device1_type,rega
+	fetch 1,mem_device_flag
+	rtneq MODE_24G_DEVICE
+	increase -1,pdata
+	mul32 pdata,29,pdata
+	iadd rega,rega
+	ifetch 1,rega
+	store 1,mem_xrecord_mode
+	beq REC_4_MODE,mouse_load_le_device
+	rtn
+
+mouse_load_le_device:
+	ifetch 6,contr
+mouse_load_le_device_end:
+	store 6,mem_hci_plap
+	arg mem_le_ltk,contw
+	call memcpy16
+	ifetch 6,contr
+	store 6,mem_le_lap
+	rtn
+
+mouse_app_initflag_check:
+	bpatch patch11_3,mem_patch11
+	fetch 2,mem_store_flag
+	arg EEPROM_INIT_FLAG,temp
+	isub temp,null
+	branch mouse_load_device_info,zero
+mouse_app_initflag_check_next:
+	storet 2,mem_store_flag
+	call mouse_ble_init_address
+	fetch 1,mem_device_flag_temp
+	store 1,mem_device_flag
+	fetch 4,mem_24g_fast_conn_addr
+	store 4,mem_24g_receiver_addr
+	store 4,mem_24g_addr
+mouse_load_default_dpi:
+	fetch 1,mem_config_sensor_dpi
+	store 1,mem_mouse_dpi
+	rtn
+
+mouse_load_device_info:
+	call mouse_otp_load_dpi
+//	call mouse_select_reconn_device
+	fetch 4,mem_mouse_24g_addr
+	store 4,mem_24g_receiver_addr
+	store 4,mem_24g_addr
+	rtn	
+
+mouse_otp_load_dpi:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_LOAD_AND_STORE_DPI
+	fetch 2,mem_otp_offset_dpi
+	copy pdata,regb
+	call mouse_read_otp_dpi_common			
+	fetch 1,mem_mouse_dpi_temp
+	call mouse_load_default_dpi,blank
+	rtn
+	
+mouse_ble_init_address:
+	fetch 6,mem_le_lap
+	store 6,mem_device1_locall_addr
+	add pdata,0x0100,pdata
+	store 6,mem_device2_locall_addr
+	add pdata,0x0100,pdata
+	store 6,mem_device3_locall_addr
+	rtn
+
+/******************************store info start**************************************/
+	
+mouse_store_device_info_delay:	
+	fetch 1,mem_store_information_delay_timer_init
+	store 1,mem_store_information_delay_timer
+	rtn
+
+mouse_store_device_info:
+	bpatch patch11_4,mem_patch11
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_EEPROM,mouse_store_eeprom_device_info
+	bbit1 MOUSE_ENABLE_FLASH,mouse_store_flash_device_info
+	bbit1 MOUSE_ENABLE_OTP,mouse_store_otp_device_info
+	rtn
+
+mouse_store_dpi_info_check:
+	bpatch patch11_5,mem_patch11
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_EEPROM,mouse_store_eerpom_dpi
+	bbit1 MOUSE_ENABLE_OTP,mouse_store_otp_dpi
+	rtn
+
+
+/******************eeprom data store****************/
+mouse_store_eeprom_device_info:
+	arg 128,temp
+	arg mem_device_flag,rega
+	arg MOUSE_INFO_EEPROM_OFFECT,regb
+	branch iicd_write_protect_eep_data
+
+mouse_store_eerpom_dpi:
+	arg 1,temp
+	arg mem_mouse_dpi,rega
+	arg MOUSE_DPI_EEPROM_OFFECT,regb
+	branch iicd_write_protect_eep_data
+	
+
+/******************flash data store****************/
+mouse_store_flash_device_info:
+	call spid_init_flash
+	call mouse_spid_flash_release_form_powerdown
+	call mouse_flash_erase_sector
+
+	call mouse_information_flash_parameters
+	call mouse_spid_write_flash
+	call mouse_spid_flash_powerdown
+	branch mouse_sensor_spi_init
+
+
+
+/******************otp data store****************/
+mouse_store_otp_device_info:
+	call mouse_write_otp_device_flag
+	call mouse_write_otp_device_info
+	branch mouse_write_otp_le_addr_increase_count_info
+
+
+/**********otp device flag store********/
+mouse_write_otp_device_flag:
+	fetchr regb,2,mem_otp_offset_device_flag
+	copy regb,regc
+mouse_write_otp_device_flag_loop:
+	call mouse_read_otp_device_flag_common
+	fetch 1,mem_device_flag_temp
+	branch mouse_device_flag_store,blank
+	store 1,mem_device_flag_last
+	increase 1,regc
+	fetch 2,mem_otp_offset_device_flag_end
+	isub regc,null
+	nrtn positive
+	copy regc,regb
+	branch mouse_write_otp_device_flag_loop
+
+mouse_device_flag_store:
+	fetch 1,mem_device_flag_last
+	and pdata,0xf0,pdata
+	branch mouse_device_flag_store_check,blank
+	fetch 1,mem_device_flag
+	store 1,mem_device_flag_value
+mouse_devoce_flag_store_end:	
+	arg 1,loopcnt
+	copy regc,regb
+	arg mem_device_flag_value,rega
+	branch otp_write			/* regb = otp address, rega pointers data, loopcnt is count */
+
+mouse_device_flag_store_check:
+	fetch 1,mem_device_flag_last
+	fetcht 1,mem_device_flag
+	isub temp,null
+	rtn zero
+	lshift4 temp,temp
+	iadd temp,pdata
+	store 1,mem_device_flag_value
+	
+	copy regc,pdata
+	fetcht 2,mem_otp_offset_device_flag
+	isub temp,null
+	branch mouse_devoce_flag_store_end,zero
+	
+	increase -1,regc
+	branch mouse_devoce_flag_store_end
+
+
+/**********otp addr store********/
+mouse_write_otp_device_info:
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_write_otp_24g_addr
+	beq MODE_BT_DEVICE1,mouse_write_otp_le_device1
+	beq MODE_BT_DEVICE2,mouse_write_otp_le_device2
+	rtn
+
+mouse_write_otp_24g_addr:
+	fetchr regb,2,mem_otp_offset_24g_addr
+	copy regb,regc
+mouse_otp_store_24g_addr_loop:
+	call mouse_read_otp_24g_addr_common
+	fetch 4,mem_mouse_24g_addr_temp
+	branch mouse_24g_addr_store,blank	
+	store 4,mem_mouse_24g_addr_last
+	increase 4,regc
+	fetch 2,mem_otp_offset_24g_addr_end
+	isub regc,null
+	nrtn positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_otp_store_24g_addr_loop
+
+mouse_24g_addr_store:
+	fetch 4,mem_mouse_24g_addr_last
+	fetcht 4,mem_mouse_24g_addr
+	isub temp,null
+	rtn zero
+	arg 4,loopcnt
+	arg mem_mouse_24g_addr,rega
+	copy regc,regb
+	branch otp_write			/* regb = otp address, rega pointers data, loopcnt is count */
+
+mouse_write_otp_le_device1:
+	fetchr regb,2,mem_otp_offset_le_addr1
+	copy regb,regc
+mouse_otp_store_le_addr1_loop:
+	call mouse_read_otp_le_addr1_common
+	fetch 6,mem_mouse_le_addr1_temp
+	branch mouse_le_addr1_store,blank	
+	store 6,mem_mouse_le_addr1_last
+	increase 6,regc
+	fetch 2,mem_otp_offset_le_addr1_end
+	isub regc,null
+	nrtn positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_otp_store_le_addr1_loop
+
+mouse_le_addr1_store:
+	fetch 6,mem_mouse_le_addr1_last
+	fetcht 6,mem_device1_addr
+	isub temp,null
+	rtn zero
+	arg 6,loopcnt
+	arg mem_device1_addr,rega
+	copy regc,regb
+	branch otp_write			/* regb = otp address, rega pointers data, loopcnt is count */
+
+
+mouse_write_otp_le_device2:
+	fetchr regb,2,mem_otp_offset_le_addr2
+	copy regb,regc
+mouse_otp_store_le_addr2_loop:
+	call mouse_read_otp_le_addr2_common
+	fetch 6,mem_mouse_le_addr2_temp
+	branch mouse_le_addr2_store,blank	
+	store 6,mem_mouse_le_addr2_last
+	increase 6,regc
+	fetch 2,mem_otp_offset_le_addr2_end
+	isub regc,null
+	nrtn positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_otp_store_le_addr2_loop
+
+mouse_le_addr2_store:
+	fetch 6,mem_mouse_le_addr2_last
+	fetcht 6,mem_device2_addr
+	isub temp,null
+	rtn zero
+	arg 6,loopcnt
+	arg mem_device2_addr,rega
+	copy regc,regb
+	branch otp_write			/* regb = otp address, rega pointers data, loopcnt is count */
+
+
+/**************store le addr increase count**********/
+mouse_write_otp_le_addr_increase_count_info:
+	fetch 1,mem_device_flag
+	rtneq MODE_24G_DEVICE
+	fetchr regb,2,mem_otp_offset_le_addr_increase_count
+	copy regb,regc
+mouse_otp_store_le_addr_increase_count_loop:
+	call mouse_read_otp_le_addr_increase_count_common
+	fetch 2,mem_random_addr_increase_count_temp
+	branch mouse_le_addr_increase_count_store,blank	
+	store 2,mem_random_addr_increase_count_last
+	increase 2,regc
+	fetch 2,mem_otp_offset_le_addr_increase_count_end
+	isub regc,null
+	nrtn positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_otp_store_le_addr_increase_count_loop
+
+mouse_le_addr_increase_count_store:
+	fetch 2,mem_random_addr_increase_count_last
+	fetcht 2,mem_random_addr_increase_count
+	isub temp,null
+	rtn zero
+	arg 2,loopcnt
+	arg mem_random_addr_increase_count,rega
+	copy regc,regb
+	branch otp_write			/* regb = otp address, rega pointers data, loopcnt is count */
+
+
+/**********otp dpi store********/
+mouse_store_otp_dpi:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_LOAD_AND_STORE_DPI
+	fetchr regb,2,mem_otp_offset_dpi
+	copy regb,regc
+mouse_otp_store_dpi_loop:
+	call mouse_read_otp_dpi_common
+	fetch 1,mem_mouse_dpi_temp
+	branch mouse_otp_dpi_store,blank
+	store 1,mem_mouse_dpi_last
+	increase 1,regc
+	fetch 2,mem_otp_offset_dpi_end
+	isub regc,null
+	nrtn positive
+	copy regc,regb
+	branch mouse_otp_store_dpi_loop
+
+mouse_otp_dpi_store:
+	fetch 1,mem_mouse_dpi_last
+	and pdata,0xf0,pdata
+	branch mouse_dpi_store_last,blank
+	fetch 1,mem_mouse_dpi
+	store 1,mem_mouse_otp_dpi_value
+mouse_dpi_store_end:	
+	arg 1,loopcnt
+	copy regc,regb
+	arg mem_mouse_otp_dpi_value,rega
+	branch otp_write			/* regb = otp address, rega pointers data, loopcnt is count */
+
+mouse_dpi_store_last:
+	fetch 1,mem_mouse_dpi_last
+	fetcht 1,mem_mouse_dpi
+	isub temp,null
+	rtn zero
+	lshift4 temp,temp
+	iadd temp,pdata
+	store 1,mem_mouse_otp_dpi_value
+	
+	copy regc,pdata
+	fetcht 2,mem_otp_offset_dpi
+	isub temp,null
+	branch mouse_dpi_store_end,zero
+	
+	increase -1,regc
+	branch mouse_dpi_store_end
+	
+/******************************store info end**************************************/
+	
+
+
+/******************************load info start**************************************/
+
+/******************eeprom data load****************/
+mouse_load_eeprom_info_check:
+	call iicd_read_init_pin
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	isolate1 MOUSE_ENABLE_2K_EEPROM,pdata
+	ncall clear_eeprom_size_2k,true
+	call mouse_eeprom_load_recon_info
+	branch mouse_app_initflag_check
+
+mouse_eeprom_load_recon_info:
+	arg 128,temp
+	arg mem_device_flag,rega
+	arg MOUSE_INFO_EEPROM_OFFECT,regb
+	branch iicd_read_eep_data
+
+mouse_load_eeprom_dpi:
+	arg 1,temp
+	arg mem_mouse_dpi,rega
+	arg MOUSE_DPI_EEPROM_OFFECT,regb
+	branch iicd_read_eep_data
+
+
+/******************flash data load****************/
+mouse_load_flash_info_check:
+	call spid_init_flash
+	call mouse_spid_flash_release_form_powerdown
+	call mouse_information_flash_parameters
+	call spid_read_flash
+	call mouse_spid_flash_powerdown
+	call mouse_app_initflag_check
+	branch mouse_sensor_spi_init
+	
+mouse_information_flash_parameters:
+	setarg mem_mouse_information_end
+	arg mem_mouse_information_start,temp
+	isub temp,temp
+	fetch 3,mem_flash_base
+	arg mem_mouse_information_start,rega
+	rtn
+	
+mouse_spid_flash_release_form_powerdown:
+	jam FLASH_COMMAND_RELEASE_FROM_POWERDOWN,mem_temp
+mouse_spid_write_flash_cmd:
+	call delay_nop100
+	call spid_unlock_flash
+	arg mem_write_flash_head_temp,rega
+	fetcht 1,mem_temp
+	call mouse_spid_write_flash_cmd_common
+	branch delay_nop100
+
+mouse_spid_flash_powerdown:
+	jam FLASH_COMMAND_POWERDOWN,mem_temp
+	branch mouse_spid_write_flash_cmd
+
+mouse_spid_write_flash_cmd_common:
+	istoret 1,rega
+	rshift16 pdata,temp
+	istoret 1,contw
+	rshift8 pdata,temp
+	istoret 1,contw
+	istore 1,contw
+	deposit rega
+	store 2,core_spid_txaddr
+	setarg 0
+	store 2,core_spid_rxlen
+	jam spid_start,core_misc_ctrl
+	branch wait_spid_done
+		
+mouse_flash_erase_sector:
+	fetch 3,mem_flash_base
+	store 3,mem_spi_write_addr
+	branch spid_flash_erase_sector+2
+
+mouse_spid_write_flash:
+	copy pdata,regc
+	copy rega,pdata
+	increase -4,pdata
+	copy pdata,regb
+	ifetch 4,regb
+	store 4,mem_write_flash_head_temp
+	copy regc,pdata
+	call spid_write_flash
+	fetch 4,mem_write_flash_head_temp
+	istore 4,regb
+	rtn
+
+mouse_flash_power_down:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_FLASH
+	call mouse_spid_flash_powerdown
+	call twspi_enable	// 2 wire mode
+	fetcht 1,mem_spi_cs_gpio		//disable flash
+	call gpio_out_inactive
+	fetcht 1,mem_spi_hold_gpio
+	branch mouse_gpio_config_input_pd
+
+
+/******************otp data load****************/
+mouse_load_otp_info_check:
+	call mouse_read_otp_dpi
+	call mouse_read_otp_device_flag
+	call mouse_read_otp_device_info
+	call mouse_read_otp_le_addr_increase_count_info
+mouse_otp_load_app_initflag:
+	arg 2,loopcnt
+	fetch 2,mem_otp_offset_app_initflag
+	copy pdata,regb
+	arg mem_store_flag,rega
+	call otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */
+	call mouse_app_initflag_check
+mouse_otp_store_app_initflag:
+	arg 2,loopcnt
+	arg mem_store_flag,rega
+	fetchr regb,2,mem_otp_offset_app_initflag
+	branch otp_write
+
+
+/**************load device flag**********/
+mouse_read_otp_device_flag:
+	fetchr regb,2,mem_otp_offset_device_flag
+	copy regb,regc
+mouse_read_otp_device_flag_loop:
+	call mouse_read_otp_device_flag_common
+	fetch 1,mem_device_flag_temp
+	branch mouse_device_flag_load,blank	
+	store 1,mem_device_flag_last
+	increase 1,regc
+	fetch 2,mem_otp_offset_device_flag_end
+	isub regc,null
+	nbranch mouse_device_flag_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_device_flag_loop
+
+mouse_read_otp_device_flag_common:
+	arg 1,loopcnt
+	arg mem_device_flag_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */
+
+mouse_device_flag_load:
+	fetch 1,mem_device_flag_last
+	copy pdata,temp
+	and pdata,0xf0,pdata
+	branch mouse_device_flag_load_last,blank
+	rshift4 pdata,pdata
+	branch mouse_device_flag_load_end
+
+mouse_device_flag_load_last:
+	copy temp,pdata
+mouse_device_flag_load_end:
+	store 1,mem_device_flag
+	rtn
+
+/****************otp load addr*************/
+mouse_read_otp_device_info:
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_read_otp_24g_addr
+	beq MODE_BT_DEVICE1,mouse_read_otp_le_device1
+	beq MODE_BT_DEVICE2,mouse_read_otp_le_device2
+	rtn
+	
+mouse_read_otp_le_device1:
+	call mouse_read_otp_le_device1_addr
+	branch mouse_read_otp_le_device1_locall_addr
+
+mouse_read_otp_le_device2:
+	call mouse_read_otp_le_device2_addr
+	branch mouse_read_otp_le_device2_locall_addr
+
+/*************************load le addr1**********************************/
+mouse_read_otp_le_device1_addr:
+	fetchr regb,2,mem_otp_offset_le_addr1
+	copy regb,regc
+mouse_read_otp_le_device1_addr_loop:
+	call mouse_read_otp_le_addr1_common	
+	fetch 6,mem_mouse_le_addr1_temp
+	branch mouse_le_addr1_load,blank	
+	store 6,mem_mouse_le_addr1_last
+	increase 6,regc
+	fetch 2,mem_otp_offset_le_addr1_end
+	isub regc,null
+	nbranch mouse_le_addr1_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_le_device1_addr_loop
+
+mouse_read_otp_le_addr1_common:
+	arg 6,loopcnt
+	arg mem_mouse_le_addr1_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */	
+
+mouse_le_addr1_load:
+	fetch 6,mem_mouse_le_addr1_last
+	store 6,mem_device1_addr
+	rtn
+
+
+mouse_read_otp_le_device1_locall_addr:
+	fetchr regb,2,mem_otp_offset_le_locall_addr1
+	copy regb,regc
+mouse_read_otp_le_device1_locall_addr_loop:
+	call mouse_read_otp_le_locall_addr1_common	
+	fetch 6,mem_mouse_le_locall_addr1_temp
+	branch mouse_le_locall_addr1_load,blank	
+	store 6,mem_mouse_le_locall_addr1_last
+	increase 6,regc
+	fetch 2,mem_otp_offset_le_locall_addr1_end
+	isub regc,null
+	nbranch mouse_le_locall_addr1_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_le_device1_locall_addr_loop
+
+mouse_read_otp_le_locall_addr1_common:
+	arg 6,loopcnt
+	arg mem_mouse_le_locall_addr1_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */	
+
+mouse_le_locall_addr1_load:
+	fetch 6,mem_mouse_le_locall_addr1_last
+	store 6,mem_device1_locall_addr
+	rtn
+
+
+/*************************load le addr2**********************************/
+mouse_read_otp_le_device2_addr:
+	fetchr regb,2,mem_otp_offset_le_addr2
+	copy regb,regc
+mouse_read_otp_le_device2_addr_loop:
+	call mouse_read_otp_le_addr2_common	
+	fetch 6,mem_mouse_le_addr2_temp
+	branch mouse_le_addr2_load,blank	
+	store 6,mem_mouse_le_addr2_last
+	increase 6,regc
+	fetch 2,mem_otp_offset_le_addr2_end
+	isub regc,null
+	nbranch mouse_le_addr2_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_le_device2_addr_loop
+
+mouse_read_otp_le_addr2_common:
+	arg 6,loopcnt
+	arg mem_mouse_le_addr2_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */	
+
+mouse_le_addr2_load:
+	fetch 6,mem_mouse_le_addr2_last
+	store 6,mem_device2_addr
+	rtn
+
+
+mouse_read_otp_le_device2_locall_addr:
+	fetchr regb,2,mem_otp_offset_le_locall_addr2
+	copy regb,regc
+mouse_read_otp_le_device2_locall_addr_loop:
+	call mouse_read_otp_le_locall_addr2_common	
+	fetch 6,mem_mouse_le_locall_addr2_temp
+	branch mouse_le_locall_addr2_load,blank	
+	store 6,mem_mouse_le_locall_addr2_last
+	increase 6,regc
+	fetch 2,mem_otp_offset_le_locall_addr2_end
+	isub regc,null
+	nbranch mouse_le_locall_addr2_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_le_device2_locall_addr_loop
+
+mouse_read_otp_le_locall_addr2_common:
+	arg 6,loopcnt
+	arg mem_mouse_le_locall_addr2_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */	
+
+mouse_le_locall_addr2_load:
+	fetch 6,mem_mouse_le_locall_addr2_last
+	store 6,mem_device2_locall_addr
+	rtn
+
+
+/**************load 24g addr**********/
+mouse_read_otp_24g_addr:
+	fetchr regb,2,mem_otp_offset_24g_addr
+	copy regb,regc
+mouse_read_otp_24g_addr_loop:
+	call mouse_read_otp_24g_addr_common
+	fetch 4,mem_mouse_24g_addr_temp
+	branch mouse_24g_addr_load,blank	
+	store 4,mem_mouse_24g_addr_last
+	increase 4,regc
+	fetch 2,mem_otp_offset_24g_addr_end
+	isub regc,null
+	nbranch mouse_24g_addr_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_24g_addr_loop
+
+mouse_read_otp_24g_addr_common:
+	arg 4,loopcnt
+	arg mem_mouse_24g_addr_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */
+	
+mouse_24g_addr_load:
+	fetch 4,mem_mouse_24g_addr_last
+	store 4,mem_mouse_24g_addr
+	rtn
+
+/**************load le addr increase count**********/
+mouse_read_otp_le_addr_increase_count_info:
+	fetch 1,mem_device_flag
+	rtneq MODE_24G_DEVICE
+	fetchr regb,2,mem_otp_offset_le_addr_increase_count
+	copy regb,regc
+mouse_read_otp_le_addr_increase_count_loop:
+	call mouse_read_otp_le_addr_increase_count_common
+	fetch 2,mem_random_addr_increase_count_temp
+	branch mouse_le_addr_increase_count_load,blank	
+	store 2,mem_random_addr_increase_count_last
+	increase 2,regc
+	fetch 2,mem_otp_offset_le_addr_increase_count_end
+	isub regc,null
+	nbranch mouse_le_addr_increase_count_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_le_addr_increase_count_loop
+
+mouse_read_otp_le_addr_increase_count_common:
+	arg 2,loopcnt
+	arg mem_random_addr_increase_count_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */
+	
+mouse_le_addr_increase_count_load:
+	fetch 2,mem_random_addr_increase_count_temp
+	store 2,mem_random_addr_increase_count
+	rtn
+
+/*************load dpi**********/
+mouse_read_otp_dpi:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_LOAD_AND_STORE_DPI,mouse_load_default_dpi
+	fetchr regb,2,mem_otp_offset_dpi
+	copy regb,regc
+mouse_read_otp_dpi_loop:
+	call mouse_read_otp_dpi_common	
+	fetch 1,mem_mouse_dpi_temp
+	branch mouse_dpi_load,blank	
+	store 1,mem_mouse_dpi_last
+	increase 1,regc
+	fetch 2,mem_otp_offset_dpi_end
+	isub regc,null
+	nbranch mouse_dpi_load,positive	//if read end,retention last value
+	copy regc,regb
+	branch mouse_read_otp_dpi_loop
+
+mouse_read_otp_dpi_common:
+	arg 1,loopcnt
+	arg mem_mouse_dpi_temp,rega
+	branch otp_read_data				/* regb=otp address, rega points to data, loopcnt is count */
+
+mouse_dpi_load:
+	fetch 1,mem_mouse_dpi_last
+	copy pdata,temp
+	and pdata,0xf0,pdata
+	branch mouse_dpi_load_last,blank
+	rshift4 pdata,pdata
+	branch mouse_dpi_load_end
+
+mouse_dpi_load_last:
+	copy temp,pdata
+mouse_dpi_load_end:
+	store 1,mem_mouse_dpi
+	rtn
+
+/******************************load info end**************************************/
+
+
+mouse_idle:
+	bpatch patch11_6,mem_patch11
+	call mouse_low_voltage_led_no_enter_lpm
+	call ui_check_paring_button
+	call mouse_dpi_check
+	call mouse_dpi_another_gpio_check
+	call mouse_select_device_check
+	call mouse_check_select_device_by_switch
+	call mouse_bt_button_check
+	branch mouse_wheel_check
+	
+mouse_select_device_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_SELECT_DEVICE_BY_PB_BUTTON,mouse_select_device_by_pb_button
+	bbit1 MOUSE_ENABLE_PB_BUTTON_LONG_PRESS_DISCONVERY,mouse_select_device_by_pb_button
+	rtn
+
+mouse_select_device_by_pb_button_check_once:
+	jam 0x03,mem_mouse_pbkey_press_status
+mouse_select_device_by_pb_button:	
+	call mouse_select_device_by_pb_button_check
+	branch mouse_select_device_by_pb_button_exit
+	
+mouse_select_device_by_pb_button_check:
+	bpatch patch11_7,mem_patch11
+	fetch 1,mem_config_select_device_button_gpio
+	rtneq GPIO_DISABLE
+	arg 0,rega
+	jam MOUSE_PB_KEY,mem_mouse_key_temp
+	fetcht 1,mem_config_select_device_button_gpio
+	call mouse_pb_button_check
+	store 1,mem_mouse_pbkey_press_status
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,mouse_3io6key_pb_button_check_end	
+	branch mouse_matrix_public_gpio_reset
+
+mouse_retransmit_select_device_by_pb_button:
+	call mouse_select_device_by_pb_button_check
+	copy rega,pdata
+	bbit1 MOUSE_PB_KEY,mouse_select_device_button_down+2
+	branch mouse_select_device_button_up
+	
+mouse_3io6key_pb_button_check_end:
+	fetcht 1,mem_config_select_device_button_gpio
+	call mouse_gpio_config_input_pu
+mouse_select_device_by_pb_button_exit:	
+	copy rega,pdata
+	bbit1 MOUSE_PB_KEY,mouse_select_device_button_down
+	branch mouse_select_device_button_up
+
+mouse_pb_button_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_PB_BUTTON_CONNECT_GND,mouse_pb_button_connect_gnd
+	fetch 1,mem_mouse_pbkey_press_status
+	copy pdata,regc
+	fetch 1,mem_matrix_public_gpio
+	beq GPIO_DISABLE,mouse_3io6key_check
+	fetch 1,mem_mouse_ghost_flag
+	nbranch mouse_select_device_by_pb_button_end,blank
+	branch mouse_pb_button_connect_matrix
+
+mouse_select_device_by_pb_button_end:
+	jam PB_BUTTON_STATE_UP,mem_select_device_button_statue
+	jam 0,mem_mouse_pbkey_press_status
+	rtn
+
+mouse_pb_button_connect_gnd:
+	fetch 1,mem_mouse_pbkey_press_status
+	branch mouse_check_key_connect_gnd
+
+mouse_pb_button_connect_matrix:
+	call gpio_get_bit
+	fetcht 1,mem_matrix_public_gpio
+	branch mouse_pb_button_connect_gnd,true
+	fetcht 1,mem_matrix_public_gpio
+	call gpio_out_active
+	fetcht 1,mem_config_select_device_button_gpio
+	fetch 1,mem_mouse_pbkey_press_status
+	branch mouse_check_key_connect_gnd
+	
+mouse_select_device_button_up:
+	fetch 1,mem_select_device_button_statue
+	rtneq PB_BUTTON_STATE_UP
+	jam PB_BUTTON_STATE_UP,mem_select_device_button_statue	
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_PB_BUTTON_SHORT_PRESS_ENTER_DISCOVERY
+	fetch 1,mem_bt_discovery_count
+	sub pdata,20,null
+	ncall mouse_ready_reconnection_by_button,positive		// press button less than 30-20=1000ms
+	fetch 1,mem_ui_button_timeout
+	store 1,mem_bt_discovery_count
+	rtn
+
+mouse_select_device_button_down:
+	call mouse_select_device_ghost_check
+	rtn user
+	fetch 1,mem_select_device_button_statue
+	rtneq PB_BUTTON_STATE_DOWN
+	jam PB_BUTTON_STATE_DOWN,mem_select_device_button_statue
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_PB_BUTTON_SHORT_PRESS_ENTER_DISCOVERY,mouse_long_button_bt_discovery
+	fetch 1,mem_mouse_direct_timer
+	rtn blank
+	fetch 1,mem_mouse_direct_timeout
+	store 1,mem_mouse_direct_timer
+	rtn
+
+mouse_select_device_ghost_check:
+	disable user
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_PB_BUTTON_CONNECT_GND
+mouse_ghost_key_value_check:
+	fetch 1,mem_mouse_lkey_press_status
+	rtn blank
+	fetch 1,mem_mouse_rkey_press_status
+	rtn blank
+	branch enable_user
+	
+mouse_check_select_device_by_switch:
+	bpatch patch12_0,mem_patch12
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_SELECT_DEVICE_BY_SWITCH_GPIO
+	fetcht 1,mem_device_switch_gpio
+	call mouse_gpio_config_input_pu
+	fetcht 1,mem_device_switch_gpio
+	call gpio_get_bit
+	branch mouse_check_select_24g_device,true
+mouse_select_btdevice:
+	fetch 1,mem_device_flag
+	rtneq MODE_BT_DEVICE1
+	jam MODE_BT_DEVICE1,mem_device_flag
+	branch mouse_stop_bluetooth_mode
+	
+mouse_check_select_24g_device:	
+	fetch 1,mem_device_flag
+	rtneq MODE_24G_DEVICE
+	jam MODE_24G_DEVICE,mem_device_flag
+	branch mouse_24g_stop
+
+mouse_ready_reconnection_by_button:
+	bpatch patch12_1,mem_patch12
+	fetch 1,mem_device_number
+	rtneq 1		// 1channel
+	call mouse_select_device_number
+	storet 1,mem_device_flag
+mouse_store_device_number_before_reset:	
+//	jam 0,mem_link_key_exists
+	call mouse_select_device_enable
+	call mouse_stop_bluetooth_mode
+	call app_evt_button_long_pressed
+	call mouse_select_device_disable
+	jam 1,mem_mouse_need_soft_reset
+	branch mouse_store_device_info_delay
+
+mouse_soft_reset:
+	call mouse_select_device_enable
+	branch soft_reset_chip
+
+mouse_select_device_number:
+	fetcht 1,mem_device_flag
+	increase 1,temp
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_24G,mouse_select_device_number_24g
+	sub temp,2,null
+	ncall mouse_select_device_count_clean_bt,positive
+	rtn
+	
+mouse_select_device_number_24g:	
+	fetch 1,mem_device_number
+	increase -1,pdata
+	isub temp,null
+	ncall mouse_select_device_count_clean_24g,positive
+	rtn
+
+mouse_select_device_count_clean_24g:
+	arg 0,temp
+	rtn
+mouse_select_device_count_clean_bt:
+	arg 1,temp
+	rtn
+
+mouse_store_device_number2eeprom:
+	arg 1,temp
+	arg mem_device_flag,rega
+	arg 0,regb
+	branch iicd_write_protect_eep_data
+		
+mouse_bt_button_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_PB_BUTTON_SHORT_PRESS_ENTER_DISCOVERY
+	branch mouse_select_device_by_pb_button
+	
+mouse_select_device_enable:
+	arg MOUSE_SELECT_DEVICE_FLAG,queue
+	branch mouse_enable_function_flag
+mouse_select_device_disable:
+	arg MOUSE_SELECT_DEVICE_FLAG,queue
+	branch mouse_disable_function_flag
+mouse_bt_cannel_reconn_enable:
+	arg MOUSE_BT_CANNEL_RECONN_FLAG,queue
+	branch mouse_enable_function_flag
+mouse_bt_cannel_reconn_disable:
+	arg MOUSE_BT_CANNEL_RECONN_FLAG,queue
+	branch mouse_disable_function_flag
+mouse_bt_discovery_button_down_enable:
+	arg MOUSE_BT_DISCOVERY_BUTTON_DOWN_FLAG,queue
+	branch mouse_enable_function_flag
+mouse_bt_discovery_button_down_disable:
+	arg MOUSE_BT_DISCOVERY_BUTTON_DOWN_FLAG,queue
+	branch mouse_disable_function_flag
+
+mouse_adc_read_enable:
+	arg MOUSE_ENABLE_ADC,queue
+	branch mouse_enable_function_flag
+
+mouse_24g_set_250Hz:
+	arg MOUSE_ENABLE_24G_250Hz,queue
+	branch mouse_enable_function_flag
+
+mouse_24g_search_dongle_enable:
+	arg MOUSE_ENABLE_24G_SEARCH_DONGLE,queue
+	branch mouse_enable_function_flag
+	
+mouse_16M_enable:
+	arg MOUSE_ENABLE_16M,queue
+	branch mouse_enable_function_flag
+	
+mouse_dpi_4level_enable:
+	arg MOUSE_ENABLE_DPI_LEVEL_4,queue
+	branch mouse_enable_function_flag
+
+mouse_enable_function_flag:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	qset1 pdata
+	store MOUSE_FLAG_LEN,mem_mouse_flag
+	rtn
+
+mouse_disable_function_flag:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	qset0 pdata
+	store MOUSE_FLAG_LEN,mem_mouse_flag
+	rtn
+
+mouse_customer_key_enable:
+	setarg 0
+	store 8,mem_customer_key_press
+	store 8,mem_customer_key_release
+	fetch 1,mem_mouse_customer_function	// 01--win+d     02--ctrl+alt+a    03--AC home    04--play
+	beq 2,mouse_customer_key_ctrl_alt_a
+	beq 3,mouse_customer_AC_home
+	beq 4,mouse_customer_key_play
+	setarg 0x070008
+mouse_customer_standrad_key_set:	
+	store 8,mem_customer_key_press+1		// win + d
+	rtn
+
+mouse_customer_key_ctrl_alt_a:
+	setarg 0x040005
+	branch mouse_customer_standrad_key_set
+
+mouse_customer_AC_home:
+	setarg 0x022303
+mouse_customer_media_key_set:	
+	store 8,mem_customer_key_press
+	setarg 0x03
+	store 8,mem_customer_key_release
+	rtn
+	
+mouse_customer_key_play:
+	setarg 0x00cd03
+	branch mouse_customer_media_key_set
+
+	
+mouse_polling_device:
+	bpatch patch12_2,mem_patch12
+	fetch 1,mem_reconn_times
+	increase -1,pdata
+	store 1,mem_reconn_times
+	fetcht 1,mem_device_flag
+	sub temp,1,null
+	ncall mouse_select_device_number,zero
+	storet 1,mem_device_flag
+	call mouse_store_device_number2eeprom
+	call mouse_before_store_reconn_info
+	branch mouse_start_reconnect_device
+
+	
+//notice: need to call p_mouse_drawing_optima_init when waked from mult
+mouse_drawing_optima:
+	bpatch patch12_3,mem_patch12
+	fetch 1,mem_config_sensor_type
+	rtneq P3212
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_SMOOTHER
+	fetch 4,mem_mouse_x
+	rtn blank
+	call mouse_data_abs_check
+	setarg 0x03	//asm_flag enable condition
+	call mouse_pdata_greater_than_check
+	call mouse_disable_asm,blank
+	ncall mouse_enable_asm,blank
+	setarg 0x02	//asm_flag disable condition
+	call mouse_data_less_than_check
+	call mouse_disable_asm,blank
+	fetch 1,mem_mouse_asm_flag
+	beq 1,mouse_drawing_optima_modify
+mouse_drawing_optima_init:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_SMOOTHER
+	arg 5,loopcnt
+	arg mem_mouse_asm_flag,contw
+	branch clear_mem
+
+mouse_drawing_optima_modify:
+	call mouse_drawing_optima_xy_offset_modify
+	fetch 2,mem_mouse_x_pre
+	store 2,mem_data_pre
+	fetch 2,mem_mouse_x
+	store 2,mem_data_current
+	call mouse_drawing_optima_data_x
+	fetch 2,mem_data_pre
+	store 2,mem_mouse_x_pre
+	fetch 2,mem_data_current
+	store 2,mem_mouse_x
+
+	fetch 2,mem_mouse_y_pre
+	store 2,mem_data_pre
+	fetch 2,mem_mouse_y
+	store 2,mem_data_current
+	call mouse_drawing_optima_data_y
+	fetch 2,mem_data_pre
+	store 2,mem_mouse_y_pre
+	fetch 2,mem_data_current
+	store 2,mem_mouse_y
+	rtn
+
+mouse_drawing_optima_xy_offset_modify:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_XY_OFFSET
+	bpatch patch12_4,mem_patch12
+	fetch 2,mem_mouse_x_pre
+	store 2,mem_data_value
+	call mouse_pre_xy_data_judge
+	store 2,mem_mouse_x_pre
+	fetch 2,mem_mouse_x
+	store 2,mem_data_value
+	call mouse_current_xy_data_judge
+	store 2,mem_mouse_x
+	fetch 2,mem_mouse_y_pre
+	store 2,mem_data_value
+	call mouse_pre_xy_data_judge
+	store 2,mem_mouse_y_pre
+	fetch 2,mem_mouse_y
+	store 2,mem_data_value
+	call mouse_current_xy_data_judge
+	store 2,mem_mouse_y
+	rtn
+
+mouse_pre_xy_data_judge:	
+	fetch 1,mem_data_value+1
+	branch mouse_pre_xy_pdata_offset,blank
+	branch mouse_pre_xy_ndata_offset
+
+mouse_pre_xy_pdata_offset:
+	fetch 1,mem_data_value
+	call mouse_pre_xy_get_0_4_times
+	store 1,mem_data_value
+mouse_xy_data_offset_new:
+	fetch 2,mem_data_value
+	rtn
+mouse_pre_xy_ndata_offset:
+	fetch 1,mem_data_value
+	call mouse_pdata_invert
+	call mouse_pre_xy_get_0_4_times
+	call disable_blank,blank
+	call mouse_pdata_get_new_value
+	branch mouse_xy_data_offset_new
+	
+mouse_current_xy_data_judge:
+	fetch 1,mem_data_value+1
+	branch mouse_current_xy_pdata_offset,blank
+	branch mouse_current_xy_ndata_offset
+mouse_current_xy_pdata_offset:
+	fetch 1,mem_data_value
+	call mouse_current_xy_get_0_6_times
+	store 1,mem_data_value
+	branch mouse_xy_data_offset_new
+mouse_current_xy_ndata_offset:	
+	fetch 1,mem_data_value
+	call mouse_pdata_invert
+	call mouse_current_xy_get_0_6_times
+	call disable_blank,blank
+	call mouse_pdata_get_new_value
+	branch mouse_xy_data_offset_new
+	
+mouse_pre_xy_get_0_4_times:
+	mul32 pdata,4,pdata
+	div pdata,5
+	call wait_div_end
+	quotient pdata
+	rtn
+mouse_current_xy_get_0_6_times:	//0.6 times
+	mul32 pdata,12,pdata
+	div pdata,10
+	call wait_div_end
+	quotient pdata
+	rtn	
+	
+mouse_drawing_optima_data_x:
+	fetch 2,mem_data_pre
+	fetcht 2,mem_data_current
+	iadd temp,pdata
+	fetcht 1,mem_mouse_data_xtemp
+	iadd temp,pdata
+	and pdata,0x01,temp
+	storet 1,mem_mouse_data_xtemp
+	branch mouse_drawing_optima_data
+
+mouse_drawing_optima_data_y:
+	fetch 2,mem_data_pre
+	fetcht 2,mem_data_current
+	iadd temp,pdata
+	fetcht 1,mem_mouse_data_ytemp
+	iadd temp,pdata
+	and pdata,0x01,temp
+	storet 1,mem_mouse_data_ytemp
+	branch mouse_drawing_optima_data
+
+/**********
+input:data_pre,data_current
+output:data_pre,data_current after optima
+***********/
+mouse_drawing_optima_data:
+	store 3,mem_data_sum
+	isolate1 16,pdata
+	branch mouse_data_sum_overflow,true
+	fetch 1,mem_data_sum+1
+	beq 0xff,mouse_data_sum_n
+	fetch 1,mem_data_sum
+mouse_data_store_pre:
+	rshift pdata,pdata
+	store 2,mem_data_pre
+	store 2,mem_data_current
+	rtn
+mouse_data_sum_overflow:
+	fetch 1,mem_data_sum+1	//sum positive
+	beq 0,mouse_data_sum_overflow_p
+	fetch 3,mem_data_sum	
+	branch mouse_data_store_pre
+mouse_data_sum_overflow_p:
+	jam 0,mem_data_sum+2
+	fetch 1,mem_data_sum
+	branch mouse_data_store_pre
+
+mouse_data_sum_n:
+	fetch 1,mem_data_sum	//sum negetive
+	call mouse_pdata_get_half
+	store 1,mem_data_pre
+	store 1,mem_data_current
+	branch mouse_data_zero,blank
+	setarg 0xff
+mouse_data_set_direction:	
+	store 1,mem_data_pre+1
+	store 1,mem_data_current+1
+	rtn
+mouse_data_zero:
+	setarg 0
+	branch mouse_data_set_direction
+
+mouse_pdata_get_half:
+	call mouse_pdata_invert
+	rshift pdata,pdata
+mouse_pdata_get_new_value:	
+	call mouse_rega_in_out
+	sub pdata,0,pdata
+	store 1,mem_data_value	
+	rtn
+
+mouse_pdata_invert:
+	sub pdata,0,pdata
+mouse_rega_in_out:	
+	store 1,mem_rega
+	fetch 1,mem_rega
+	rtn
+
+mouse_disable_asm:
+	jam 0,mem_mouse_asm_flag
+	rtn
+mouse_enable_asm:
+	jam 1,mem_mouse_asm_flag
+	rtn
+
+//rega mouse_x, regb mouse_y, pdata refer
+mouse_pdata_greater_than_check:
+	isub rega,null
+	nbranch disable_blank,positive
+	isub regb,null
+	nbranch disable_blank,positive
+	branch enable_blank
+mouse_data_less_than_check:
+	isub rega,null
+	nrtn positive
+	isub regb,null
+	nrtn positive
+	branch enable_blank
+
+mouse_data_abs_check:
+	fetch 2,mem_mouse_x
+	call mouse_data_abs
+	copy pdata,rega
+	fetch 2,mem_mouse_y
+	call mouse_data_abs
+	copy pdata,regb
+	rtn
+
+/***********
+input: data_current
+output:pdata,abs
+************/
+mouse_data_abs:
+	store 2,mem_data_current
+	fetch 1,mem_data_current+1
+	beq 0xff,mouse_data_reversal
+	fetch 1,mem_data_current
+mouse_data_abs_store:
+	and_into 0xff,pdata
+	//output:pdata
+	rtn
+mouse_data_reversal:
+	fetch 2,mem_data_current
+	sub pdata,0,pdata
+	branch mouse_data_abs_store
+
+mouse_24g_long_sleep_param_update_timer:
+	arg mem_24g_long_sleep_param_update_timer,regc
+	arg mouse_24g_long_sleep_normal_param,regb
+	branch timer_single_step
+mouse_24g_long_sleep_normal_param:
+	fetch 4,mem_24g_long_sleep_set1
+	store 4,mem_24g_enter_hibernate
+	jam 1,mem_mouse_long_mult_flag
+	rtn
+
+
+mouse_24g_long_sleep_set:
+	fetch 1,mem_24g_long_sleep_set_level
+	beq 0x00,mouse_24g_long_sleep_set_30ms
+	beq 0x01,mouse_24g_long_sleep_set_50ms
+	beq 0x02,mouse_24g_long_sleep_set_80ms
+	beq 0x03,mouse_24g_long_sleep_set_100ms
+mouse_24g_long_sleep_set_80ms:
+	setarg 0x0ea600
+mouse_24g_long_sleep_set_end:	
+	store 4,mem_24g_long_sleep_set1
+	rtn
+mouse_24g_long_sleep_set_30ms:
+	setarg 0x05e740
+	branch mouse_24g_long_sleep_set_end
+mouse_24g_long_sleep_set_50ms:
+	setarg 0x0927c0
+	branch mouse_24g_long_sleep_set_end
+mouse_24g_long_sleep_set_100ms:
+	setarg 0x124f80
+	branch mouse_24g_long_sleep_set_end
+
+mouse_24g_hibernate_set:
+	bpatch patch12_5,mem_patch12
+	jam 0,mem_24g_attempt_fail_flag
+	call g24_transmit_next_packet
+	setarg -1
+	store 4,mem_24g_enter_hibernate
+	setarg 0
+	store 7,mem_mouse_key
+	jam 1,mem_sensor_shutdown_flag
+	call mouse_sensor_powerdown
+	call mouse_setgpio_hibernate
+	branch mouse_24g_long_sleep
+
+mouse_wakeup_24g:
+	fetch 1,mem_sensor_shutdown_flag
+	ncall mouse_wakeup_24g_from_long_sleep,blank
+	jam 0,mem_sensor_shutdown_flag
+	rtn
+
+mouse_wakeup_24g_from_long_sleep:
+	call mouse_init_sensor_wakeup
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_WHEEL_WAKE_UP_CANCEL
+mouse_wheel_gpio_init:
+	fetch 1,mem_whee_a_data_gpio
+	arg gpcfg_pullup,temp
+ 	call gpio_config_function_int
+	fetch 1,mem_whee_b_data_gpio
+	arg gpcfg_pullup,temp
+ 	branch gpio_config_function_int	
+
+mouse_24g_transmit_start:
+	call mouse_24g_fast_conn_mode_check
+	fetch 1,mem_sensor_shutdown_flag
+	nbranch mouse_24g_short_sleep,blank
+	branch g24_transmit_start_next
+
+mouse_24g_fast_conn_mode_check:
+	fetch 4,mem_24g_receiver_addr
+	fetcht 4,mem_24g_fast_conn_addr
+	isub temp,null
+	branch mouse_soft_agc_enable,zero
+	branch mouse_soft_agc_disable
+
+mouse_soft_agc_enable:
+	jam 0,mem_gain_fix
+	jam TX_POWER_FACTORY,mem_tx_power
+	rtn
+mouse_soft_agc_disable:
+	jam 0xff,mem_gain_fix
+	rtn
+
+mouse_24g_stop:
+	set0 mark_24g,mark
+	jam STATE_24G_STOP,mem_24g_conn_sm
+	arg MOUSE_24G_PAIRING_FLAG,queue
+	branch mouse_disable_function_flag
+
+mouse_24g_start_mode:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_24G,mouse_24g_mode_setup_error
+	call mouse_device_24g_pair_led_config
+	call mouse_wakeup_from_power_check	// wake from hibernate :enble user
+	branch mouse_24g_reconn_dongle_start,user
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_AUTO_24G_PARING,mouse_24g_reconn_general_dongle
+	bbit0 MOUSE_ENABLE_24G_POWER_ON_PAIRING,mouse_24g_reconn_general_dongle
+	call mouse_key_check_once
+	and rega,0x07,pdata
+	fetcht 1,mem_mouse_commbination_key_24g
+	isub temp,null
+	branch mouse_24g_start_pair_mode,zero
+	branch mouse_24g_reconn_general_dongle
+
+mouse_24g_mode_setup_error:
+	fetch 1,mem_reconn_times
+	nbranch mouse_polling_device,blank
+	rtn
+
+mouse_24g_first_start_auto_pair_mode:
+	call mouse_wakeup_from_power_check
+	branch mouse_24g_first_start_reconn,user  	// wake from hibernate :enble user
+mouse_24g_reconn_general_dongle:	
+	jam MODE_24G_DEVICE,mem_device_flag
+	fetch 2,mem_mouse_24g_power_on_fast_conn_timer
+	store 2,mem_24g_reconn_timeout
+	jam FAST_CONN_AND_3_0_ADDR,mem_24g_reconn_type
+	branch g24_reconn_start
+
+mouse_24g_start_auto_pair:
+	fetch 2,mem_24g_pair_timeout_init
+	store 2,mem_24g_reconn_timeout
+	jam PAIR_AND_3_0_ADDR,mem_24g_reconn_type
+	branch g24_reconn_start
+
+mouse_24g_first_start_reconn:
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_24g_reconn_dongle_start
+	call mouse_bluetooth_fast_conn_disable
+mouse_24g_first_bluetooth_reconnect:
+	call mouse_24g_stop
+	jam MODE_BT_DEVICE1,mem_device_flag
+	call mouse_select_reconn_device
+	branch mouse_start_reconnect_device
+
+mouse_24g_first_bb_event_reconn_timeout:
+	call mouse_wakeup_from_power_check
+	branch mouse_app_enter_hibernate,user
+	branch mouse_start_discovery
+
+mouse_24g_first_store_reconn_info:
+	call mouse_wakeup_from_power_check
+	rtn user
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING,mouse_store_device_info_delay
+	rtn
+
+mouse_24g_start_pair_mode:
+	call mouse_device_24g_pair_led_config
+	jam 0,mem_24g_reconn_type
+	arg MOUSE_24G_PAIRING_FLAG,queue
+	call mouse_enable_function_flag
+	setarg 0
+	store 2,mem_24g_reconn_timeout	
+	call mouse_stop_discovery
+	jam TYPE_MS,mem_24g_data_type
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_KEYBOARD,g24_pair_start
+	jam TYPE_KB,mem_24g_data_type
+	branch g24_pair_start
+
+mouse_24g_attempt_fail:
+	fetch 1,mem_24g_attempt_fail_flag
+	nbranch mouse_24g_hibernate_set,blank
+	fetch 1,mem_24g_reconn_type
+	beq FAST_CONN_AND_3_0_ADDR,mouse_24g_fast_conn_attempt_fail
+	beq PAIR_AND_3_0_ADDR,mouse_24g_auto_pair_attempt_fail
+	beq RECEIVER_AND_3_0_ADDR,mouse_reconn_dongle_attempt_fail
+mouse_24g_attempt_fail_enter_hibernate:
+	call mouse_24g_stop
+	fetch 1,mem_reconn_times
+	nbranch mouse_polling_device,blank
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_app_enter_hibernate
+	rtn
+
+mouse_24g_fast_conn_attempt_fail:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag 
+	bbit1 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING,mouse_24g_start_auto_pair
+	bbit1 MOUSE_ENABLE_AUTO_24G_PARING,mouse_24g_start_auto_pair
+	bbit0 MOUSE_ENABLE_24G_AUTO_PAIR_NERVER_BEEN_PAIRED,mouse_24g_reconn_dongle_start
+	fetch 4,mem_mouse_24g_addr		// auto pair first time
+	fetcht 4,mem_mouse_compare_addr
+	isub temp,null
+	branch mouse_24g_start_pair_mode,zero
+mouse_24g_reconn_dongle_start:
+	fetch 2,mem_24g_reconn_timeout_init
+	store 2,mem_24g_reconn_timeout
+	jam RECEIVER_AND_3_0_ADDR,mem_24g_reconn_type
+	branch g24_reconn_start
+
+mouse_24g_auto_pair_attempt_fail:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag 
+	bbit0 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING,mouse_24g_attempt_fail_enter_hibernate
+	fetch 1,mem_device_number
+	beq 1,mouse_24g_attempt_fail_enter_hibernate		//24g first mode and only 2.4g device
+	branch mouse_24g_first_bluetooth_reconnect
+
+mouse_reconn_dongle_attempt_fail:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING,mouse_24g_attempt_fail_enter_hibernate
+	bbit1 MOUSE_ENABLE_EEPROM,mouse_24g_attempt_fail_enter_hibernate
+	bbit1 MOUSE_ENABLE_FLASH,mouse_24g_attempt_fail_enter_hibernate
+	branch mouse_24g_start_auto_pair+1
+	
+mouse_24g_attempt_success:
+	fetch 4,mem_24g_addr
+	store 4,mem_24g_receiver_addr
+	store 4,mem_mouse_24g_addr		// if need store 24g address to eeprom/flash,need get mem_24g_addr
+	call g24_ch_syncword_crc8_init
+	call mouse_no_data_timer_init
+	call mouse_device_poweron_led_config
+	call mouse_init_sensor_reset
+	jam 0,mem_mouse_long_mult_flag
+	jam 0,mem_24g_conn_sm
+	jam 0,mem_24g_reconn_type
+	fetch 4,mem_24g_receiver_addr
+	fetch 4,mem_24g_fast_conn_addr
+	isub temp,null
+	rtn zero
+	branch mouse_24g_first_store_reconn_info
+	
+mouse_24g_pairing_complete:
+	call mouse_init_sensor_reset
+	call mouse_read_sensor_common
+mouse_24g_pairing_complete_common:
+	call mouse_device_poweron_led_config
+	call mouse_no_data_timer_init
+	arg MOUSE_24G_PAIRING_FLAG,queue
+	call mouse_disable_function_flag
+	setarg 0
+	store 2,mem_24g_pair_timeout
+	store 2,mem_24g_reconn_timeout
+	store 1,mem_24g_conn_sm
+	store 1,mem_mouse_move_flag
+	store 1,mem_24g_reconn_type
+
+
+	fetch 4,mem_24g_addr
+	store 4,mem_24g_receiver_addr
+	store 4,mem_mouse_24g_addr
+	branch mouse_store_device_info_delay
+
+mouse_24g_short_sleep_clear_wake:
+	call clear_wake
+	branch lpm_write_gpio_wakeup
+
+mouse_24g_package_data:
+	bpatch patch12_6,mem_patch12
+	rtnmark0 mark_24g
+	call mouse_motion
+	nrtn user
+	fetch 1,mem_mouse_24g_long_sleep_flag
+	jam 0,mem_mouse_24g_long_sleep_flag
+	ncall mouse_24g_short_sleep_clear_wake,blank	
+	
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_KEYBOARD,mouse_24g_mouse_package_data
+	fetch 1,mem_customer_key
+	nbranch mouse_24g_keyboard_package_data,blank
+mouse_24g_mouse_package_data:
+	call mouse_data_xy_release
+	fetch 1,mem_24g_data_type
+	bbit1 1,mouse_24g_mouse_package_data_now	// last package is keyboard data
+	fetcht 1,mem_24g_txbuf+1
+	fetch 1,mem_mouse_key
+	ior temp,pdata
+	store 1,mem_mouse_key
+	fetcht 1,mem_24g_txbuf+6
+	fetch 1,mem_mouse_z
+	iadd temp,pdata
+	store 1,mem_mouse_z
+	fetcht 1,mem_24g_txbuf+7
+	fetch 1,mem_mouse_tz
+	iadd temp,pdata
+	store 1,mem_mouse_tz	
+mouse_24g_mouse_package_data_now:	
+	jam TYPE_MS,mem_24g_data_type
+	arg 7,rega	//length
+	arg mem_mouse_key,regb //tx buff
+	fetch 2,mem_mouse_z
+	rtn blank
+	branch g24_transmit_by_interrupt_enable
+
+mouse_24g_keyboard_package_data:
+	jam TYPE_KB,mem_24g_data_type
+	arg 9,rega	//length
+	fetch 1,mem_customer_data_trigger
+	nbranch mouse_customer_key_press,blank
+	arg mem_customer_key_release,regb	//tx buff
+	rtn
+mouse_customer_key_press:
+	arg mem_customer_key_press,regb
+	rtn
+
+
+/**************************************g24 search receiver*****************************************/
+
+mouse_24g_search_dongle_init:
+	setarg 0
+	store 3,mem_mouse_search_dongle_action
+	rtn
+
+mouse_24g_search_dongle:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_24G_SEARCH_DONGLE
+	fetch 1,mem_mouse_long_mult_flag
+	rtn blank
+	fetch 1,mem_24g_abort_pac
+	rtn blank
+	fetch 1,mem_mouse_search_dongle_interval
+	increase 1,pdata
+	and_into 3,pdata
+	store 1,mem_mouse_search_dongle_interval
+	nrtn blank	//400ms
+	jam 0,mem_mouse_search_dongle_ch
+mouse_24g_search_dongle_loop:
+	bpatch patch12_7,mem_patch12
+	fetch 1,mem_mouse_search_dongle_ch
+	increase 1,pdata
+	store 1,mem_mouse_search_dongle_ch
+	sub pdata,G24_CH_NUMBER,null
+	nbranch mouse_24g_search_dongle_loop_end,positive
+	call g24_reconn_data_prep
+	call g24_transmit_receive_ack
+	nbranch mouse_24g_search_dongle_loop_retry,sync
+	nbranch mouse_24g_search_dongle_loop_retry,user3
+	call mouse_g24_ackpayload_parse
+	call mouse_24g_search_dongle_success
+mouse_24g_search_dongle_loop_end:
+	call g24_txbuf_clear
+	fetch 1,mem_mouse_search_dongle_count
+	increase 1,pdata
+	store 1,mem_mouse_search_dongle_count
+	beq G24_CH_POLL_COUNT,mouse_24g_search_dongle_check
+	rtn
+
+mouse_24g_search_dongle_loop_retry:
+	call g24_ch
+	branch mouse_24g_search_dongle_loop
+
+mouse_24g_search_dongle_check:
+	jam 0,mem_mouse_search_dongle_count
+	fetch 1,mem_mouse_search_dongle_action
+	rtnbit1 G24_DISCONN_STATE
+	set1 G24_DISCONN_STATE,pdata
+	store 1,mem_mouse_search_dongle_action
+	fetch 2,mem_mouse_24g_search_dongle_time_init		//3min
+	store 2,mem_mouse_no_data_timer
+	branch mouse_sensor_powerdown
+	
+mouse_24g_search_dongle_success:
+	fetch 1,mem_24g_abort_pac
+	branch mouse_24g_search_dongle_init,blank
+	jam 0,mem_mouse_search_dongle_count
+	fetch 1,mem_mouse_search_dongle_action
+	rtnbit0 G24_DISCONN_STATE
+	set0 G24_DISCONN_STATE,pdata
+	store 1,mem_mouse_search_dongle_action
+	call mouse_no_data_timer_init
+	branch mouse_init_sensor_wakeup
+
+mouse_g24_ackpayload_parse:
+	call g24_ackpayload_parse
+	fetch 1,mem_24g_rxbuf+1
+	compare 0x08,pdata,0xf8
+	nrtn true
+	fetch 1,mem_24g_rxbuf+2		// pc sleep mouse ackpayload: 01 08 ff
+	beq 0xff,mouse_24g_hibernate_set
+	rtn
+
+/**************************************g24 search receiver*****************************************/
+
+
+mouse_g24_retransmit:
+	fetch 1,mem_mouse_need_soft_reset
+	nrtn blank
+	call mouse_retransmit_select_device_by_pb_button
+	call mouse_select_device_by_dpi_button_once
+	branch g24_retransmit0
+
+mouse_select_device_by_dpi_button_once:
+	arg 12,queue
+	call timer_check
+	nrtn blank
+	call mouse_dpi_check_once
+	call mouse_dpi_key_check_long_press
+mouse_g24_retransmit_100ms_timer_init:
+	arg 12,queue
+	setarg 160
+	branch timer_init
+	
+mouse_dpi_check_once:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_SELECT_DEVICE_BY_DPI_BUTTON
+//	jam 0x03,mem_mouse_dpikey_press_status
+	branch mouse_dpi_check
+
+/**************************************g24 new process start********************************************/
+mouse_24g_before_lpm_sleep:
+	fetch 1,mem_device_flag
+	bne MODE_24G_DEVICE,lpm_sleep_skip_cb_function
+	fetch 1,mem_24g_disable_fec1
+	rtn blank
+mouse_peripheral_clock_off:
+	jam 2,core_clksel			//use rc clock
+	jam 0xf8,core_lpm_ctrl
+	rtn
+
+/**************************************g24 new process end********************************************/
+
+/*******************logo led*******************/
+mouse_logo_led_on_timer:
+	fetch 1,mem_mouse_logo_led_gpio
+	rtneq GPIO_DISABLE
+	fetch 2,mem_mouse_no_data_timer
+	rtn blank
+	fetch 2,mem_mouse_no_data_timeout
+	fetcht 2,mem_mouse_no_data_timer
+	isub temp,temp
+	fetch 2,mem_mouse_logo_led_on_time_init
+	isub temp,pdata
+	branch mouse_logo_led_on,positive
+mouse_logo_led_off:
+	fetcht 1,mem_mouse_logo_led_gpio
+	branch mouse_led_off
+mouse_logo_led_on:
+	fetcht 1,mem_mouse_logo_led_gpio
+	branch mouse_led_on
+	
+/*******************logo led end*******************/
+
+
+
+/*******************dpi led*******************/
+mouse_dpi_led_blink_delay_timer:
+	arg mem_mouse_dpi_led_delay_count,regc
+	arg mouse_dpi_led_blink_init,regb
+	branch timer_single_step
+	
+mouse_dpi_led_blink_init:
+	bpatch patch13_0,mem_patch13
+	fetch 1,mem_config_sensor_type
+	beq P3212,mouse_dpi_led_blink_init_another		//result:    level3: 1  2  3     level4: 2  3  4  1
+	beq KA8G2,mouse_dpi_led_blink_init_another	//result:    level3: 1  2  3     level4: 2  3  4  1
+	fetcht 1,mem_mouse_dpi
+	increase 2,temp	// 2 3 4 (5)
+mouse_dpi_led_blink_init_next:
+	sub temp,3,null
+	call mouse_dpi_led_blink_init_level_4,positive
+	ncall mouse_dpi_led_blink_count_clean,positive
+	copy temp,pdata
+	iadd pdata,pdata
+	store 1,mem_mouse_multi_led_blink_count
+mouse_multi_dpi_led_blink_enable:
+	jam 4,mem_mouse_multi_led_blink_type
+	call mouse_multi_dpi_led_blink_timer_init	
+	jam MULTI_LED_BLINK,mem_mouse_multi_led_type
+	branch mouse_multi_led_enable
+
+mouse_dpi_led_blink_init_another:
+	fetcht 1,mem_mouse_dpi
+	increase 1,temp
+	branch mouse_dpi_led_blink_init_next
+
+mouse_dpi_led_blink_init_level_4:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_DPI_LEVEL_4
+	increase 1,temp  	// 2-->3   3-->4
+	rtn
+mouse_dpi_led_blink_count_clean:
+	increase -3,temp		// 4-->1  5-->2
+	rtn
+
+
+mouse_dpi_led_blink_delay:
+	fetch 1,mem_mouse_dpi_gpio
+	rtneq GPIO_DISABLE
+	fetch 2,mem_mouse_discovery_timer
+	nrtn blank
+	fetch 2,mem_24g_pair_timeout
+	nrtn blank
+	fetch 2,mem_24g_reconn_timeout
+	nrtn blank
+	fetch 1,mem_mouse_multi_led_powon_timer
+	nrtn blank
+	fetch 1,mem_mouse_dpi_led_delay_count_init
+	branch mouse_dpi_led_blink_init,blank
+	store 1,mem_mouse_dpi_led_delay_count  //delay 1s led blink
+	rtn
+
+/*******************dpi led end*******************/
+
+
+
+/*******************low voltage led*************************/
+
+mouse_check_dpi_blink:
+	disable user
+	fetch 1,mem_mouse_multi_led_blink_type		//04:dpi blink
+	sub pdata,4,null
+	nrtn zero
+	branch enable_user
+
+mouse_low_voltage_led_timer:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_LOW_LED
+	rtnbit0 MOUSE_LOW_VOLTAGE_FLAG
+	fetch 2,mem_mouse_discovery_timer
+	nrtn blank
+	fetch 2,mem_24g_pair_timeout
+	nrtn blank
+	fetch 2,mem_24g_reconn_timeout
+	nrtn blank
+	fetch 1,mem_mouse_multi_led_powon_timer
+	nrtn blank
+	call mouse_check_dpi_blink		//need judge blink led=dpi? if led=dpi led->rtn
+	rtn user
+
+	fetch 1,mem_mouse_multi_low_led_blink_count
+	branch mouse_low_led_blink_count_init_judge,blank
+mouse_low_led_blink_timer:
+	fetcht 1,mem_adc_low_volatage_led_timer_count
+	increase 1,temp
+	storet 1,mem_adc_low_volatage_led_timer_count
+	fetch 1,mem_mouse_low_led_blink_timer
+	isub temp,null
+	ncall mouse_low_led_timer_count_clean,positive
+	fetch 1,mem_mouse_low_led_blink_half_timer
+	isub temp,null
+	nbranch mouse_low_voltage_led_off_judge,positive
+mouse_low_voltage_led_on_judge:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_LOW_FOR_LED,mouse_device_led_on
+	bbit1 MOUSE_ENABLE_DPI_LOW_FOR_LED,mouse_device_led_on
+mouse_low_voltage_led_on:
+	fetcht 1,mem_mouse_low_voltage_alarm_gpio 
+	branch mouse_led_on
+
+mouse_low_led_timer_count_clean:
+	jam 1,mem_adc_low_volatage_led_timer_count
+	fetch 1,mem_mouse_multi_low_led_blink_count	//blink count decrease
+	increase -1,pdata
+	store 1,mem_mouse_multi_low_led_blink_count
+mouse_low_voltage_led_off_judge:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_LOW_FOR_LED,mouse_device_led_off
+	bbit1 MOUSE_ENABLE_DPI_LOW_FOR_LED,mouse_device_led_off
+mouse_low_voltage_led_off:
+	fetcht 1,mem_mouse_low_voltage_alarm_gpio
+	branch mouse_led_off
+
+mouse_low_led_blink_count_init_judge:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_LOW_LED_BLINK_LIMIT,mouse_low_voltage_led_off_judge
+	call mouse_multi_low_led_blink_count_init
+	branch mouse_low_led_blink_timer
+	
+/*******************low voltage led end*************************/
+
+
+/*******************multi led start*************************/
+/***parm init****/
+
+mouse_device_multi_led_parm_init:
+	jam 0,mem_mouse_multi_led_blink_enable
+	call mouse_device_multi_led_all_off		//can be remove?
+	jam 0,mem_mouse_multi_led_blink_type
+	fetch 1, mem_mouse_low_led_blink_timer
+	rshift pdata,pdata
+	store 1,mem_mouse_low_led_blink_half_timer
+	rtn
+mouse_multi_low_led_blink_count_init:
+	fetch 1,mem_mouse_multi_lowled_blink_count_init
+	store 1,mem_mouse_multi_low_led_blink_count
+	rtn
+
+mouse_multi_led_blink_timer_init:
+	fetch 1,mem_mouse_multi_led_blink_type		//00:rtn	01:24g blink	02:le blink		03:reconn blink 	04:low blink	05:dpi blink
+	beq 1,mouse_device_24g_led_blink_timer_init
+	beq 2,mouse_device_le_discovery_led_blink_timer_init
+	beq 3,mouse_device_le_reconn_led_blink_timer_init
+mouse_multi_dpi_led_blink_timer_init:
+	fetch 1,mem_mouse_dpi_led_blink_timer_init
+mouse_store_multi_led_blink_timer:
+	store 1,mem_mouse_multi_led_blink_timer
+	rtn
+mouse_device_24g_led_blink_timer_init:
+	fetch 1,mem_mouse_multi_24gled_blink_timer_init
+	branch mouse_store_multi_led_blink_timer
+mouse_device_le_discovery_led_blink_timer_init:
+	fetch 1,mem_mouse_multi_le_discovery_blink_timer_init
+	branch mouse_store_multi_led_blink_timer
+mouse_device_le_reconn_led_blink_timer_init:
+	fetch 1,mem_mouse_multi_le_reconn_blink_timer_init
+	branch mouse_store_multi_led_blink_timer
+
+//===led poweron config===//
+mouse_device_poweron_led_config:	//power on
+	bpatch patch13_1,mem_patch13
+	fetch 1,mem_mouse_multi_led_powon_timer_init
+	store 1,mem_mouse_multi_led_powon_timer
+	jam MULTI_LED_ON,mem_mouse_multi_led_type
+mouse_multi_led_enable:
+	jam OFF,mem_mouse_multi_led_state
+	jam ON,mem_mouse_multi_led_blink_enable
+	rtn
+
+//===led blink config===//
+mouse_device_24g_pair_led_config:		//24g pair led config
+	bpatch patch13_2,mem_patch13
+	fetch 1,mem_device_flag
+	rtnne MODE_24G_DEVICE
+	call mouse_multi_led_blink_enable_init
+	jam 1,mem_mouse_multi_led_blink_type
+	call mouse_device_24g_led_blink_timer_init
+	fetch 1,mem_mouse_le_reconn_blink_limit
+	rtn blank
+	fetch 1,mem_mouse_multi_24gled_blink_count_init
+	branch mouse_device_led_blink_count_init
+
+mouse_device_le_reconn_led_config:		//le recon led config
+	fetch 1,mem_device_flag
+	rtneq MODE_24G_DEVICE
+	call mouse_multi_led_blink_enable_init
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_BT_RECONN_LED_EFFECT
+	jam 3,mem_mouse_multi_led_blink_type
+	call mouse_device_le_reconn_led_blink_timer_init
+	fetch 1,mem_mouse_le_reconn_blink_limit
+	rtn blank
+	fetch 1,mem_mouse_multi_le_reconn_blink_count_init
+mouse_device_led_blink_count_init:
+	store 1,mem_mouse_multi_led_blink_count
+	rtn	
+
+mouse_device_discovery_led_config:		//ble discovery led config
+	jam 0,mem_mouse_le_reconn_blink_limit
+	jam 2,mem_mouse_multi_led_blink_type
+	call mouse_device_le_discovery_led_blink_timer_init
+mouse_multi_led_blink_enable_init:
+	jam 1,mem_mouse_multi_led_blink_enable
+	jam MULTI_LED_BLINK,mem_mouse_multi_led_type
+	branch mouse_device_multi_led_on
+
+
+//====multi timer====//
+mouse_led_multi_timer:
+	fetch 1,mem_mouse_multi_led_blink_enable
+	rtn blank
+	fetch 1,mem_mouse_multi_led_type
+	beq MULTI_LED_BLINK,mouse_multi_led_type_blink
+mouse_device_multi_led_type_on:
+	fetch 1,mem_mouse_multi_led_powon_timer
+	branch mouse_device_poweron_led_off,blank
+	increase -1
+	store 1,mem_mouse_multi_led_powon_timer
+	branch mouse_device_led_on
+
+mouse_device_poweron_led_off:
+ 	jam 0,mem_mouse_multi_led_blink_enable
+	call mouse_multi_low_led_blink_count_init
+	branch mouse_device_led_off
+
+mouse_multi_led_type_blink:
+	bpatch patch13_3,mem_patch13
+	fetch 1,mem_mouse_multi_led_blink_type	//00:rtn	01:24g blink	02:le blink		03:reconn blink 	04:low blink	05:dpi blink
+	rtn blank
+	beq 4,mouse_device_led_blink_limit	//dpi blink
+	branch mouse_device_led_blink_judge
+
+mouse_device_led_blink_judge:
+	fetch 1,mem_mouse_le_reconn_blink_limit
+	beq 1,mouse_device_led_blink_limit
+	branch mouse_multi_led_type_blink_next
+
+mouse_device_led_blink_limit:
+	fetch 1,mem_mouse_multi_led_blink_count
+	branch mouse_multi_led_off_judge, blank		//blink count =0
+mouse_multi_led_type_blink_next:	//blink no limit
+	arg mem_mouse_multi_led_blink_timer,regc
+	arg mouse_multi_led_type_blink_start,regb
+	branch timer_single_step
+	
+mouse_multi_led_type_blink_start:
+	fetch 1,mem_mouse_multi_led_blink_type
+	beq 4,mouse_multi_led_blink_count_decrease		//dpi blink
+	fetch 1,mem_mouse_le_reconn_blink_limit
+	beq 1,mouse_multi_led_blink_count_decrease
+mouse_multi_led_blink:
+	call mouse_multi_led_blink_timer_init
+	fetch 1,mem_mouse_multi_led_state
+	beq ON,mouse_multi_led_off_judge_next
+	branch mouse_multi_led_on_judge
+
+mouse_multi_led_blink_count_decrease:
+	fetch 1,mem_mouse_multi_led_blink_count	
+	increase -1
+	store 1,mem_mouse_multi_led_blink_count
+	branch mouse_multi_led_blink
+
+//=====led on/off interface=====//
+mouse_multi_led_on_judge:
+	fetch 1,mem_mouse_multi_led_blink_type
+	beq 4,mouse_multi_dpi_led_on_judge
+mouse_device_multi_led_on:
+	jam ON,mem_mouse_multi_led_state
+mouse_device_led_on:
+	bpatch patch13_4,mem_patch13
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_device_24g_led_on
+	beq MODE_BT_DEVICE1,mouse_device_bt1_led_on
+	beq MODE_BT_DEVICE2,mouse_device_bt2_led_on
+	rtn
+mouse_device_24g_led_on:
+	fetcht 1,mem_mouse_1io2led_multi_24gled
+	branch mouse_led_on	//by mouse.dat config
+mouse_device_bt1_led_on:
+	fetcht 1,mem_mouse_1io2led_multi_bt1led
+	branch mouse_led_on	//by mouse.dat config
+mouse_device_bt2_led_on:
+	fetcht 1,mem_mouse_1io2led_multi_bt2led
+mouse_led_on:
+	branch gpio_out_active	//by mouse.dat config
+
+mouse_led_off:
+	branch gpio_out_inactive	//by mouse.dat config
+
+mouse_multi_led_off_judge:
+	jam 0,mem_mouse_multi_led_blink_enable
+	jam 0,mem_mouse_multi_led_blink_type
+mouse_multi_led_off_judge_next:
+	fetch 1,mem_mouse_multi_led_blink_type
+	beq 4,mouse_multi_dpi_led_off_judge
+mouse_device_multi_led_off:
+	jam OFF,mem_mouse_multi_led_state
+mouse_device_led_off:
+	bpatch patch13_5,mem_patch13
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_device_24g_led_off
+	beq MODE_BT_DEVICE1,mouse_device_bt1_led_off
+	beq MODE_BT_DEVICE2,mouse_device_bt2_led_off
+	rtn
+mouse_device_24g_led_off:
+	fetcht 1,mem_mouse_1io2led_multi_24gled
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_1IO2LED,mouse_led_off
+	branch gpio_set_high_impedance
+mouse_device_bt1_led_off:
+	fetcht 1,mem_mouse_1io2led_multi_bt1led
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_1IO2LED,mouse_led_off
+	branch gpio_set_high_impedance
+mouse_device_bt2_led_off:
+	fetcht 1,mem_mouse_1io2led_multi_bt2led
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_1IO2LED,mouse_led_off
+	branch gpio_set_high_impedance
+
+mouse_device_multi_led_all_off:		//dpi+low no
+	call mouse_device_24g_led_off
+	call mouse_device_bt1_led_off
+	call mouse_device_bt2_led_off
+	call mouse_low_voltage_led_off_judge
+	branch mouse_multi_dpi_led_off_judge
+
+mouse_multi_dpi_led_off_judge:
+	jam OFF,mem_mouse_multi_led_state
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_DPI_FOR_LED,mouse_device_multi_led_off
+	bbit1 MOUSE_ENABLE_DPI_LOW_FOR_LED,mouse_device_multi_led_off
+mouse_multi_dpi_led_off:
+	fetcht 1,mem_mouse_dpi_gpio
+	branch mouse_led_off
+
+mouse_multi_dpi_led_on_judge:
+	jam ON,mem_mouse_multi_led_state
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_DPI_FOR_LED,mouse_device_multi_led_on
+	bbit1 MOUSE_ENABLE_DPI_LOW_FOR_LED,mouse_device_multi_led_on
+mouse_multi_dpi_led_on:
+	fetcht 1,mem_mouse_dpi_gpio
+	branch mouse_led_on	//by mouse.dat config
+
+/*******************multi led end*************************/
+
+mouse_low_voltage_led_no_enter_lpm:	
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_LOW_VOLTAGE_FLAG
+	fetch 1,mem_adc_low_volatage_led_timer_count
+	fetcht 1,mem_mouse_low_led_blink_half_timer
+	sub pdata,temp,null
+	branch mouse_lpm_mode_clear,positive
+mouse_low_voltage_led_no_enter_lpm_next:	
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,g24_transmit_by_interrupt_exit_check
+	jam 1,mem_lpm_mode
+	rtn
+
+g24_transmit_by_interrupt_exit_check:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag	
+	rtnbit1 MOUSE_ENABLE_24G_250Hz	
+	branch g24_transmit_by_interrupt_exit
+
+mouse_lpm_mode_clear:
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,g24_transmit_by_interrupt_enable
+	jam 0,mem_lpm_mode
+	rtn
+
+
+mouse_store_signal_rssi:
+//	call rssi_hex2dec
+	fetch 1,mem_rssi
+	branch rssi_signal
+
+mouse_le_transmit:
+	call mouse_store_signal_rssi
+	branch power_ctrl_start
+
+mouse_le_set_lpm_mult:
+	fetch 1,mem_le_connect_status_flag
+	compare 3,pdata,3
+	nbranch disable_blank,true
+	call app_lpm_mult_enable
+	branch enable_blank
+
+mouse_set_lpm_mult:
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,mouse_le_set_lpm_mult
+	rtn
+
+mouse_24g_long_sleep:
+	call g24_lpm_wait
+	nrtn user
+	jam 1,mem_mouse_24g_long_sleep_flag
+	call g24_setgpio_lpm_before
+	jam 0,mem_mouse_24g_sleep_miss
+	call mouse_24g_send_time_long_wake
+	fetch 1,mem_sensor_shutdown_flag
+	ncall mouse_setgpio_hibernate,blank
+	fetch 4,mem_24g_enter_hibernate
+	branch g24_long_seep2	
+
+mouse_24g_short_sleep:
+	fetch 1,mem_mouse_sleep_deal_type
+	branch g24_short_sleep,blank
+	call g24_lpm_wait
+	nrtn user
+	fetch 1,mem_mouse_24g_sleep_miss
+	jam 0,mem_mouse_24g_sleep_miss
+	sub pdata,0,null
+	nbranch mouse_24g_short_sleep_last_miss,zero
+	fetcht 2,mem_24g_retransmit
+	sub temp,0,null
+	branch mouse_24g_short_sleep_default,zero
+
+	fetch 4,mem_mouse_24g_tx_time_last_delt
+	branch mouse_24g_short_sleep_default,blank
+mouse_24g_short_sleep_notify:
+	fetcht 4,mem_mouse_24g_tsniff
+	isub temp,temp
+	storet 4,mem_mouse_24g_sleep_miss_temp
+	nbranch mouse_24g_short_sleep_long,positive
+	fetch 3,mem_24g_short_sleep_set
+	isub temp,pdata
+	nbranch mouse_24g_short_sleep_2,positive
+	arg 0x600,temp
+	isub temp,null
+	nbranch mouse_24g_short_sleep_2,positive
+mouse_24g_short_sleep2:
+	store 4,mem_mouse_24g_sleep_time_temp
+	call mouse_24g_miss_temp_clear
+	fetch 4,mem_mouse_24g_sleep_time_temp
+mouse_24g_short_sleep3:	
+	call clk2lpo
+	storet 4,mem_sleep_counter
+	branch lpm_sleep
+
+mouse_24g_short_sleep_default:
+	call mouse_24g_miss_temp_clear
+	fetch 3,mem_24g_short_sleep_set
+	branch mouse_24g_short_sleep2
+
+mouse_24g_short_sleep_long:
+	sub temp,0,temp
+	fetch 3,mem_24g_short_sleep_set
+	iadd temp,pdata
+	branch mouse_24g_short_sleep2
+
+mouse_24g_miss_temp_clear:
+	setarg 0
+	store 4,mem_mouse_24g_sleep_miss_temp
+	rtn
+	
+mouse_24g_short_sleep_last_miss:
+	fetch 4,mem_mouse_24g_tx_time_last_delt
+	fetcht 4,mem_mouse_24g_sleep_miss_temp
+	iadd temp,pdata
+	branch mouse_24g_short_sleep_notify
+	
+mouse_24g_short_sleep_2:
+	jam 1,mem_mouse_24g_sleep_miss
+	rtn
+
+
+mouse_24g_transmit_callback:
+	call mouse_24g_send_time_check
+	branch mouse_wakeup_24g
+
+mouse_24g_send_time_check:
+	fetch 1,mem_mouse_sleep_deal_type
+	rtn blank
+	fetch 1,mem_24g_transmit_by_interrupt
+	beq G24_TX_TIMER_INT_ENABLE,mouse_24g_send_timer_first
+	fetch 1,mem_mouse_24g_tx_count
+	branch mouse_24g_send_timer_first,blank
+	copy clkn,pdata
+	fetcht 6,mem_mouse_24g_tx_time_last
+	store 6,mem_mouse_24g_tx_time_last
+	call clk_diff_rt
+	store 4,mem_mouse_24g_tx_time_last_delt
+
+	fetch 1,mem_mouse_24g_sleep_miss
+	nrtn blank
+	fetch 2,mem_24g_retransmit
+	nrtn blank
+	fetch 4,mem_mouse_24g_tx_time_last_delt
+mouse_24g_send_time_check_1:
+	fetcht 5,mem_mouse_24g_tx_time_sum
+	iadd temp,pdata
+	store 5,mem_mouse_24g_tx_time_sum	
+	fetcht 1,mem_mouse_24g_tx_count
+	fetch 1,mem_mouse_24g_tx_time_sum_count
+	isub temp,null
+	branch mouse_24g_send_time_check_average,zero
+	increase 1,temp
+	storet 1,mem_mouse_24g_tx_count
+	rtn
+
+mouse_24g_send_time_check_average:
+	jam 1,mem_mouse_24g_tx_count
+	arg 0,temp
+	fetch 5,mem_mouse_24g_tx_time_sum
+	storet 5,mem_mouse_24g_tx_time_sum
+	fetcht 1,mem_mouse_24g_tx_time_sum_count
+	idiv temp
+	call wait_div_end
+  	quotient rega
+
+	fetch 4,mem_mouse_24g_tsniff
+	fetcht 1,mem_mouse_24g_tx_time_offset
+	isub temp,temp
+	increase -40,temp
+
+	copy rega,pdata
+	isub temp,pdata
+	branch mouse_24g_send_time_check_average_late,positive
+	sub pdata,0,pdata
+	
+	rshift2 pdata,pdata
+	fetcht 3,mem_24g_short_sleep_set
+	iadd temp,temp
+	bpatch patch13_6,mem_patch13
+	fetch 3,mem_mouse_24g_short_sleep_set_init
+	arg 0x1800,rega
+	iadd rega,pdata
+	isub temp,null
+	nbranch mouse_24g_send_time_check_average_min,positive
+	storet 3,mem_24g_short_sleep_set
+	rtn
+
+mouse_24g_send_time_check_average_late:
+	rshift2 pdata,temp
+	fetch 3,mem_24g_short_sleep_set
+	isub temp,temp
+	bpatch patch13_7,mem_patch13
+	fetch 3,mem_mouse_24g_short_sleep_set_init
+	arg 0x1800,rega
+	isub rega,pdata
+	isub temp,null
+	branch mouse_24g_send_time_check_average_min,positive
+	storet 3,mem_24g_short_sleep_set
+	rtn
+
+mouse_24g_send_time_check_average_min:
+	store 3,mem_24g_short_sleep_set
+	rtn
+
+mouse_24g_send_timer_first:
+	jam 1,mem_mouse_24g_tx_count
+	copy clkn,pdata
+	store 6,mem_mouse_24g_tx_time_last
+	rtn
+
+mouse_24g_send_time_long_wake:
+	setarg 0
+	store 1,mem_mouse_24g_tx_count
+	store 5,mem_mouse_24g_tx_time_sum
+	rtn
+	
+
+/*****************close define  COMPILE_MOUSE**********/
+else
+
+endif
+
+
+

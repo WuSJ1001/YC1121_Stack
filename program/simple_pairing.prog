@@ -1,0 +1,1068 @@
+
+
+ifdef SECURE_CONNECTION
+
+
+publickey_init:
+//	fetch 1,mem_ssp_enable
+//	nbranch sp_initialize,blank
+	branch sp_initialize_256
+
+sp_calc_sequence_256_check:
+	bpatch patch1d_5,mem_patch1d
+//	fetch 1,mem_ssp_enable
+//	rtn blank
+//	fetch 1,mem_sp_local_key_invalid
+//	rtnne SP_KEY_VALID
+	fetch 1,mem_secure_connections_enable
+	rtn blank
+	fetch 1,mem_sc_local_key_invalid
+	rtneq SP_KEY_VALID_256
+//	fetch 2,mem_ui_state_map
+//	bbit1 UI_STATE_BT_CONNECTED,stop_publickey_calc_256
+	fetch 1,mem_sc_calc
+	beq SP_CALC_STANDBY,sp_initialize_256
+	rtn
+stop_publickey_calc_256:
+	jam SP_CALC_STANDBY,mem_sc_calc	
+	rtn
+
+
+	
+
+sp_clear_flags:
+	bpatch patch1d_6,mem_patch1d
+	setarg mem_sp_state_end
+	arg mem_sp_state_start,contw
+	isub contw,loopcnt
+	call clear_mem
+	setarg mem_sp_state_xmem_end
+	arg mem_sp_state_xmem,contw
+	isub contw,loopcnt
+	branch clear_mem
+
+
+
+sp_calc_check_publickey_256:
+	call sp_calc_b256
+	arg mem_le_pubkey_remote_y_256,rega
+	arg mem_t7_256,contw
+	call bn_sqrmod_256   
+	arg mem_le_pubkey_remote_x_256,rega
+	arg mem_t2_256,contw
+	call bn_sqrmod_256   
+  	arg mem_t2_256,rega
+	arg mem_le_pubkey_remote_x_256,regb
+	arg mem_t2_256,contw
+	call bn_mulmod_256	
+  	arg mem_a_256,rega
+	arg mem_le_pubkey_remote_x_256,regb
+	arg mem_t3_256,contw
+	call bn_mulmod_256	
+  	arg mem_t3_256,rega
+	arg mem_t2_256,regb
+	arg mem_t2_256,contw
+	call bn_addmod_256	 
+  	arg mem_t0_256,rega
+	arg mem_t2_256,regb
+	arg mem_t0_256,contw
+	call bn_addmod_256	 
+	arg 32,loopcnt
+  	arg mem_t7_256,rega
+	arg mem_t0_256,regb
+	branch  string_compare
+	
+sp_calc_b256:
+	arg mem_gy_256,rega
+	arg mem_t0_256,contw
+	call bn_sqrmod_256   
+	arg mem_gx_256,rega
+	arg mem_t2_256,contw
+	call bn_sqrmod_256    
+  	arg mem_t2_256,rega
+	arg mem_gx_256,regb
+	arg mem_t2_256,contw
+	call bn_mulmod_256	
+  	arg mem_a_256,rega
+	arg mem_gx_256,regb
+	arg mem_t3_256,contw
+	call bn_mulmod_256	 
+  	arg mem_t3_256,rega
+	arg mem_t2_256,regb
+	arg mem_t2_256,contw
+	call bn_addmod_256	 
+  	arg mem_t0_256,rega
+	arg mem_t2_256,regb
+	arg mem_t0_256,contw
+	branch  bn_submod_256	
+
+
+
+
+random_generator:
+	increase -1,queue
+	nrtn     positive
+	random   pdata
+	istore   2,contw  
+	branch   random_generator
+compare4:
+	increase -1,queue
+	nbranch  compare4_success,positive
+	ifetch   4,rega
+	copy     pdata,temp
+	ifetch   4,regb
+	iflip    temp,pdata
+	nbranch  compare4_failed,zero
+	increase 4,rega
+	increase 4,regb
+	branch   compare4
+compare4_failed:
+	branch disable_true
+
+compare4_success:
+	branch enable_true
+
+
+
+
+bn_testbit:
+	and pdata,7,queue
+	rshift3 pdata,pdata
+	iadd contr,contr
+	ifetch 1,contr
+	qisolate0 pdata
+	rtn
+
+
+bn_eq_zero:
+	ifetch 8,contr
+	nrtn blank
+	ifetch 8,contr
+	nrtn blank
+	ifetch 8,contr
+	rtn
+	
+	
+	/* return zero if eq */
+
+bn_eq_0:	
+	ifetch 4,rega
+	iforce temp
+	ifetch 4,regb
+	isub temp,null
+	nrtn zero
+	increase 4,rega
+	increase 4,regb
+	loop bn_eq_0
+	rtn
+	/* return positive if A >= B */
+bn_bigeq:
+	force 6,loopcnt
+	increase 20,rega
+	increase 20,regb
+bn_bigeq_0:	
+	ifetch 4,regb
+	iforce temp
+	ifetch 4,rega
+	isub temp,pdata
+	nrtn positive
+	nrtn blank
+	increase -4,rega
+	increase -4,regb
+	loop bn_bigeq_0
+	rtn
+bn_add:
+	force 6,loopcnt
+	force 0,regc
+bn_add_0:	
+	ifetch 4,rega
+	iforce temp
+	ifetch 4,regb
+	iadd temp,pdata
+	iadd regc,pdata
+	istore 4,contw
+	isolate1 32,pdata
+	setflag true,0,regc
+	increase 4,rega
+	increase 4,regb
+	loop bn_add_0
+	rtn
+
+bn_sub:
+	force 6,loopcnt
+	force 0,regc
+bn_sub_0:	
+	ifetch 4,regb
+	iforce temp
+	ifetch 4,rega
+	isub temp,pdata
+	isub regc,pdata
+	istore 4,contw
+	isolate1 32,pdata
+	setflag true,0,regc
+	increase 4,rega
+	increase 4,regb
+	loop bn_sub_0
+	rtn
+
+bn_rshift6:
+	force 6,loopcnt
+	increase 20,rega
+bn_rshift:
+	force 0,regc
+bn_rshift_0:	
+	ifetch 4,rega
+	isolate1 0,pdata
+	setflag true,1,regc
+	rshift pdata,pdata
+	isolate1 0,regc
+	setflag true,31,pdata
+	istore 4,rega
+	increase -4,rega
+	rshift regc,regc
+	loop bn_rshift_0
+	rtn
+bn_lshift:
+	force 6,loopcnt
+	force 0,regc
+bn_lshift_0:	
+	ifetch 4,rega
+	isolate1 31,pdata
+	setflag true,1,regc
+	lshift pdata,pdata
+	isolate1 0,regc
+	setflag true,0,pdata
+	istore 4,rega
+	increase 4,rega
+	rshift regc,regc
+	loop bn_lshift_0
+	rtn
+	
+
+bn_load:
+	force 6,loopcnt
+bn_load_0:	
+	ifetch 4,contr
+	iforce regext
+	increase 1,regext_index
+	loop bn_load_0
+	rtn
+
+
+
+sp_initialize_256:	
+	bpatch patch1d_7,mem_patch1d
+	fetch 1,mem_secure_connections_enable
+	nbranch sp_pubkey_calc_256,blank
+//	call sp_clear_flags
+sc_reset:
+	jam SP_CALC_STANDBY,mem_sc_calc
+	jam SP_KEY_INVALID,mem_sc_local_key_invalid
+	rtn
+	
+	
+    	
+sp_wait_pubkey_calc_256_done:
+	fetch 1,mem_secure_connections_enable
+	rtn blank
+	fetch 1,mem_sc_local_key_invalid
+	rtneq SP_KEY_VALID_256
+	call sp_calc_sequence_256
+	branch sp_wait_pubkey_calc_256_done
+
+
+//BD1A3CCD:A6B89958:99B740EB:7B60FF4A:503F10D2:E3B3C974:385FC5A3:D4F6493F
+sp_debug_private_256:
+	arg mem_sc_private_key_256,contw
+        setsect 0,0x1abd
+        setsect 1,0x1b34f
+        setsect 2,0x19b8a
+        setsect 3,0x26562
+        istore 9,contw
+        setsect 0,0x340b7
+        setsect 1,0x1efa
+        setsect 2,0xaff6
+        setsect 3,0xfd41
+        istore 9,contw
+        setsect 0,0x3d210
+        setsect 1,0x26cf8
+        setsect 2,0x3874c
+        setsect 3,0x3157c
+        istore 9,contw
+        setsect 0,0x2d4a3
+        setsect 1,0x3d27d
+        setsect 2,0x3
+        istore 5,contw
+        rtn
+	
+
+sp_pubkey_calc_256:
+	fetch    1,mem_sc_local_key_invalid
+	rtnne SP_KEY_INVALID
+	fetch    1,mem_sc_calc
+	rtnne  SP_CALC_STANDBY
+	call init_memp_256
+	arg      mem_sc_private_key_256,contw 
+	force    15,queue
+	call     random_generator
+	random   pdata
+	rshift   pdata,pdata
+	istore   2,contw 
+	
+	fetch 1,mem_sp_debug_mode
+	ncall sp_debug_private_256,blank
+	
+	arg      mem_k_256,contw
+	arg      mem_sc_private_key_256,contr	
+	call     memcpy32 //mem_sp_private_key=>mem_k 
+
+	arg      mem_ax_256,contw
+	arg      mem_gx_256,contr
+	call     memcpy64 //mem_gx=>mem_ax 
+	
+	arg      mem_az_256,contw
+	call      clear_mem_256
+	jam      1,mem_az_256 //0=>mem_az 
+
+	call     eckp_calc_init_256
+	jam SP_CALC_PUBKEY_256,mem_sc_calc
+	rtn    
+
+sp_pubkey_generated_256:
+	arg      mem_sc_pubkey_local_x_256,contw
+	arg      mem_bx_256,contr
+	call     memcpy64   
+	jam      SP_KEY_VALID_256,mem_sc_local_key_invalid
+	jam      SP_CALC_STANDBY,mem_sc_calc
+	rtn
+	
+
+
+sp_dhkey_calc_256:
+	fetch    1,mem_sp_dhkey_invalid
+	rtnne  SP_KEY_INVALID
+	fetch    1,mem_sc_calc
+	rtnne  SP_CALC_STANDBY
+
+	arg      mem_k_256,contw
+	arg      mem_sc_private_key_256,contr	
+	call     memcpy32
+
+	arg      mem_ax_256,contw
+	arg      mem_le_pubkey_remote_x_256,contr
+	call     memcpy64
+
+	arg      mem_az_256,contw
+	call     clear_mem_256
+	jam      1,mem_az_256 //0=>mem_az 
+
+	call     eckp_calc_init_256
+	jam     SP_CALC_DHKEY_256,mem_sc_calc
+	rtn 
+
+
+sp_dhkey_generated_256:
+//	jam SP_FLAG_COMMIT,mem_sp_dh_ready
+	arg mem_le_dhkey_256,contw
+	arg mem_bx_256,contr
+	call memcpy32
+	jam SP_KEY_VALID_256,mem_sp_dhkey_invalid
+	jam SP_CALC_STANDBY,mem_sc_calc
+	rtn
+
+
+
+sp_calc_sequence_256:
+	fetch 1,mem_secure_connections_enable
+	rtn blank
+	fetch 1,mem_sc_calc
+	rtn blank
+	increase 0x80,pdata
+	store    1,mem_sc_calc
+	rtnbit1 7
+	fetch    2,mem_ec_loopc
+	branch   sp_calc_sequence_done_256,blank
+	branch   eckp_calc_256
+
+sp_calc_sequence_done_256:    
+	bpatch patch1e_0,mem_patch1e
+	call ecunmapz_256
+	fetch 1,mem_sc_calc
+	beq  SP_CALC_PUBKEY_256,sp_pubkey_generated_256
+	beq  SP_CALC_DHKEY_256,sp_dhkey_generated_256
+	rtn
+
+
+eckp_calc_256:
+	call     ecdbl_256  
+	fetch    2,mem_ec_loopc
+	increase -1,pdata
+	store    2,mem_ec_loopc
+	arg      mem_k_256,contr
+	call     bn_testbit
+	rtn	true
+	branch     ecadd_256   
+
+eckp_calc_init_256:
+	bpatch patch1e_1,mem_patch1e
+	setarg 256
+	store 2,mem_ec_loopc
+eckp_calc_init_256_1:    
+	fetch    2,mem_ec_loopc
+	rtn      blank
+	increase -1,pdata
+	store    2,mem_ec_loopc
+	arg      mem_k_256,contr
+	call     bn_testbit
+	branch eckp_calc_init_256_1,true
+	arg      mem_ax_256,contr
+	arg      mem_cx_256,contw
+	branch     memcpy96	
+
+
+ecunmapz_256:
+	arg mem_cz_256,rega
+	arg mem_t3_256,contw
+	call bn_invmod_256			/* t3 = 1/z */
+	arg mem_t3_256,rega
+	arg mem_t1_256,contw		
+	call bn_sqrmod_256			/* t1 = 1/z2 */
+	arg mem_cx_256,rega
+	arg mem_t1_256,regb
+	arg mem_bx_256,contw
+	call bn_mulmod_256
+	arg mem_t3_256,rega
+	arg mem_t1_256,regb
+	arg mem_t2_256,contw			
+	call bn_mulmod_256			/* t2 = 1/z3 */
+	arg mem_cy_256,rega
+	arg mem_t2_256,regb
+	arg mem_by_256,contw
+	branch bn_mulmod_256	
+	
+ecdbl_256:
+	arg mem_cz_256,rega
+	arg mem_t2_256,contw
+	call bn_sqrmod_256
+	arg mem_t2_256,rega
+	arg mem_t3_256,contw
+	call bn_sqrmod_256
+//call ice_break
+	arg mem_a_256,rega
+	arg mem_t3_256,regb
+	arg mem_t3_256,contw
+	call bn_mulmod_256		/* t3=a*z4	*/
+	arg mem_cx_256,rega
+	arg mem_t2_256,contw
+	call bn_sqrmod_256
+//call ice_break
+	arg mem_t2_256,contr
+	arg mem_t1_256,contw
+	call memcpy32
+	arg mem_t1_256,rega
+	call bn_lshiftmod_256
+	arg mem_t2_256,rega
+	arg mem_t1_256,regb
+	arg mem_t2_256,contw
+	call bn_addmod_256
+//call ice_break
+	arg mem_t2_256,rega
+	arg mem_t3_256,regb
+	arg mem_t2_256,contw
+	call bn_addmod_256		/* t2=3*x2 + z*z4		D  */
+//call ice_break
+	arg mem_cx_256,contr
+	arg mem_t1_256,contw
+	call memcpy32
+	arg mem_cy_256,rega
+	arg mem_t3_256,contw
+	call bn_sqrmod_256
+	arg mem_t1_256,rega
+	call bn_lshiftmod_256
+	arg mem_t1_256,rega
+	call bn_lshiftmod_256
+	arg mem_t1_256,rega		
+	arg mem_t3_256,regb
+	arg mem_t1_256,contw
+	call bn_mulmod_256		//S = 4X1Y1^2/* t1=4x*y2	B	*/
+	arg mem_t3_256,rega
+	arg mem_t0_256,contw
+	call bn_sqrmod_256
+	arg mem_t0_256,rega
+	call bn_lshiftmod_256
+	arg mem_t0_256,rega
+	call bn_lshiftmod_256		
+	arg mem_t0_256,rega		
+	call bn_lshiftmod_256	//T = 8Y1^4	/* t0=8*y4		C */
+	arg mem_cy_256,contr
+	arg mem_t3_256,contw
+	call memcpy32
+	arg mem_t3_256,rega
+	call bn_lshiftmod_256
+	arg mem_t3_256,rega
+	arg mem_cz_256,regb
+	arg mem_cz_256,contw
+	call bn_mulmod_256		//z = 2Y1Z1
+
+
+	arg mem_t2_256,rega
+	arg mem_t3_256,contw
+	call bn_sqrmod_256   // M ^2
+//call ice_break
+	arg mem_t3_256,rega
+	arg mem_t1_256,regb
+	arg mem_t3_256,contw
+	call bn_submod_256  // t2^2 - 4*cx *cy^2 
+	arg mem_t3_256,rega
+	arg mem_t1_256,regb
+	arg mem_cx_256,contw
+	call bn_submod_256   //X2
+	arg mem_t1_256,rega
+	arg mem_cx_256,regb
+	arg mem_t3_256,contw
+	call bn_submod_256   //S-X2
+	arg mem_t3_256,rega
+	arg mem_t2_256,regb
+	arg mem_t3_256,contw
+	call bn_mulmod_256	//M(S-X2)	
+	arg mem_t3_256,rega
+	arg mem_t0_256,regb
+	arg mem_cy_256,contw
+	branch bn_submod_256  //M(S-X2)-T Y2	
+
+ecadd_256:
+
+	arg mem_az_256,rega
+	arg mem_t7_256,contw
+	call bn_sqrmod_256
+	arg mem_cx_256,rega
+	arg mem_t7_256,regb
+	arg mem_t0_256,contw
+	call bn_mulmod_256		/* n1=t0=xa*zb2 U1 = X1Z0^2*/
+
+
+	arg mem_az_256,rega
+	arg mem_t7_256,regb
+	arg mem_t7_256,contw
+	call bn_mulmod_256	
+	arg mem_cy_256,rega
+	arg mem_t7_256,regb
+	arg mem_t1_256,contw
+	call bn_mulmod_256		/* n2=t1=ya*zb3   S1 = Y1Z0^3*/
+
+
+	arg mem_cz_256,rega
+	arg mem_t7_256,contw
+	call bn_sqrmod_256
+	arg mem_ax_256,rega
+	arg mem_t7_256,regb
+	arg mem_t2_256,contw
+	call bn_mulmod_256		/* n3=t2=xb*za2  U0 = X0Z1^2*/
+
+	arg mem_cz_256,rega
+	arg mem_t7_256,regb
+	arg mem_t7_256,contw
+	call bn_mulmod_256	
+	arg mem_ay_256,rega
+	arg mem_t7_256,regb
+	arg mem_t3_256,contw
+	call bn_mulmod_256		/* n4=t3=yb*za3 S0 = Y0Z1^3*/
+
+
+//	arg mem_t0_256,rega
+//	arg mem_t2_256,regb
+	arg mem_t0_256,regb
+	arg mem_t2_256,rega
+	arg mem_t7_256,contw
+	call bn_submod_256		/* n5=t7=n1-n3=t0-t2   W=U1-U0*/
+	arg mem_t0_256,rega
+	arg mem_t2_256,regb
+	arg mem_t0_256,contw
+	call bn_addmod_256		/* n7=t0=n1+n3=t0+t2    T=U1+U0 */
+//	arg mem_t1_256,rega
+//	arg mem_t3_256,regb
+	arg mem_t1_256,regb
+	arg mem_t3_256,rega
+	arg mem_t2_256,contw
+	call bn_submod_256		/* n6=t2=n2-n4=t1-t3  S1-S0 */
+	arg mem_t1_256,rega
+	arg mem_t3_256,regb
+	arg mem_t1_256,contw
+	call bn_addmod_256		/* n8=t1=n2+n4=t1+t3 M=S1+S0*/
+	arg mem_t1_256,rega
+	arg mem_t7_256,regb
+	arg mem_t1_256,contw
+	call bn_mulmod_256		/* t1=n8*n5     MW */
+	arg mem_cz_256,rega
+	arg mem_az_256,regb
+	arg mem_t3_256,contw
+	call bn_mulmod_256	      //Z0Z1
+	arg mem_t3_256,rega
+	arg mem_t7_256,regb
+	arg mem_cz_256,contw
+	call bn_mulmod_256		/* z=za*zb*n5   Z0Z1W */
+
+	arg mem_t7_256,rega
+	arg mem_t7_256,contw
+	call bn_sqrmod_256		/* t7=n5^2 */
+	arg mem_t7_256,rega
+	arg mem_t0_256,regb
+	arg mem_t3_256,contw
+	call bn_mulmod_256		/* t3=n5^2*n7 */
+	arg mem_t7_256,rega
+	arg mem_t1_256,regb
+	arg mem_t1_256,contw
+	call bn_mulmod_256		/* t1=n8*n5^3 */
+	arg mem_t2_256,rega
+	arg mem_cx_256,contw
+	call bn_sqrmod_256		
+	arg mem_cx_256,rega
+	arg mem_t3_256,regb
+	arg mem_cx_256,contw
+	call bn_submod_256		/* x=n6^2-n5^2*n7 */
+	arg mem_cx_256,contr
+	arg mem_t7_256,contw
+	call memcpy32
+	arg mem_t7_256,rega
+	call bn_lshiftmod_256		/* t7=2*x */
+	arg mem_t3_256,rega
+	arg mem_t7_256,regb
+	arg mem_t3_256,contw
+	call bn_submod_256		/* t3=n9 */
+	arg mem_t3_256,rega
+	arg mem_t2_256,regb
+	arg mem_t2_256,contw
+	call bn_mulmod_256		/* t2=n9*n6 */
+	arg mem_t2_256,rega
+	arg mem_t1_256,regb
+	arg mem_cy_256,contw
+	call bn_submod_256	
+	arg mem_cy_256,rega
+	arg mem_p_256,regb
+	arg mem_cy_256,contw
+	force 0,regc
+	fetch 1,mem_cy_256
+	isolate1 0,pdata
+	call bn_add_256,true
+	copy regc,alarm
+	arg mem_cy_256,rega
+	call bn_rshift_256
+	fetch 1,mem_cy5_256
+	isolate1 0,alarm
+	setflag true,7,pdata
+	store 1,mem_cy5_256
+	rtn	
+
+bn_invmod_256:
+	copy contw,timeup					 
+	arg mem_tmp0_256,contw			 
+	call clear_mem_256
+	force 0,pdata
+//	store 4,mem_tmp52
+	store 4,mem_t2_256
+	jam 1,mem_tmp0_256      //y1
+	arg mem_tmp1_256,contw	//y2			 
+	call clear_mem_512      
+	arg mem_p_256,contr
+	arg mem_tmp2_256,contw		//j		 
+	call memcpy32
+	copy rega,contr
+	arg mem_tmp3_256,contw		//i		 
+	call memcpy32
+	
+//	arg mem_tmp22,rega
+//	arg mem_tmp32,regb
+//	call p_bn_bigeq_256
+//	branch assert,positive
+bn_invmod_256_2:	
+	arg mem_tmp3_256,contr
+	call bn_eq_zero_256
+	branch bn_invmod_256_0,blank
+//call ice_break    	
+//fetch 1,0x4ffe
+//increase 1,pdata
+//store 1,0x4ffe
+	arg mem_tmp3_256,rega
+	arg mem_tmp0_256,regb
+	call bn_rshifteven_256
+	arg mem_tmp2_256,rega
+	arg mem_tmp1_256,regb
+	call bn_rshifteven_256
+	
+	arg mem_tmp3_256,rega
+	arg mem_tmp2_256,regb
+	call bn_bigeq_256
+	branch bn_invmod_256_1,positive
+	arg mem_tmp2_256,rega
+	arg mem_tmp3_256,regb
+	copy rega,contw
+	call bn_sub_256
+	arg mem_tmp0_256,rega
+	arg mem_tmp1_256,regb
+	copy regb,contw
+	call bn_add_256
+	ifetch 1,rega
+	iadd regc,regc
+	ifetch 1,regb
+	iadd regc,pdata
+	istore 1,regb
+	branch bn_invmod_256_2
+bn_invmod_256_1:
+	arg mem_tmp3_256,rega
+	arg mem_tmp2_256,regb
+	copy rega,contw
+	call bn_sub_256
+	arg mem_tmp1_256,rega
+	arg mem_tmp0_256,regb
+	copy regb,contw
+	call bn_add_256
+	ifetch 1,rega
+	iadd regc,regc
+	ifetch 1,regb
+	iadd regc,pdata
+	istore 1,regb
+	branch bn_invmod_256_2
+bn_invmod_256_0:
+//call ice_break
+	arg mem_tmp1_256,rega
+	copy timeup,contw
+	call  bn_p256mod
+//call ice_break
+	arg mem_p_256,rega
+	copy timeup,regb
+	copy timeup,contw
+	branch bn_submod_256
+
+
+bn_mulmod_256:
+	copy contw,timeup					/* save result ptr */
+	
+	force 0,regext_index
+	
+	arg mem_tmp1_256,contw
+	call clear_mem_512
+	arg mem_regext,contw
+	call clear_mem_512
+//	jam 0,mem_regext_index
+
+//	arg mem_tmp12,contw
+	copy rega,contr
+//	force 0,regext_index
+	jam 0,mem_regext
+	setarg 0
+	call bn_load_mem
+	copy regb,contr
+	call bn_load_256
+//	force 0,regb
+//	jam 0,mem_regb
+	force 0,queue
+	arg mem_tmp1_256,contw	
+bn_mulmod_256_1:	
+//	copy regb,pdata
+//	store 1,
+	arg mem_regext,temp
+	copy queue,regb
+	lshift2 regb,pdata
+//	lshift4 pdata,pdata
+	iadd temp,regb	
+	force 0,temp
+	force 0,regc
+bn_mulmod_256_0:
+//	copy contw,pdata
+//	store 2,mem_contw
+//call ice_break
+//	copy pdata,contw
+	ifetch 4,contw					/* d[i+j] */
+	iforce rega
+//	copy regb,regext_index
+//	deposit regext
+	ifetch 4,regb
+	copy regc,regext_index
+	imul32 regext,pdata
+	iadd rega,pdata					/* uv = a[i]*b[j] + d[i+j] */
+	iadd temp,pdata					/* uv += u */
+	istore 4,contw					/* ->d[i+j] */
+	rshift32 pdata,temp				/* temp = u = uv >> 32 */
+	increase 1,regc
+	compare 8,regc,0xff
+	nbranch bn_mulmod_256_0,true
+//call ice_break
+	deposit temp
+	istore 4,contw					/* d[i + 12] = u */
+	increase -32,contw
+//	fetch 1,mem_regb
+//	copy pdata,regb
+	increase 1,queue
+	compare 8,queue,0xff
+	nbranch bn_mulmod_256_1,true
+	arg mem_tmp1_256,rega
+	copy timeup,contw
+	branch bn_p256mod
+
+bn_p256mod:
+	bpatch patch1e_2,mem_patch1e
+	copy contw,timeup				/* save result ptr */
+	copy rega,alarm				/* temp save rega */
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	call memset0_4	
+	istore 8,contw
+	add rega,44,contr
+	call memcpy8
+	call memcpy12
+	copy regb,rega
+	call  bn_lshiftmod_256 //2S1
+	arg mem_tmp2_256,regb
+	copy alarm,rega   
+	copy timeup,contw
+	call bn_addmod_256 //T+2S1
+//call ice_break	
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	call memset0_4	
+	istore 8,contw
+	add alarm,48,contr
+	call memcpy16
+	call memset0_4	
+	copy regb,rega
+	call  bn_lshiftmod_256 //2S2
+//call ice_break	
+//	arg 0,regb
+
+	arg mem_tmp2_256,regb
+	copy timeup,rega   
+	copy rega,contw	
+	call bn_addmod_256  //+2S2
+//call ice_break	
+//	arg 0,regb
+		
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	add alarm,32,contr
+	call memcpy12
+	call memset0_4	
+	istore 8,contw
+	add alarm,56,contr
+	call memcpy8
+	copy timeup,rega
+	copy rega,contw
+	call bn_addmod_256 //+S3
+//call ice_break	
+//	arg 0,regb
+
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	add alarm,36,contr
+	call memcpy12
+	add alarm,52,contr	
+	call memcpy12
+	add alarm,52,contr
+	call memcpy4
+	add alarm,32,contr
+	call memcpy4
+	copy timeup,rega
+	copy rega,contw
+	call bn_addmod_256 //+S4	
+//call ice_break	
+//	arg 1,regb
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	add alarm,44,contr
+	call memcpy12
+	call memset0_4	
+	istore 8,contw
+	add alarm,32,contr
+	call memcpy4
+	add alarm,40,contr
+	call memcpy4
+	copy timeup,rega
+	copy rega,contw
+	call bn_submod_256 //-D1	
+//call ice_break	
+//	arg 2,regb
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	add alarm,48,contr
+	call memcpy8
+	call memcpy8
+	force 0,pdata
+	istore 8,contw
+	add alarm,36,contr
+	call memcpy4
+	add alarm,44,contr
+	call memcpy4
+	copy timeup,rega
+	copy rega,contw
+	call bn_submod_256 //-D2	
+//call ice_break	
+//	arg 3,regb
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	add alarm,52,contr
+	call memcpy12
+	add alarm,32,contr
+	call memcpy12
+	call memset0_4	
+	add alarm,48,contr
+	call memcpy4
+	copy timeup,rega
+	copy rega,contw
+	call bn_submod_256 //-D3
+//call ice_break	
+//	arg 4,regb
+	arg mem_tmp2_256,regb
+	copy regb,contw
+	add alarm,56,contr
+	call memcpy8
+	call memset0_4	
+	add alarm,36,contr
+	call memcpy12
+	call memset0_4	
+	add alarm,52,contr
+	call memcpy4
+	copy timeup,rega
+	copy rega,contw
+	branch  bn_submod_256 //-D4	
+
+
+bn_load_mem:
+	force 32,loopcnt
+	arg mem_regext,contw
+	iadd contw,contw
+	branch memcpy
+
+bn_load_256:
+	force 8,loopcnt
+	branch bn_load_0
+
+bn_sqrmod_256:
+	copy rega,regb
+	branch bn_mulmod_256
+
+bn_add_256:
+	force 8,loopcnt
+ 	branch bn_add+1
+
+bn_addmod_256:
+	call bn_add_256
+	copy contw,rega
+	branch bn_lshiftmod_ismod_256
+
+bn_lshiftmod_256:
+	call bn_lshift_256
+bn_lshiftmod_ismod_256:	
+	isolate1 0,regc
+	branch bn_lshiftmod_p_256,true
+	arg mem_p_256,regb
+	copy rega,regc
+	increase -32,rega
+	call bn_bigeq_256
+	nrtn positive
+	copy regc,rega
+	branch sub_p2_256
+	
+bn_lshiftmod_p_256:
+	call sub_p2_256
+//	nrtn true
+	copy rega,regc
+	increase -32,rega
+	arg mem_p_256,regb
+	call bn_bigeq_256
+	nrtn positive
+	copy regc,rega
+	branch sub_p2_256
+		
+	
+sub_p2_256:
+	increase -32,rega
+	arg mem_p_256,regb
+	copy rega,contw
+	branch bn_sub_256
+	
+
+
+	
+bn_submod_256:
+	call bn_sub_256
+//	isolate1 0,regc
+	branch  bn_submod_256_np,true
+//	copy rega,regc
+//	increase -32,rega
+	add contw,-32,rega
+	arg mem_p_256,regb
+	call bn_bigeq_256
+	nrtn positive
+	arg mem_p_256,regb
+	add contw,-32,rega
+//	copy regc,rega
+	copy rega,contw
+	branch  bn_sub_256
+bn_submod_256_np:	
+	add contw,-32,rega
+	arg mem_p_256,regb
+	copy rega,contw
+	call bn_add_256
+//	isolate1 0,regc
+	rtn true
+	add contw,-32,rega
+	arg mem_p_256,regb
+	copy rega,contw
+	branch bn_add_256	
+
+
+ 
+bn_sub_256:
+	force 8,loopcnt
+	branch bn_sub+1
+
+bn_rshift_256:
+	force 8,loopcnt
+	increase 28,rega
+	branch bn_rshift
+
+bn_lshift_256:
+	force 8,loopcnt
+	force 0,regc
+	branch bn_lshift_0
+
+bn_bigeq_256:
+	force 8,loopcnt
+	increase 28,rega
+	increase 28,regb
+	branch bn_bigeq_0
+
+
+bn_eq_zero_256:
+	ifetch 8,contr
+	nrtn blank
+	branch bn_eq_zero
+
+
+
+	
+bn_rshifteven_256:
+	copy rega,alarm
+bn_rshifteven_256_1:
+	copy alarm,rega
+	ifetch 1,rega
+	isolate1 0,pdata
+	rtn true
+	call bn_rshift_256
+	ifetch 1,regb
+	isolate0 0,pdata
+	branch bn_rshifteven_256_0,true
+	arg mem_p_256,rega
+	copy regb,contw
+	call bn_add_256
+	ifetch 1,regb
+	iadd regc,pdata
+	istore 1,regb						 
+	increase -32,regb
+bn_rshifteven_256_0:
+	add regb,32,rega
+	force 9,loopcnt
+	call bn_rshift
+	branch bn_rshifteven_256_1		
+
+endif
+

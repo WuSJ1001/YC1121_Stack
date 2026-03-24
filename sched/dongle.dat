@@ -1,0 +1,69 @@
+
+mem_device_option:04
+mem_ui_button_gpio:ff
+
+
+#efuse size:28 bytes
+
+#sys config
+#bit7:enable 16M xtal#0:24M#1:16M
+#bit6:enable new channel map
+#bit5:enable eeprom
+#bit4:enable kb icon
+#bit3:enable 24g 2M
+#bit2-0:retention
+mem_dg_sys_config:00  #24M
+
+#24g new process #default value 00,if need new process set value 01
+mem_24g_disable_fec1:00
+mem_dg_24g_tx_power_default:06	#6dBm
+
+#usb config
+#mem_dg_usb_vid_pid:
+#00 #disable
+#mouse only#auto pair
+#51 31#VID
+#20 10#PID
+#mouse & keyboard
+#51 31#VID
+#20 30#PID
+#mem_dg_usb_tx_interval:00
+#mem_dg_usb_device_name:
+#'123456
+
+
+#rf config
+mem_24g_lap:36 26 10 30 12 23#low 4B used for 24g rxaddr
+#mem_24g_tx_phy:01#0x01:1M/0x02:2M/0x04:S2/0x84:S8
+#mem_24g_rx_phy:01#0x01:1M/0x02:2M/0x04:S2/0x84:S8
+#mem_24g_no_ack:00#no ack
+mem_24g_rx_window:78 69#rx
+mem_24g_hop_interval:1e
+#mem_24g_ackpayload_enable:00#ack payload enable
+#mem_24g_ch_map1:00 13 2c 42
+#mem_24g_ch_map2:06 15 36 48
+#mem_24g_ch_map3:0f 1a 3a 4c
+#mem_24g_ch_map4:11 23 31 4d
+#mem_24g_pair_switch:00
+mem_24g_pair_mode:00
+#mem_24g_pair_ch:4e
+#mem_24g_pair_tx_power:85
+#mem_24g_pair_addr:20 15 10 05
+#mem_24g_ch_map_update:00
+#mem_24g_ch_update_map1
+#mem_24g_ch_update_map2
+#mem_24g_ch_update_map3
+#mem_24g_ch_update_map4
+
+#mem_rssi_buff_index:ff
+#mem_rssi_noise_buffer_ptr:mem_dg_rssi_noise_buffer
+#mem_rssi_noise_self_buffer_ptr:mem_dg_rssi_noise_dg_buffer
+#mem_rssi_noise_device1_buffer_ptr:mem_dg_rssi_noise_ms_buffer
+#mem_rssi_noise_device2_buffer_ptr:mem_dg_rssi_noise_kb_buffer
+
+
+
+#mem_rf_debug_rx_gpio:8c
+#mem_rf_debug_tx_gpio:8b
+
+

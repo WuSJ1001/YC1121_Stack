@@ -1,0 +1,135 @@
+
+memalloc usb_dongle(
+256 mem_dg_rssi_noise_buffer
+256 mem_dg_rssi_noise_dg_buffer
+256 mem_dg_rssi_noise_ms_buffer
+256 mem_dg_rssi_noise_kb_buffer
+
+)
+
+
+xmemalloc g24_rx_dongle(
+1 mem_dg_kb_bind_flag
+8 mem_dg_kb_data_sta_data
+8 mem_dg_kb_data_last_data
+3 mem_dg_kb_multikey_sta_data
+3 mem_dg_kb_multikey_last_data
+3 mem_dg_kb_system_sta_data
+3 mem_dg_kb_system_last_data
+1 mem_dg_kb_blank_data_enable
+1 mem_dg_kb_mul_blank_data_enable
+1 mem_dg_kb_system_crtl_blank_data_enable
+1 mem_dg_ms_blank_data_enable
+
+1 mem_dg_sys_config
+9 mem_dg_usb_vid_pid
+1 mem_dg_usb_tx_interval
+30 mem_dg_usb_device_name
+1 mem_dg_kb_bind_success
+1 mem_dg_pc_sleep_flag
+
+1 mem_dg_24g_tx_power_default
+)
+
+
+//otp address offset
+(
+0x5A DONGLE_KB_BIND_SUCCESS
+0x1fdf DONGLE_KB_BIND_EFUSE_OFFECT
+)
+
+(
+5 WORK_MODE_DELAY
+7 BIND_MODE_DELAY
+)
+
+(
+0 DONGLE_WORK	   		//connect mode normal
+1 DONGLE_BIND			//code pair mode
+2 DONGLE_TEST			//test mode
+3 DONGLE_CODE			//PC_application
+4 DONGLE_PCBA			//PCBA_TEST
+5 DONGLE_DEBUG
+6 DONGLE_MODE_MAX
+7 DONGLE_SEARCH
+0 CLEAR_INIT
+)
+
+
+(
+0xa0 COMMAND_MODE     //BYTE 0
+0x81 COM_MODE_BIND	//BYTE 1
+0x82 COM_MODE_TEST	//BYTE 1
+)
+(
+0xa1 COMMAND_BIND		//BYTE 0
+0x01 COM_BIND_GET		//1
+0x84 COM_BIND_EXIT		//1
+0xa7 COM_READ_MODE		//1
+)
+(
+0xa2 COMMAND_TEST	//BYTE 0
+0x81 COM_TEST_SC		//	进入单载波
+0x82 COM_TEST_CD		// fcc测试
+0x83 COM_TEST_DAT		// 数据测试
+0x84 COM_TEST_LOW_CH  //低频点
+0x85 COM_TEST_MID_CH	//中频点
+0x86 COM_TEST_HIG_CH	//高频点
+0x87 COM_TEST_SW_HIG	//自动切换频点为高 1mhz
+0x88 COIM_TEST_SW_LOW	//自动切换频点为低 1mhz
+0x89 COM_TEST_SW_STOP	//停止自动切换频点
+0x8a COM_TEST_POW_5		//设置输出功率5dbm
+0x8b COM_TEST_POW_0		//0dbm
+0x8c COM_TEST_POW_N5		//-5dbm
+0x8d COM_TEST_POW_N10		//-10dbm
+0x8e COM_TEST_EXIT			//退出测试模式
+)
+(
+0xa6 COMMAND_CURRENT_PROJECT
+0xa7 COMMAND_CURRENT_MODE
+0xa9 COMMAND_CURRENT_FW_VERSION
+0xb0 COMMAND_USER_DEFINED		//user defined cmd
+)
+
+(
+0x15 PRODUCT_ID
+0 FW_VERSION0
+0 FW_VERSION1
+1 FW_VERSION2
+7 FW_VERSION3
+)
+
+(
+640 TIMER_NODATA_DELAY	//200ms
+
+384 TIMER_MS_BLANK_DELAY
+
+384 TIMER_KB_MUL_BLANK_DELAY
+
+384 TIMER_KB_SYS_CRTL_BLANK_DELAY
+
+384 TIMER_KB_BLANK_DELAY
+)
+
+(
+0 KB_NORMAL_REPORT_ID
+1 MS_REPORT_ID
+2 KB_SYSTEM_CONCTRL_REPORT_ID
+3 KB_MULTIKEY_REPORT_ID
+)
+
+
+(
+0x01 BIND_ACKPAYLOAD
+0x03 KB_LED_ACKPAYLOAD
+)
+
+//mem_dg_sys_config
+(
+7 DG_ENABLE_XTAL_24M
+6 DG_ENABLE_NEW_CHMAP
+5 DG_ENABLE_EEPROM
+4 DG_ENABLE_KB_ICON
+3 DG_ENABLE_24G_2M
+)
+

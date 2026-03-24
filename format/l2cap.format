@@ -1,0 +1,40 @@
+
+
+
+xmemalloc(
+0 mem_l2cap_xmem_start
+
+//*******************L2CAP malloc********************//
+1 mem_used_map
+0 mem_tx_fifo0
+1 mem_tx_fifo0_map
+2 mem_tx_fifo0_ptr
+0 mem_tx_fifo1
+1 mem_tx_fifo1_map
+2 mem_tx_fifo1_ptr
+0 mem_tx_fifo2
+1 mem_tx_fifo2_map
+2 mem_tx_fifo2_ptr
+0 mem_tx_fifo3
+1 mem_tx_fifo3_map
+2 mem_tx_fifo3_ptr
+0 mem_tx_fifo_end
+
+2 mem_l2cap_lpm_txbuf_ptr
+0 mem_l2cap_xmem_end
+
+)
+
+
+//mem_l2cap_lpm_txbuf
+(
+256 l2cap_lpm_txbuf_len
+)
+
+(
+4 L2CAP_TX_FIFO_SIZE
+8 L2CAP_TX_BUFF_CNT
+
+)
+
+

@@ -1,0 +1,339 @@
+
+le_parse_ll:
+	fetch 1,mem_le_rxbuf_data_ll_opcode
+	beq LL_CONNECTION_UPDATE_IND,le_parse_connection_update_ind
+	beq LL_CHANNEL_MAP_IND,le_parse_channel_map_ind
+	beq LL_TERMINATE_IND,le_parse_terminate_ind
+	beq LL_ENC_REQ,le_parse_enc_req
+	beq LL_ENC_RSP,le_parse_enc_rsp
+	beq LL_START_ENC_REQ,le_parse_start_enc_req
+	beq LL_START_ENC_RSP,le_parse_start_enc_rsp
+	beq LL_UNKNOWN_RSP,le_parse_unknown_rsp
+	beq LL_FEATURE_REQ,le_parse_feature_req
+	beq LL_FEATURE_RSP,le_parse_feature_rsp
+	beq LL_PAUSE_ENC_REQ,le_parse_pause_enc_req
+	beq LL_PAUSE_ENC_RSP,le_parse_pause_enc_rsp
+	beq LL_VERSION_IND,le_parse_version_ind
+	beq LL_REJECT_IND,le_parse_reject_ind
+	beq LL_PING_REQ,le_parse_ping_req
+	beq LL_PING_RSP,le_parse_ping_rsp
+	beq LL_LENGTH_REQ,le_parse_length_req
+	beq LL_LENGTH_RSP,le_parse_length_rsp
+	beq LL_PHY_REQ,le_parse_phy_req
+	beq LL_PHY_UPDATE_IND,le_parse_phy_update_ind
+	fetchr regc,1,mem_le_rxbuf_data_ll_opcode
+	branch le_send_unknown_rsp
+
+
+//LL Opcode:0x00
+le_parse_connection_update_ind:
+	ifetch 9,contr
+	store 9,mem_le_new_param
+	ifetch 2,contr
+	store 2,mem_le_instant
+	fetch 1,mem_le_state
+	set1 lestate_update_param,pdata
+	store 1,mem_le_state
+	rtn
+
+
+//LL Opcode:0x01
+le_parse_channel_map_ind:
+	ifetch 5,contr
+	store 5,mem_le_new_map
+	ifetch 2,contr
+	store 2,mem_le_instant
+le_update_map_enable:
+	fetch 1,mem_le_state
+	set1 lestate_update_map,pdata
+	store 1,mem_le_state
+	rtn
+
+
+//LL Opcode:0x02
+le_parse_terminate_ind:
+	setarg 20 // 200ms
+	store 2,mem_le_superto
+	store 2,mem_le_init_superto
+	rtn
+
+
+//LL Opcode:0x03
+le_parse_enc_req:
+	ifetch 8,contr
+	store 8,mem_le_rand
+	ifetch 2,contr
+	store 2,mem_le_ediv
+	ifetch 8,contr
+	store 8,mem_le_skdm
+	ifetch 4,contr
+	store 4,mem_ccm_ivm
+	call le_send_enc_rsp
+	bpatchx patch2d_2,mem_patch2d
+	fetch 1,mem_le_pairing_state
+	beq FLAG_LE_PAIRING_AFTER_AUTH,le_parse_enc_req_after_auth
+	fetch 1,mem_le_configuration
+	bbit1  BIT_BLE_PAIRING_FIXED_LTK,le_parse_enc_req_fixed_ltk
+	fetch 1,mem_nv_data_number
+	ncall load_device_list_mode_4,blank
+	fetch 1,mem_ltk_exists
+	beq 0,le_ltk_lost
+le_parse_enc_req_after_auth:
+	jam FLAG_LE_RCV_ENC_START,mem_le_enc_state
+	call  le_send_start_enc_req
+	branch generate_sk
+le_parse_enc_req_fixed_ltk:
+	jam 1,mem_ltk_exists
+	arg mem_le_fixed_ltk,contr
+	arg mem_le_ltk,contw
+	call memcpy16
+	branch le_parse_enc_req_after_auth
+	
+le_ltk_lost:
+	jam FLAG_LE_ENC_NULL,mem_le_enc_state
+	jam FLAG_LE_ENC_NULL,mem_le_pairing_state
+	jam BT_EVT_LE_LTK_LOST,mem_fifo_temp
+	branch ui_ipc_send_event
+
+//LL Opcode:0x04
+le_parse_enc_rsp:
+	ifetch 8,contr
+	store 8,mem_le_skds
+	ifetch 4,contr
+	store 4,mem_ccm_ivs
+	branch generate_sk
+
+
+//LL Opcode:0x05
+le_parse_start_enc_req:
+	fetch 1,mem_le_state
+	set1 lestate_encryption,pdata
+	store 1,mem_le_state
+	rtn
+
+//LL Opcode:0x06
+le_parse_start_enc_rsp:
+	rtn master
+	jam BT_EVT_LE_START_ENC,mem_fifo_temp
+	call ui_ipc_send_event	
+	jam FLAG_LE_SEND_START_ENC_RSP,mem_le_enc_state
+	branch le_send_start_enc_rsp
+
+
+//LL Opcode:0x07
+le_parse_unknown_rsp:
+	rtn
+
+
+//LL Opcode:0x08
+le_parse_feature_req:
+	branch le_send_feature_rsp
+
+
+//LL Opcode:0x09
+le_parse_feature_rsp:
+	rtn
+
+
+//LL Opcode:0x0a
+le_parse_pause_enc_req:
+	jam FLAG_LE_ENC_PAUSE,mem_le_enc_state
+	call le_send_pause_enc_rsp	
+	jam BT_EVT_LE_PAUSE_ENC,mem_fifo_temp
+	branch ui_ipc_send_event	
+
+
+//LL Opcode:0x0b
+le_parse_pause_enc_rsp:
+	rtn
+
+
+//LL Opcode:0x0c
+le_parse_version_ind:
+	rtn master
+	branch le_send_version_ind
+
+
+//LL Opcode:0x0d
+le_parse_reject_ind:
+	rtn
+
+
+//LL Opcode:0x13
+le_parse_ping_req:
+	branch le_send_ping_rsp
+
+
+//LL Opcode:0x14
+le_parse_ping_rsp:
+	rtn
+
+
+le_parse_length_req:
+	call le_parse_length_rsp
+	branch le_send_data_length_res
+
+le_parse_length_rsp:
+	ifetch 8,contr
+	store 8,mem_remote_rx_max_octets
+	fetch 2,mem_remote_rx_max_octets
+	fetcht 2,mem_local_tx_max_octets
+	call not_greater_than
+	store 2,mem_remote_rx_max_octets
+	
+	fetch 2,mem_remote_tx_max_octets
+	fetcht 2,mem_local_rx_max_octets
+	call not_greater_than
+	store 2,mem_remote_tx_max_octets
+	rtn
+
+
+//LL Opcode:0x16
+le_parse_phy_req:
+	branch le_send_phy_rsp
+
+
+//LL Opcode:0x18
+le_parse_phy_update_ind:
+	ifetch 2,contr
+	store 2,mem_le_new_m2s_phy
+	ifetch 2,contr
+	store 2,mem_le_instant
+	rtn blank
+	fetch 1,mem_le_state
+	set1 lestate_update_phy,pdata
+	store 1,mem_le_state	
+	rtn
+
+
+///////////////////send ll packet//////////////
+//LL Opcode:0x02
+le_send_terminate_ind_user_terminated:
+	arg ERROR_REMOTE_USER_TERMINATED_CONNECTION,regc
+
+//regc:The ErrorCode field shall be set to inform the remote device why the connection is about to be terminated.
+le_send_terminate_ind:
+	arg 2,rega
+	arg LL_TERMINATE_IND,regb
+	call le_fifo_malloc_tx_ll
+	copy regc,pdata
+	istore 1,contw
+	rtn
+
+
+//LL Opcode:0x04
+le_send_enc_rsp:
+	arg mem_le_skds,contw
+	force 8,loopcnt
+	call generate_random_loop
+	arg mem_ccm_ivs,contw
+	force 4,loopcnt
+	call generate_random_loop
+	arg 13,rega
+	arg LL_ENC_RSP,regb
+	call le_fifo_malloc_tx_ll
+	fetch 8,mem_le_skds
+	istore 8,contw
+	fetch 4,mem_ccm_ivs
+	istore 4,contw
+	rtn
+
+
+//LL Opcode:0x05
+le_send_start_enc_req:
+	jam FLAG_LE_SEND_START_ENC_REQ,mem_le_enc_state
+	arg LL_START_ENC_REQ,regb
+	branch le_send_ll_one_lenth
+
+
+//LL Opcode:0x06
+le_send_start_enc_rsp:
+	arg LL_START_ENC_RSP,regb
+	branch le_send_ll_one_lenth
+
+
+//LL Opcode:0x07
+//input:regc is receive ll opcode
+le_send_unknown_rsp:
+	arg 2,rega
+	arg LL_UNKNOWN_RSP,regb
+	call le_fifo_malloc_tx_ll
+	istorer regc,1,contw
+	rtn	
+
+
+//LL Opcode:0x09
+le_send_feature_rsp:
+	arg 9,rega
+	arg LL_FEATURE_RSP,regb
+	call le_fifo_malloc_tx_ll
+	fetch 8,mem_le_local_feature
+	or pdata,FUN_LL_FEATURE_LE_ENCRYPTION,pdata
+	istore 8,contw
+	rtn
+
+
+//LL Opcode:0x0B
+le_send_pause_enc_rsp:
+	arg LL_PAUSE_ENC_RSP,regb
+	branch le_send_ll_one_lenth
+
+
+//LL Opcode:0x0C
+le_send_version_ind:
+	arg 6,rega
+	arg LL_VERSION_IND,regb
+	call le_fifo_malloc_tx_ll
+	fetch 5,mem_version
+	istore 5,contw
+	rtn
+
+//LL Opcode:0x0D
+le_send_reject_ind:
+	arg 2,rega
+	arg LL_REJECT_IND,regb
+	call le_fifo_malloc_tx_ll
+	setarg LE_ERR_PIN_OR_KEY_MISSING
+	istore 1,contw
+	rtn		
+
+
+//LL Opcode:0x13
+le_send_ping_rsp:
+	arg LL_PING_RSP,regb
+	branch le_send_ll_one_lenth
+	
+le_send_data_length_req:
+	arg LL_LENGTH_REQ,regb
+	branch le_send_data_length
+
+le_send_data_length_res:
+	arg LL_LENGTH_RSP,regb
+le_send_data_length:
+	arg 9,rega
+	call le_fifo_malloc_tx_ll
+	fetch 8,mem_local_rx_max_octets
+	istore 8,contw
+	rtn
+
+
+//LL Opcode:0x17
+le_send_phy_rsp:
+	arg 3,rega
+	arg LL_PHY_RSP,regb
+	call le_fifo_malloc_tx_ll
+	fetch 1,mem_le_tx_phys
+	and pdata,0x07,pdata
+	istore 1,contw
+	fetch 1,mem_le_rx_phys
+	and pdata,0x07,pdata
+	istore 1,contw
+	rtn		
+
+
+//regb:ll opcode
+le_send_ll_one_lenth:
+	arg 1,rega
+	branch le_fifo_malloc_tx_ll
+
+

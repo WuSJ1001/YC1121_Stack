@@ -1,0 +1,31 @@
+
+
+mem_flippen_no_data_timeout:14 00 #2s
+mem_flippen_start_pair_no_data_timeout:36 01 #31s
+mem_key_longpress_timer_init:08 07	#3min
+
+
+mem_key_press_data:
+00 00 00 4B 00 00 00 00 00	#Page Up
+00 00 00 4E 00 00 00 00 00	#Page Down	
+00 02 00 3E 00 00 00 00 00	#Shift+F5
+00 00 00 29 00 00 00 00 00	#Esc
+00 00 00 05 00 00 00 00 00	#B
+00 00 00 2B 00 00 00 00 00	#tab
+00 00 00 28 00 00 00 00 00	#enter
+00 04 00 2B 00 00 00 00 00	#alt tab
+00 04 00 3D 00 00 00 00 00	#alt f4
+03 CD 00 00 00 00 00 00 00	#play/pause
+03 E9 00 00 00 00 00 00 00	#vol up
+03 EA 00 00 00 00 00 00 00	#vol down
+
+
+mem_standard_key_release:
+00 00 00 00 00 00 00 00 00
+mem_system_ctrl_key_release:
+02 00 00 00 00 00 00 00 00
+mem_media_key_release:
+03 00 00 00 00 00 00 00 00
+
+
+

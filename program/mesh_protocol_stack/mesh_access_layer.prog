@@ -1,0 +1,188 @@
+
+/*
+	mesh协议中access layer
+	主要是负责mesh中access layer数据的解析
+*/
+/*
+	access layer解析指令集
+*/
+
+//input:alarm is upper transport access ptr
+ali_mesh_access_layer_resolve_message:
+	fetch 1,mem_ccm_data_len
+	store 1,mem_mesh_receive_model_message_payload_len
+	copy alarm,contr
+	call memcpy24
+ifdef mesh_debug_log
+	call logging_tx_info_receive_access_message
+endif
+	fetch 2,mem_mesh_cb_receive_access_message
+	branch callback_func
+
+ali_mesh_access_layer_check_access_message_opcode:
+	jam MESH_RECEIVE_NEW_MESSAGE_TIMER,mem_mesh_upper_receive_new_message_timer
+	call ali_mesh_app_recv_new_mesh_pkt
+
+	
+	fetch 1,mem_mesh_receive_model_message_payload_opcode
+	beq MESH_MESSAGE_OPCODE_CONFIG_APPKEY_ADD,ali_mesh_access_layer_message_opcode_config_AppKey_Add
+	beq MESH_CONFIGURATION_AND_HEALTH_MESSAGE_OPCODE_HEADER,ali_mesh_access_layer_config_or_health_message_opcode
+	beq MESH_MODULE_MESSAGE_OPCODE_HEADER,ali_mesh_model_layer_check_model_message_opcode
+	beq VENDOR_MESSAGE_ATTR_SET,ali_mesh_ali_vendor_message_attribute_set
+	beq VENDOR_MESSAGE_ATTR_GET,ali_mesh_ali_vendor_message_opcode_attr_get
+	beq VENDOR_MESSAGE_ATTR_SET_UNACKNOWLEDGED,ali_mesh_ali_vendor_message_attribute_set
+	beq VENDOR_MESSAGE_ATTR_CONFIRMATION,ali_mesh_ali_vendor_message_opcode_attr_confrimation
+	rtn
+
+/*
+	接收到config AppKey Add指令
+*/
+
+ali_mesh_access_layer_message_opcode_config_AppKey_Add:
+	arg mem_mesh_receive_application_key,contr
+	arg mem_mesh_application_key,contw
+	call memcpy16
+	jam PAIRED_STATUS,mem_mesh_provisioned_flag
+	call ali_mesh_encrypt_base_function_k3
+	call ali_mesh_encrypt_base_function_k4
+	call ali_mesh_access_layer_finish_pairing_init_subscription_list
+	call ali_mesh_accesss_layer_check_message_type
+	call ali_mesh_access_layer_send_config_AppKey_status
+	jam PAIRED_STATUS,mem_mesh_provisioned_flag
+	fetch 2,mem_mesh_cb_receive_config_appkey_add
+	branch callback_func
+
+ali_mesh_access_layer_recv_cfg_appkey_add_cb:
+	setarg 0
+	store 2,mem_mesh_fast_pairing_timer	//clear prov timer
+//	jam APPKEY_ADD_TIMEOUT, mem_mesh_recv_cfg_appkey_add_timer
+	random pdata
+	and pdata,0x1f,pdata
+	add pdata,30,pdata
+	store 1,mem_mesh_report_full_attribute_timer
+	add pdata,5,pdata
+	store 1,mem_mesh_report_power_on_timer
+	call mesh_clear_timer_data	
+	branch mesh_receive_config_appkey_add_cb
+
+ali_mesh_accesss_layer_check_message_type:
+	fetch 1,mem_mesh_network_packet_type
+	jam RECEIVED_CONFIG_APPKEY_ADD,mem_mesh_provisioned_flag		//中间状态 APP配网时，需要回复数量多
+	rtneq MESH_MESSAGE_APP
+	jam PAIRED_STATUS,mem_mesh_provisioned_flag					//tmall配网不需要重传多次
+	rtn
+
+ali_mesh_access_layer_send_config_AppKey_status:
+	setarg MESH_CONFIGURATION_AND_HEALTH_MESSAGE_OPCODE_HEADER
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_MESSAGE_OPCODE_CONFIG_CONFIG_MODEL_PUBLICATION_SET
+	istore 1,contw
+	setarg STATUS_CODE_SUCCESS
+	istore 1,contw
+	fetch 3,mem_mesh_NETKeyindex_and_APPKeyindex
+	istore 3,contw
+	jam 6,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+
+ali_mesh_access_layer_finish_pairing_init_subscription_list:
+	fetch 2,mem_mesh_core_feature
+	rtnbit1 MESH_FEATURE_DISABLE_SUBSCRIPTION
+	call mesh_get_element_info_config
+ali_mesh_access_layer_finish_pairing_init_subscription_list_loop:
+	add rega,ELEMENT_DEVICE_SUBSCRIPTION_LABEL,regc
+	setarg -1
+	istore SUBSCRIPTION_MAX_COUNT,regc
+	istore SUBSCRIPTION_MAX_COUNT,contw
+	ifetch 2,rega		//read group address
+	istore 2,regc
+	copy regb,pdata
+	iadd rega,rega
+	loop ali_mesh_access_layer_finish_pairing_init_subscription_list_loop
+	fetch 2,mem_mesh_cb_subscriptuion_list_changed
+	branch callback_func
+
+
+/*
+	generic onoff status
+*/
+ali_mesh_access_layer_send_generic_onoff_status:
+	setarg MESH_MODULE_MESSAGE_OPCODE_HEADER
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_MODULE_MESSAGE_OPCODE_GENERIC_ONOFF_STATUS_NO_HEAD
+	istore 1,contw
+	fetch 1,mem_mesh_generic_onoff_set_payload_OnOff
+	istore 1,contw
+	jam 3,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+
+/*
+	light lightness status
+*/
+ali_mesh_access_layer_send_light_lightness_status:
+	setarg MESH_MODULE_MESSAGE_OPCODE_HEADER
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_MODULE_MESSAGE_OPCODE_LIGHT_LIGHTNESS_STATUS_NO_HEAD
+	istore 1,contw
+	fetch 2,mem_mesh_light_lightness_set_payload_lightness
+	istore 2,contw
+	jam 4,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+
+ali_mesh_access_layer_send_light_ctl_stauts:
+	setarg MESH_MODULE_MESSAGE_OPCODE_HEADER
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_MODULE_MESSAGE_OPCODE_LIGHT_CTL_STATUS_NO_HEAD
+	istore 1,contw
+	fetch 4,mem_mesh_CTL_Lightness
+	istore 4,contw
+	jam 6,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+
+
+ali_mesh_access_layer_send_scene_status:
+	setarg MESH_MODULE_MESSAGE_OPCODE_SCENE_STATUS
+	store 1,mem_mesh_access_layer_payload
+	setarg MESH_SUCCESS
+	istore 1,contw
+	fetch 2,mem_mesh_scene_recall_payload_scene_number
+	istore 2,contw
+	jam 4,mem_mesh_access_layer_payload_len
+	branch ali_mesh_upper_transport_layer_send_access_message
+
+
+ifdef mesh_debug_log
+logging_tx_info_receive_access_message:
+	fetchr loopcnt,1,mem_ccm_data_len
+	copy alarm,rega
+	arg MESH_ACCESS_RECEIVE_MESSAGE,regb
+	branch logging_tx_info
+endif
+
+ali_mesh_app_recv_new_mesh_pkt:
+
+	fetch 1, mem_mesh_report_full_attribute_timer
+	rtn blank
+	pincrease 30
+	store 1,mem_mesh_report_full_attribute_timer
+	rtn
+
+ali_mesh_report_power_on_timer:
+	arg mem_mesh_report_power_on_timer,regc
+	arg ali_mesh_ali_vendor_message_opcode_device_power_on, regb
+	branch timer_single_step
+
+ali_mesh_report_full_attribute_timer:
+	arg mem_mesh_report_full_attribute_timer,regc
+	arg ali_mesh_app_report_device_state, regb
+	branch timer_single_step
+
+ali_mesh_app_report_device_state:
+	fetch 2,mem_mesh_app_deport_device_state
+	branch callback_func
+
+
+	

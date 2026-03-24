@@ -1,0 +1,396 @@
+
+/*
+ble core spec advertising
+*/
+
+le_advertising_dispatch:
+	jam FUN_RX_LL_1M_PHY,mem_le_rx_phy
+	jam FUN_TX_LL_1M_PHY,mem_le_tx_phy
+	call le_enable
+	call le_scan
+	call le_adv
+	branch le_disable
+
+le_scan:
+	bpatchx patch28_4,mem_patch28
+	fetch 1,mem_le_scan_enable
+	rtnne LE_SCAN_ENABLE
+	arg le_scan_interval_timer,queue
+	call timer_check
+	nrtn blank
+	fetch 2,mem_le_scan_interval
+	fetcht 2,mem_le_scan_window
+	isub temp,pdata
+	arg le_scan_interval_timer,queue
+	call timer_init
+	disable master
+	call le_init_adv
+	call le_wait_adv
+	nrtn match
+	bpatchx patch28_5,mem_patch28
+	fetch 6,mem_le_rxbuf+2
+	store 6,mem_le_plap
+//	call le_scan_dongle
+
+	fetch 1,mem_le_adv_rcv
+	increase 1,pdata
+	store 1,mem_le_adv_rcv
+	call le_create_conn
+	rtn master
+	call le_send_scan_request
+	nrtn match
+	fetch 1,mem_le_scanrsp_rcv
+	increase 1,pdata
+	store 1,mem_le_scanrsp_rcv
+	fetch 9,mem_le_rxbuf+8
+	store 9,mem_temp_block0
+	rtn
+
+
+le_wait_adv:
+	bpatchx patch28_6,mem_patch28
+	call le_next_adv_channel
+	call le_receive_adv
+	fetch 1,mem_le_adv_waitcnt
+	increase 1,pdata
+	store 1,mem_le_adv_waitcnt
+	rtn
+
+
+le_create_conn:
+	bpatchx patch28_7,mem_patch28
+	fetch 1,mem_cmd_le_create_conn
+	rtnne hci_cmd_le_create_conn
+	fetch 6,mem_le_plap
+	fetcht 6,mem_le_conn_peer_addr
+	isub temp,null
+	nrtn zero
+	call context_new
+	nrtn zero
+	call le_connect_request
+	call le_init_master
+	call le_send_version_ind
+	jam BT_EVT_LE_CONNECTED,mem_fifo_temp
+	call ui_ipc_send_event	
+	jam 0,mem_hci_cmd
+	jam 0,mem_le_peer_sca
+	jam 0,mem_le_scan_enable
+	jam 0,mem_cmd_le_create_conn
+	branch context_save
+
+le_connect_request:
+	bpatchx patch29_0,mem_patch29
+	force -1,pdata
+	setsect 2,1
+	store 5,mem_le_channel_map
+	arg mem_le_state,rega	
+	call le_calc_channel_map	
+	force 4,loopcnt
+	arg mem_le_access,contw
+	call generate_random_loop
+	fetch 2,mem_le_timeout
+	store 2,mem_le_superto
+le_con_req_hop_retry:
+	random pdata
+	and_into 0xf,pdata
+	sub pdata,4,null
+	branch le_con_req_hop_retry,positive
+	store 1,mem_le_hop
+//	store 1,mem_tmp1
+	bpatchx patch29_1,mem_patch29
+	fetcht 2,mem_le_conn_interval
+	storet 2,mem_le_tsniff	
+	copy temp,regc			// tsniff in regc
+	add clkn_bt,7,pdata			// leave space for offset
+	idiv regc
+	call wait_div_end
+	remainder rega
+	isub rega,pdata
+	iadd regc,pdata
+	fetcht 2,mem_le_dsniff
+	iadd temp,pdata
+	store 4,mem_le_anchor
+	isub clkn_bt,rega
+	increase -6,rega			// window offset
+	arg 0x2205,regb			// length & CONN_REQ PDU
+	fetch 1,mem_le_conn_own_addr_type
+	nsetflag blank,LE_SENDER_ADDR_BIT,regb
+	fetch 1,mem_le_conn_peer_addr_type
+	nsetflag blank,LE_RECEIVER_ADDR_BIT,regb
+	copy regb,pdata
+	store 2,mem_le_txheader
+	fetch 6,mem_le_lap
+	istore 6,contw//own addr
+	fetch 6,mem_le_plap
+	istore 6,contw// peer addr
+	fetch 4,mem_le_access
+	istore 4,contw
+	random pdata
+	istore 2,contw				/* crc init */
+	random pdata
+	istore 1,contw
+	force 2,pdata				/* window size */	
+	istore 1,contw
+	rshift2 rega,pdata
+	istore 2,contw				/* window offset */
+	rshift2 regc,pdata			
+	istore 2,contw				/* conn Interval */
+	bpatchx patch29_2,mem_patch29
+	setarg 0					/* slave latency */
+	istore 2,contw
+	fetch 2,mem_le_timeout
+	istore 2,contw
+	fetch 5,mem_le_channel_map
+	istore 5,contw				/* channel map */
+	fetch 1,mem_le_hop
+	arg param_le_sca,temp
+	ior temp,pdata
+	istore 1,contw
+	call le_transmit_norx
+	setarg mem_le_txheader
+	add pdata,18,contr
+	ifetch 3,contr
+	store 3,mem_le_crcinit
+	rtn
+		
+
+le_adv:
+	jam 36,mem_le_ch_mapped
+	jam 0,mem_le_adv_channel_map_temp
+	call le_send_adv_protect_txbuf
+	call le_adv_loop
+	branch le_send_adv_recover_txbuf
+	
+le_adv_loop:
+	bpatchx patch29_3,mem_patch29
+	fetch 1,mem_le_adv_enable
+	rtn blank
+	arg le_adv_interval_timer,queue
+	call timer_check
+	nrtn blank
+	enable swfine
+	call le_init_adv
+	call le_next_adv_channel
+	call le_send_adv_ind
+	nbranch le_adv_not_match,match
+	fetch 1,mem_le_req_rcv
+	increase 1,pdata
+	store 1,mem_le_req_rcv
+	fetch 1,mem_le_rxbuf_adv_header
+	and pdata,0x0f,pdata
+	beq SCAN_REQ,le_send_scan_response
+	beq CONNECT_REQ,le_parse_connect_req
+le_adv_not_match:
+	bpatchx patch29_4,mem_patch29
+	fetch 1,mem_le_adv_channel_map_temp
+	fetcht 1,mem_le_adv_channel_map
+	isub temp,null
+	nbranch le_adv_loop,zero
+	random pdata 
+	arg 0x1ff,temp
+	iand temp,pdata
+	add pdata,250,pdata
+	call delay
+	arg le_adv_interval_timer,queue
+	fetch 2,mem_le_adv_interval
+	branch timer_init
+
+le_send_adv_protect_txbuf:
+	arg mem_le_tx_buf_temp,contw
+	arg mem_le_txheader,contr	
+	branch memcpy48
+	
+le_send_adv_recover_txbuf:
+	arg mem_le_tx_buf_temp,contr
+	arg mem_le_txheader,contw
+	branch memcpy48
+
+le_init_adv:
+	bpatchx patch29_5,mem_patch29
+	disable master
+le_adv_access:
+	setarg 0x8e89be
+	lshift8 pdata,pdata
+	or_into 0xd6,pdata
+	iforce access
+	setarg 0x555555
+	store 3,mem_le_crcinit
+	rtn
+
+
+
+le_send_adv_ind:
+	bpatchx patch29_6,mem_patch29
+	fetch 1,mem_le_adv_type
+	fetcht 1,mem_le_adv_own_addr_type
+	lshift4 temp,temp
+	lshift2 temp,temp
+	iadd temp,temp
+	storet 1,mem_le_txheader
+	beq ADV_DIRECT_IND,le_send_adv_direct_ind
+	fetcht 1,mem_le_adv_data_len
+	add temp,6,pdata
+	store 1,mem_le_txlen
+	fetch 6,mem_le_lap
+	store 6,mem_le_txpayload
+	copy temp,loopcnt
+	arg mem_le_adv_data,contr
+	call memcpy_fast
+	branch le_send_adv_transmit
+
+le_send_adv_direct_ind:
+	setarg 12
+	store 1,mem_le_txlen
+	fetch 6,mem_le_lap
+	store 6,mem_le_txpayload
+	fetch 6,mem_hci_plap
+	istore 6,contw
+le_send_adv_transmit:
+	bpatchx patch29_7,mem_patch29
+	fetch 1,mem_le_adv_transmit
+	increase 1,pdata
+	store 1,mem_le_adv_transmit
+	arg 1800,stop_watch
+	disable match
+	branch le_transmit_receive_sifs_without_change_mode
+
+
+le_send_scan_request:
+	bpatchx patch2a_0,mem_patch2a
+	fetch 1,mem_le_scan_type
+	rtnne LE_SCAN_TYPE_ACTIVE
+	fetch 1,mem_le_adv_transmit
+	increase 1,pdata
+	store 1,mem_le_adv_transmit
+	arg 0x0c03,temp// length + SCAN_REQ PDU
+	fetch 1,mem_le_scan_own_addr_type
+	nsetflag blank,LE_SENDER_ADDR_BIT,temp
+	copy rega,pdata
+	nsetflag blank,LE_RECEIVER_ADDR_BIT,temp	
+	storet 2,mem_le_txheader
+	fetch 6,mem_le_lap
+	istore 6,contw
+	fetch 6,mem_le_plap
+	istore 6,contw
+	branch le_transmit_receive_sifs_without_change_mode
+
+le_send_scan_response:
+	bpatchx patch2a_1,mem_patch2a
+	fetch 6,mem_le_rxbuf_adv_scan_req_adv_address
+	fetcht 6,mem_le_lap
+	isub temp,null
+	nrtn zero
+	arg SCAN_RSP,temp
+	fetch 1,mem_le_adv_own_addr_type
+	nsetflag blank,LE_SENDER_ADDR_BIT,temp
+	storet 1,mem_le_txheader
+	fetcht 1,mem_le_scan_data_len
+	add temp,6,pdata
+	store 1,mem_le_txlen
+	fetch 6,mem_le_lap
+	store 6,mem_le_txpayload
+	arg mem_le_scan_data,contr
+	copy temp,loopcnt
+	call memcpy_fast
+	call le_transmit_norx
+	branch le_adv_not_match
+
+le_parse_connect_req:
+	fetch 6,mem_le_rxbuf_adv_connect_ind_adv_address
+	fetcht 6,mem_le_lap
+	isub temp,null
+	nrtn zero
+	call le_scan_check_sender_addr_type
+	storer rega,1,mem_le_conn_peer_addr_type
+	fetch 6,mem_le_rxbuf_adv_connect_ind_init_address
+	store 6,mem_le_plap
+	fetch 8,mem_le_rxbuf_adv_connect_ind_access_address
+	store 8,mem_le_access 	// and crcinit & window size
+	fetcht 2,mem_le_rxbuf_adv_connect_ind_win_offset	// transmit offset
+	bpatchx patch2a_2,mem_patch2a
+	lshift2 temp,temp
+	fetch 2,mem_le_rxbuf_adv_connect_ind_interval	// connInterval
+	lshift2 pdata,pdata
+	store 2,mem_le_tsniff
+	store 4,mem_le_anchor
+	isub temp,pdata
+	add pdata,-2,clke_bt
+	fetch 9,mem_le_rxbuf_adv_connect_ind_latency
+	store 9,mem_le_slave_latency// and super to & channel map
+	fetch 1,mem_le_rxbuf_adv_connect_ind_hop_and_sca
+	and pdata,0x1f,temp
+	storet 1,mem_le_hop
+	rshift4 pdata,temp
+	rshift temp,temp
+	storet 1,mem_le_peer_sca
+	arg mem_le_state,rega
+	call le_receive_window_size
+	arg mem_le_state,rega	
+	call le_calc_channel_map
+	call le_init_slave
+	call context_new
+	nrtn zero
+	bpatchx patch2a_3,mem_patch2a
+	call calc_clke_offset
+	call le_l2cap_reset_signaling_identifier
+	jam BT_EVT_LE_CONNECTED,mem_fifo_temp
+	call ui_ipc_send_event
+	branch context_save
+
+
+le_next_adv_channel:
+	bpatchx patch2a_4,mem_patch2a
+	fetch 1,mem_le_ch_mapped
+	beq 37,le_next_adv_channel_curr_channel_37
+	beq 38,le_next_adv_channel_curr_channel_38
+	beq 39,le_next_adv_channel_curr_channel_39
+	branch le_next_adv_channel_curr_channel_39
+
+le_next_adv_channel_curr_channel_37:
+	fetcht 1,mem_le_adv_channel_map
+	isolate1 BIT_ADV_CHANNEL_MAP_38,temp		//check 38 channel enable
+	branch set_le_next_adv_channel_38,true
+	isolate1 BIT_ADV_CHANNEL_MAP_39,temp		//check 39 channel enable
+	branch set_le_next_adv_channel_39,true
+	branch set_le_next_adv_channel_37
+
+
+le_next_adv_channel_curr_channel_38:
+	fetcht 1,mem_le_adv_channel_map
+	isolate1 BIT_ADV_CHANNEL_MAP_39,temp		//check 39 channel enable
+	branch set_le_next_adv_channel_39,true
+	isolate1 BIT_ADV_CHANNEL_MAP_37,temp		//check 37 channel enable
+	branch set_le_next_adv_channel_37,true
+	branch set_le_next_adv_channel_38
+
+
+le_next_adv_channel_curr_channel_39:
+	fetcht 1,mem_le_adv_channel_map
+	isolate1 BIT_ADV_CHANNEL_MAP_37,temp		//check 37 channel enable
+	branch set_le_next_adv_channel_37,true
+	isolate1 BIT_ADV_CHANNEL_MAP_38,temp		//check 38 channel enable
+	branch set_le_next_adv_channel_38,true
+	branch set_le_next_adv_channel_39
+
+set_le_next_adv_channel_37:
+	jam 37,mem_le_ch_mapped
+	fetch 1,mem_le_adv_channel_map_temp
+	set1 BIT_ADV_CHANNEL_MAP_37,pdata
+	store 1,mem_le_adv_channel_map_temp
+	rtn
+
+set_le_next_adv_channel_38:
+	jam 38,mem_le_ch_mapped
+	fetch 1,mem_le_adv_channel_map_temp
+	set1 BIT_ADV_CHANNEL_MAP_38,pdata
+	store 1,mem_le_adv_channel_map_temp
+	rtn
+
+set_le_next_adv_channel_39:
+	jam 39,mem_le_ch_mapped
+	fetch 1,mem_le_adv_channel_map_temp
+	set1 BIT_ADV_CHANNEL_MAP_39,pdata
+	store 1,mem_le_adv_channel_map_temp
+	rtn
+
+

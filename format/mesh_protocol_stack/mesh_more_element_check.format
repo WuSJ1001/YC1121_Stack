@@ -1,0 +1,17 @@
+
+memalloc ali_mesh(
+	2 mem_mesh_loopcnt_tmep
+	2 mem_mesh_rega_temp
+	2 mem_mesh_regb_temp
+	2 mem_mesh_regc_temp
+	2 mem_mesh_alarm_temp
+	
+)
+
+
+
+xmemalloc ali_mesh(
+	1 mem_mesh_receive_group_address
+	1 mem_mesh_receive_element_number
+)
+

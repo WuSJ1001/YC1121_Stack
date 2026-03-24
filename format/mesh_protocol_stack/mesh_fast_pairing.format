@@ -1,0 +1,199 @@
+memalloc ali_mesh(
+
+	16 mem_mesh_Device_UUID
+	
+	1 mem_mesh_receive_VID
+
+)
+
+
+xmemalloc ali_mesh(
+
+	// provisioning flag 标志是否入网
+	1 mem_mesh_provisioned_flag
+
+	//入网时的状态机
+	1 mem_mesh_Provisioning_State_Flag
+	
+	1 mem_mesh_Device_PID
+	1 mem_mesh_UUID_FeatureFlag
+	1 mem_mesh_UUID_FeatureFlag1
+	1 mem_mesh_PDU_RFU
+	2 mem_mesh_OOB_information
+
+	//Provisioning_Data
+	0 mem_mesh_Encrypt_Provisioning_Data
+	2 mem_mesh_provisioning_data_Mac_addr
+	1 mem_mesh_KeyFresh_and_Update_flag
+	16 mem_mesh_Network_Key
+	1 mem_mesh_last_IV_Index_byte
+	2 mem_mesh_Unicast_Address
+
+	1 mem_mesh_recv_cfg_appkey_add_timer
+
+	1 mem_mesh_report_power_on_timer
+	1 mem_mesh_report_full_attribute_timer
+
+	1 mem_mesh_health_node_reset_timer
+//	4 mem_mesh_adv_last_time
+	2 mem_mesh_send_packet_timeout
+
+	1 mem_mesh_gatt_package_send_msg_id
+
+)
+
+
+(
+33 GATT_RECEIVE_MSG_BUFFER_SIZE
+)
+
+xmemalloc ali_mesh(
+
+	1 mem_mesh_gatt_receive_msg_timer
+	//fast pairing 
+	//APP control 
+
+
+
+)
+
+amemalloc mem_mesh_queue_ele_temp(
+	2 mem_mesh_gatt_package_receive_msg_buffer_ptr
+	0 mem_mesh_gatt_package_receive_msg_buffer_temp
+	2 mem_mesh_gatt_package_receive_msg_id
+	0 mem_mesh_gatt_package_receive_MAC
+	1 mem_mesh_gatt_package_receive_msg_num
+	1 mem_mesh_gatt_package_receive_msg_total_length
+	29 mem_mesh_gatt_package_receive_msg_payload
+)
+
+amemalloc mem_mesh_Device_UUID(
+	2 mem_mesh_receive_service_uuid_company_id
+	1 mem_mesh_receive_service_uuid_vid
+	1 mem_mesh_receive_service_uuid_provisioning_type
+	2 mem_mesh_receive_service_uuid_mac
+	1 mem_mesh_receive_service_uuid_msg_id
+	1 mem_mesh_receive_service_uuid_package_num
+	1 mem_mesh_receive_service_uuid_length
+	7 mem_mesh_receive_service_uuid_payload_data
+)
+
+
+amemalloc mem_le_txheader_mesh_temp(
+	1 mem_mesh_fast_pair_packet_type
+)
+amemalloc mem_mesh_send_packet_timeout(
+	2 mem_mesh_fast_pairing_timer
+)
+
+(//mem_mesh_provisioned_flag
+0 PAIRED_STATUS
+1 UNPROVISIONED_BEACON_STATUS
+2 PAIRING_STATUS
+3 SILENCE_BEACON_STATUS
+4 RECEIVED_CONFIG_APPKEY_ADD
+5 WAIT_RECEIVE_APPKEY
+6 RECEIVE_CONFIG_COMPOSITION_DATA_GET
+)
+
+(//mem_mesh_UUID_FeatureFlag
+0 BIT_SILENCE_ADV_FLAG
+)
+
+//mem Beacon Tmall Length
+(
+0x01 UNPROVISIONED_ADLEN_LENGTH
+0x01 UNPROVISIONED_ADTYPE_LENGTH
+0x01 UNPROVISIONED_DEVICE_BEACON_LENGTH
+0x10 UNPROVISIONED_DEVICE_UUID_LENGTH
+0x02 UNPROVISIONED_OOB_INFORMATION_LENGTH
+)
+
+// mem Beacon Type
+(
+0x00 UNPROVISIONED_DEVICE_BEACON
+0x01 SECURE_NETWORK_BEACON
+0x1827 MESH_PROVISIONING_UUID
+0x1828 MESH_PROXY_SERVICE
+
+)
+
+// Provisioning Type
+(
+0x00 PROVISIONING_RANDOM
+0x01 PROVISIONING_CONFIRMATION
+0x02 PROVISIONING_DATA
+0x03 PROVISIONING_COMPLETE
+0x04 PROVISIONING_CONFIG
+0x05 PROVISIONING_CONFIG_ACK
+0x06 PROVISIONING_IOS_DATA
+0x07 PROVISIONING_SEND_IOS_DATA
+0x09 PROVISIONING_ADD_APPKEY
+0x0A PROVISIONING_ADD_APPKEY_ACK
+)
+
+(//mem_mesh_Provisioning_State_Flag
+// FLAG bit1:Provisioning Confirmation
+1 RECEIVE_PROVISIONING_RANDOM
+2 RECEIVE_PROVISIONING_DATA
+3 RECEIVE_PROVISIONING_ADD_APPKEY
+)
+
+
+(//provisioning packet info size
+3 PROVISIONING_PACKET_LENGTH_FLAGS
+6 PROVISIONING_PACKET_LENGTH_AD_TYPE_COMPANY_ID_VID_PROVISIONING_TYPE
+5 PROVISIONING_PACKET_AD_TYPE_COMPANY_ID_VID_PROVISIONING_TYPE
+1 PROVISIONING_PACKET_LENGTH
+1 PROVISIONING_PACKET_AD_TYPE
+2 PROVISIONING_PACKET_COMPANY_ID
+1 PROVISIONING_PACKET_VID
+1 PROVISIONING_PACKET_PROVISIONING_TYPE
+//provisioning random
+2 PROVISIONING_PACKET_RANDOM_MAC
+8 PROVISIONING_PACKET_RANDOM_RANDOM_A
+8 PROVISIONING_PACKET_RANDOM_RANDOM_B
+//provisioning confirmation
+2 PROVISIONING_PACKET_CONFIRMATION_MAC
+16 PROVISIONING_PACKET_CONFIRMATION_DEVICE
+//provisioning complete
+6 PROVISIONING_PACKET_COMPLETE_MAC
+//provisioning add appkey ack
+7 PROVISIONING_PACKET_ADD_APPKEY_ACK
+
+2 PROVISIONING_CONFIG_ACK_MAC
+1 PROVISIONING_CONFIG_ACK_FIELD
+
+)
+
+(
+0x01 PROVISIONING_CONFIG_ACK_NOTE
+)
+
+(//gatt package struct
+0 GATT_PACKAGE_MSG_ID
+1 GATT_PACKAGE_PACKAGE_NUM
+2 GATT_PACKAGE_LENGTH
+3 GATT_PACKAGE_PAYLOAD
+)
+
+(
+0x12 MAX_LENGTH_PRIVISIONING_CONTROL_MSG_ANDROID
+0x08 MAX_LENGTH_PRIVISIONING_CONTROL_MSG_IOS
+0x07 MAX_LENGTH_PRIVISIONING_PAIRING_MSG_IOS
+)
+
+(
+4 MAX_GATT_PACKAGE_NUM
+50 GATT_RECEIVE_TIMEOUT
+)
+
+(//mem_mesh_fast_pairing_timer
+300 FAST_PAIRING_TIMEOUT_PROVISIONING
+200 FAST_PAIRING_TIMEOUT_PROXY
+)
+
+(//mem_mesh_add_appkey_ack_timer
+2 FAST_PAIRING_TIMEOUT_ADD_APPKEY_ACK
+)
+

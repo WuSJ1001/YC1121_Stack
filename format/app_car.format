@@ -1,0 +1,335 @@
+
+
+xmemalloc g24_rx_car(
+1 mem_car_hard_soft_switch
+1 mem_car_queue_each_size
+1 mem_car__queue_length
+
+1 mem_car_queue_curr_num
+1 mem_car_queue_read_ptr
+1 mem_car_queue_write_ptr
+120 mem_car_queue_ele
+
+20 mem_car_pop_queue_buff
+
+1 mem_car_led_num
+10 mem_car_led_map
+
+1 mem_car_style1_led_type
+1 mem_car_style1_blink_count
+1 mem_car_style1_struct_led_gpio
+2 mem_car_style1_on_time
+2 mem_car_style1_off_time
+2 mem_car_style1_cb_ledon
+2 mem_car_style1_cb_ledoff
+
+1 mem_car_style2_led_type
+1 mem_car_style2_blink_count
+1 mem_car_style2_struct_led_gpio
+2 mem_car_style2_on_time
+2 mem_car_style2_off_time
+2 mem_car_style2_cb_ledon
+2 mem_car_style2_cb_ledoff
+
+//////motor
+0 mem_le_receive_data
+2 mem_le_receive_packet_head
+1 mem_le_receive_cmd
+2 mem_le_receive_length
+10 mem_le_receive_payload
+1 mem_le_receive_checksum
+1 mem_motor1_status
+1 mem_motor1_speed
+1 mem_motor2_status
+1 mem_motor2_speed
+1 mem_motor3_status
+1 mem_motor3_speed
+
+0 mem_motor1_pwm_set
+1 mem_motor1_pwm_pin1_set
+1 mem_motor1_pwm_pin2_set
+1 mem_motor1_pwm_pin_set
+1 mem_motor1_pwm_channel_set
+3 mem_motor1_pwm_freq_set
+1 mem_motor1_pwm_dute_set
+0 mem_motor2_pwm_set
+1 mem_motor2_pwm_pin1_set
+1 mem_motor2_pwm_pin2_set
+1 mem_motor2_pwm_pin_set
+1 mem_motor2_pwm_channel_set
+3 mem_motor2_pwm_freq_set
+1 mem_motor2_pwm_dute_set
+0 mem_motor3_pwm_set
+1 mem_motor3_pwm_pin1_set
+1 mem_motor3_pwm_pin2_set
+1 mem_motor3_pwm_pin_set
+1 mem_motor3_pwm_channel_set
+3 mem_motor3_pwm_freq_set
+1 mem_motor3_pwm_dute_set
+
+1 mem_motor_select_p_n
+1 mem_car_motor_status
+1 mem_car_motor_speed
+0 mem_motor_pwm_set
+1 mem_motor_pwm_pin1_set
+1 mem_motor_pwm_pin2_set
+1 mem_motor_pwm_pin_set
+1 mem_motor_pwm_channel_set
+3 mem_motor_pwm_freq_set
+1 mem_motor_pwm_dute_set
+
+1 mem_ir_rx_gpio
+2 mem_ir_data
+2 mem_ir_rx_buf
+4 mem_ir_receive_clkn
+
+3 mem_ir_notify_data
+5 mem_ir_notify_data_head
+2 mem_ir_notify_data_payload
+1 mem_ir_notify_data_check_sum
+1 mem_car_ir_breakdown_check_timer
+1 mem_car_ir_breakdown_flag
+
+0 mem_car_led_control
+1 mem_car_led1_status
+1 mem_car_led2_status
+1 mem_car_led3_status
+1 mem_car_led4_status
+1 mem_car_led5_status
+1 mem_car_led6_status
+1 mem_car_led7_status
+1 mem_car_led8_status
+1 mem_car_led_control_timer
+1 mem_car_led_blink_status
+1 mem_car_led_no
+
+3 mem_car_info_request
+5 mem_car_info_request_head
+8 mem_car_info_request_payload
+1 mem_car_info_request_checksum
+
+0 mem_car_config_param
+1 mem_car_config_setting_flag
+1 mem_car_config_device_select
+1 mem_car_config_motor_layout
+1 mem_car_config_ir_enable
+1 mem_car_config_ir_rx_gpio
+1 mem_car_config_pairing_led_conn_status
+1 mem_car_config_pairing_led_gpio
+1 mem_car_config_led_num
+0 mem_car_config_blood_led_gpio
+1 mem_car_config_blood_led1_gpio
+1 mem_car_config_blood_led2_gpio
+1 mem_car_config_blood_led3_gpio
+1 mem_car_config_blood_led4_gpio
+1 mem_car_config_blood_led5_gpio
+1 mem_car_config_blood_led6_gpio
+1 mem_car_config_blood_led7_gpio
+1 mem_car_config_blood_led8_gpio
+1 mem_car_config_bat_notify_enable
+1 mem_car_config_low_voltage_led_gpio
+1 mem_car_config_low_voltage_percent
+1 mem_car_config_soft_switch_enable
+1 mem_car_config_soft_switch_gpio
+
+1 mem_car_notify_vdd_count
+1 mem_car_notify_vdd_timer
+1 mem_car_notify_vdd_value_last
+1 mem_car_notify_vdd_percent
+1 mem_car_working_flag
+1 mem_low_bat_flag
+
+3 mem_notify_bat_packet
+5 mem_notify_bat_head
+1 mem_notify_bat_payload
+1 mem_notify_bat_check_sum
+
+1 mem_vdd_notify_flag
+2 mem_car_current_vdd_value_temp
+2 mem_car_last_vdd_value
+
+0 mem_vdd_calculate_set
+2 mem_vdd_full_vol
+2 mem_vdd_empty_vol
+2 mem_vdd_low_vol
+2 mem_vdd_now_vol
+
+
+1 mem_car_24g_status
+2 mem_car_24g_no_data_timeout_count
+2 mem_car_24g_no_data_timeout_timer
+
+1 mem_car_24g_ir_receive_attack_count
+1 mem_car_24g_go_die_flag
+1 mem_car_attack_shake_timer
+1 mem_car_attack_shake_flag
+
+0 mem_car_soft_power
+1 mem_car_power_state
+1 mem_car_power_timer
+1 mem_car_power_off_timeout
+1 mem_car_power_starting_timeout
+2 mem_car_power_off_cb
+2 mem_car_power_starting_cb
+2 mem_car_power_standby_cb
+2 mem_car_ui_button_up_cb
+
+
+500 mem_car_le_att_list
+
+1 mem_car_moto1_blank_timer
+1 mem_car_moto2_blank_timer
+1 mem_car_moto3_blank_timer
+
+1 mem_car_motor_gpio_num
+0 mem_car_motor_gpio_map
+1 mem_car_motor_left_gpio
+1 mem_car_motor_right_gpio
+1 mem_car_motor_front_gpio
+1 mem_car_motor_back_gpio
+1 mem_car_gpio
+1 mem_car_app_send_speed
+
+2 mem_rssi_sum
+2 mem_check_rssi_high_count
+8 mem_rssi_data
+
+1 mem_car_24g_received_pac
+1 mem_car_24g_bind_enable_delay_count
+
+0 mem_car_keyscan
+1 mem_car_key_num
+2 mem_cb_car_keyscan
+
+2 mem_car_enter_lpm_timer_count
+2 mem_car_enter_lpm_timer
+1 mem_car_enter_lpm_flag
+
+1 mem_car_24g_ch_polling
+
+8 mem_car_rssi_noise_buffer
+8 mem_car_rssi_noise_car_buffer
+8 mem_car_rssi_noise_remote_buffer
+
+
+4 mem_car_24g_commom_addr
+4 mem_car_24g_commom_addr_temp
+4 mem_car_24g_commom_addr_read
+1 mem_car_save_addr_flag
+400 mem_ble_att_list
+)
+
+(
+//20ms
+0x0020	FAST_ADV_INTERVAL_VALUE_CAR
+)
+
+(
+0x19 ATT_CAR_CONTROL_HANDLE
+0x19 ATT_SPEED_SET_HANDLE
+)
+
+
+(
+0 TURN_FRONT
+1 TURN_LEFT
+2 TURN_RIGHT
+0 MOTOR_STOP
+1 GO_FRONT
+2 GO_BACK
+0x6b5a LE_RECEIVE_PACKET_HEAD
+)
+
+(
+0 FLAG_IR_DISABLE
+1 FLAG_IR_ENABLE
+)
+
+(
+0 DEVICE_CAR
+1 DEVICE_TANK
+2 DEVICE_BATTLE_CAR
+3 DEVICE_BATTLE_TANK
+4 DEVICE_REMOTE
+)
+
+(
+0 F_B_MOTOR
+1 L_R_MOTOR
+2 F_B_BATTERY
+3 L_R_BATTERY
+)
+
+(
+0 CAR_WORK	   		//connect mode normal
+1 CAR_BIND			//code pair mode
+2 CAR_TEST			//test mode
+3 CAR_CODE			//PC_application
+4 CAR_PCBA			//PCBA_TEST
+5 CAR_DEBUG
+6 CAR_MODE_MAX
+7 CAR_SEARCH
+)
+
+(
+1 SPEED_LEVEL_1
+2 SPEED_LEVEL_2
+3 SPEED_LEVEL_3
+4 SPEED_LEVEL_4
+5 SPEED_LEVEL_5
+6 SPEED_LEVEL_6
+7 SPEED_LEVEL_7
+8 SPEED_LEVEL_8
+9 SPEED_LEVEL_9
+10 SPEED_LEVEL_10
+)
+
+(
+0 PWM0_DUTY_SETTING
+1 PWM1_DUTY_SETTING
+2 PWM2_DUTY_SETTING
+)
+
+(
+1 CAR_CMD_BATTERY
+2 CAR_CMD_OLD_CAR_CONTROL
+3 CAR_CMD_OLD_SPEED_CONTROL
+4 CAR_CMD_L_R_MOTOR_CONTROL
+5 CAR_CMD_F_B_MOTOR_CONTROL
+6 CAR_CMD_IR_CONTROL
+7 CAR_CMD_LED_CONTROL
+8 CAR_CMD_DEVICE_INFO
+)
+
+(
+0 CAR_REMOTE_CHECK_BUTTON
+1 CAR_REMOTE_CHECK_ROCKER
+)
+
+(
+0x11 CAR_NOTIFY_HANDLE
+)
+
+(
+0 LED_OFF
+1 LED_ON
+2 LED_BLINK
+0xFF LED_INVALID
+)
+
+(
+0xFF INVALID_PIN_NUM
+)
+
+
+(
+0 POWER_ON
+1 WORK_PAIRED
+2 WORK_SEARCH
+)
+
+(
+0x700 OTP_OFFSET_CAR_COMMOM_START_ADDR 
+0x7cc OTP_OFFSET_CAR_COMMOM_END_ADDR 
+)
+

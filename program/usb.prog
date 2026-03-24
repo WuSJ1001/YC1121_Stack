@@ -1,0 +1,1099 @@
+ ifdef COMPILE_USB
+
+usb_isr:
+	bpatch patch1f_5,mem_patch1f
+	fetch 1,core_usb_status
+	isolate1 USB_STATUS_RESET,pdata
+	call usb_init_restart,true
+	fetch 2,core_usb_status
+	store 2,core_usb_status
+	store 2,mem_usb_status
+	call usb_nak_state_judge
+	call usb_rx
+	call usb0_tx
+	call usb_tx
+	branch usb_nak_state
+
+usb_init:
+	bpatch patch1f_6,mem_patch1f
+	call enable_authrom
+	call usb_init_param
+usb_init_restart:
+	jam 0x00,core_usb_config
+ifdef SIM
+	nop 10
+else
+	nop 10000
+endif
+	jam 0x0,core_usb_hmode
+	fetch 2,core_clkoff
+	set0 CLOCK_OFF_USB,pdata
+	store 2,core_clkoff
+	jam 0x21,core_usb_epmap
+	jam 0x9d,core_usb_pupd
+	jam 0x3c,core_usb_config
+	setarg mem_usb_rxbuf
+	store 2,core_usb_rx_saddr
+	store 2,core_usb_rxptr
+	setarg mem_usb_rxbuf_end
+	store 2,core_usb_rx_eaddr
+	jam 0x80,core_usb_hmode
+	jam 0,core_usb_addr
+	jam 0xff,core_usb_status
+	setarg mem_usb_clear_mem_end
+	arg mem_usb_clear_mem_start,contw
+	isub contw,loopcnt
+	branch clear_mem
+	
+usb_offline_check_init:
+	fetcht 1,mem_usb_offline_check_gpio
+	branch gpio_config_input
+usb_offline_state:
+	fetch 1,mem_usb_device_enumeration_endflag
+	rtn blank
+	fetcht 1,mem_usb_offline_check_gpio
+	call gpio_get_bit
+	branch usb_init_restart,true
+	rtn
+
+usb_init_param:
+	jam DEV_DEFAULT,mem_usb0_state
+	setarg 0x0
+	store 1,mem_remain
+	store 2,mem_usb_zero_packet
+	pincrease 1
+	store 2,mem_usb_ones_packet
+	pincrease 1
+	store 2,mem_usb_two_packet
+	arg mem_string0,contw
+	setarg 0x030404
+	istore 3,contw
+	setarg 0x0409
+	istore 2,contw
+	arg mem_string1,contw
+	setsect 0,0x15906
+	setsect 1,0x210d2
+	setsect 2,0x10494
+	setsect 3,0x1
+	istore 9,contw
+	arg mem_string2,contw
+	setsect 0,0x1570f
+	setsect 1,0x15c9a
+	setsect 2,0x256c6
+	setsect 3,0x1cdcd
+	istore 9,contw
+	setsect 0,0x14420
+	setsect 1,0x25d99
+	setsect 2,0x25636
+	setsect 3,0x1
+	istore 7,contw
+	arg mem_string3,contw
+	setsect 0,0x1620a
+	setsect 1,0xc8c
+	setsect 2,0x30333
+	setsect 3,0xc0c0
+	istore 9,contw
+	setsect 0,0x3130
+	istore 2,contw
+	setarg USB_KBDATA_VENDOR_DEFINE_ADDR
+	store 2,mem_hidreportdesc_kb
+	setarg USB_MSDATA_ADDR
+	store 2,mem_hidreportdesc_m
+	arg USB_DEVICEDATA_ADDR,contr
+	arg mem_devicedesc,contw
+	arg 19,loopcnt
+	call memcpy	
+	arg USB_CONFDATA_ADDR,contr
+	arg mem_confdesc,contw
+	arg 60,loopcnt
+	call memcpy
+usb_config_cb:
+	fetch 2,mem_cb_usb_config
+	branch callback_func
+
+usb_tx_interval_config:
+	fetch 1,mem_usb_tx_interval
+	rtn blank
+	store 1,mem_confdesc+34
+	store 1,mem_confdesc+59
+	rtn
+
+usb_nak_state:
+	arg USB_TIMER_NAK,queue
+	call timer_check
+	nrtn blank
+	fetch 1 ,mem_usb_wakestate_onetime_flag
+	nrtn blank
+	fetch 1,mem_usb_device_enumeration_endflag
+	ncall usb_mac_wakeup_judge,blank
+	rtn
+
+usb_nak_state_judge:
+	fetch 1,mem_usb_status
+	bbit1 USB_STATUS_NAK,usb_nak_state_timer_init
+	rtn
+	
+usb_nak_state_timer_init:
+	call usb0_attached_state_judge
+	call timer_reinit
+	setarg TIMER_NAK_DELAY
+	arg USB_TIMER_NAK,queue
+	branch timer_init
+	
+usb0_attached_state_judge:
+	fetch 1,mem_usb_state
+	bne USB_CONNECTED,usb_clear_halt_dispose
+	jam 0,mem_usb_wakestate_onetime_flag
+	jam 0,mem_usb_mac_wakeup_trig
+	rtn
+
+usb_clear_halt_dispose:
+	fetch 1,mem_usb_clear_halt
+	rtn blank
+	jam 0,mem_usb_clear_halt
+	jam USB_CONNECTED,mem_usb_state
+	jam 1,mem_usb_device_enumeration_endflag
+	rtn
+
+usb_rx_no_data:
+	fetch 1,mem_usb_status
+	bbit1 USB_STATUS_SETUP,usb_class_type
+	rtn
+
+usb_rx_len:
+	fetchr contus,2,core_usb_rx_saddr
+	fetchr contue,2,core_usb_rx_eaddr
+	fetchr contu,2,core_usb_rxptr
+	ifetch 2,contu
+	rshift8 pdata,temp
+	rshift4 temp,temp					// temp is endpoint
+	arg 0xfff,contr
+	iand contr,loopcnt
+	storer loopcnt,2,mem_usb_read_len
+	rtn
+
+
+usb_rx_data:
+	call usb_rx_len
+usb_rx_read:
+	ifetch 1,contu
+	istore 1,contw
+	loop usb_rx_read
+	storer contu,2,core_usb_rxptr
+	rtn
+
+usb_rx_ep13:
+	arg mem_usb_ccid_buf,contw
+	call usb_rx_read
+	arg mem_usb_ccid_buf+4,temp
+	storet 2,core_usb_tx_saddr3
+	fetch 1,mem_usb_ccid_buf+1
+	pincrease 6
+	istore 1,temp
+	jam 0x8,core_usb_trig
+	rtn
+
+
+usb_rx:
+	bpatch patch1f_7,mem_patch1f
+	fetch 1,mem_usb_status
+	rtnbit0 USB_STATUS_RXREADY
+	call usb_rx_len
+	compare 13,temp,0xff
+	branch usb_rx_ep13,true
+	arg mem_usb_setup,contw
+	call usb_rx_read
+	fetch 1,mem_usb_read_len
+	beq 0x00,usb_rx_no_data
+	beq 0x01,usb_out_one_byte	// HUAWEI pad led status	
+	sub pdata,7,null
+	rtn positive
+usb_class_type:
+	bpatchx patch20_0,mem_patch20
+	set0 mark_isstr,mark
+	fetch 1,mem_usb_setup_bmRequestType
+	and_into 0x80,pdata
+	beq IN_DEVICE,usb_in_device
+	beq OUT_DEVICE,usb_out_device
+	branch assert
+
+usb_out_one_byte:
+	fetch 1,mem_usb_setup
+	rtnbit1 7	// OUT_DEVICE
+	call usb_get_led_status
+	branch usb0_reply_zerolen
+
+
+usb_in_device:
+	fetch 1,mem_usb_setup_bmRequestType
+	rshift4 pdata,pdata
+	rshift pdata,pdata
+	and_into 0x03,pdata
+	beq STANDARD_REQ,usb_in_standard_req
+	beq CLASS_REQ,usb_in_class_req
+	beq MANUFACTURER_REQ,usb_in_manufacturer_req
+	branch assert
+
+usb_out_device:
+	fetch 1,mem_usb_setup_bmRequestType
+	rshift4 pdata,pdata
+	rshift pdata,pdata
+	and_into 0x03,pdata
+	beq STANDARD_REQ,usb_out_standard_req
+	beq CLASS_REQ,usb_out_class_req	
+	beq MANUFACTURER_REQ,usb_out_manufacturer_req
+	branch assert
+
+usb_in_standard_req:
+	fetch 1,mem_usb_setup_bRequest
+	beq GET_CONFIGURATION,usb0_request_get_configuration
+	beq GET_DESCRIPTOR,usb0_request_get_descriptor
+	beq GET_INTERFACE,usb0_request_get_interface
+	beq GET_STATUS,usb0_request_get_status
+	branch usb0_force_stall
+
+usb_in_class_req:
+	fetch 1,mem_usb_setup_bRequest
+	beq GET_IDLE,usb_get_idle
+	beq GET_REPORT,usb_get_report
+	beq GET_PROTOCOL,usb_get_protocol_req
+	branch usb0_force_stall
+
+usb_in_manufacturer_req:
+	branch usb0_force_stall
+
+usb_out_standard_req:
+	fetch 1,mem_usb_setup_bRequest
+	beq CLEAR_FEATURE,usb0_request_clear_feature
+	beq SET_FEATURE,usb0_request_set_feature
+	beq SET_ADDRESS,usb0_request_set_address
+	beq SET_CONFIGURATION,usb0_request_set_configuration
+	beq SET_INTERFACE,usb0_request_set_interface
+	beq SET_DESCRIPTOR,usb0_force_stall
+	branch usb0_force_stall
+
+usb_out_class_req:
+	fetch 1,mem_usb_setup_bRequest
+	beq SET_IDLE,usb_set_idle
+	beq SET_REPORT,usb_set_report
+	beq SET_PROTOCOL,usb_set_protocol_req
+	branch usb0_force_stall
+
+usb_out_manufacturer_req:
+	branch usb0_force_stall
+
+usb0_force_stall:
+	bpatchx patch20_1,mem_patch20
+	fetch 1,core_usb_stall
+	set1 0,pdata
+	store 1,core_usb_stall
+	branch usb0_reply_zerolen
+	
+usb0_reply_zerolen:
+	jam 0x1,core_usb_clear_nak
+	rtn
+
+usb0_request_get_configuration:
+	fetch 1,mem_usb_setup_bmRequestType
+	bne IN_DEVICE,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex+1
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLength
+	bne 1,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue+1
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb0_state
+	beq DEV_CONFIGURED,usb0_request_get_cfg_dev_cfg
+	beq DEV_ADDRESS,usb0_request_get_cfg_dev_addr
+	branch usb0_force_stall
+//Return current config : 1
+usb0_request_get_cfg_dev_cfg:
+	arg 1,regb
+	branch usb_send_ones_packet
+//Config do not work, return default config : 0
+usb0_request_get_cfg_dev_addr:
+	arg 1,regb
+	branch usb_send_zero_packet
+
+usb0_request_get_descriptor:
+	bpatchx patch20_2,mem_patch20
+//	set0 mark_isstr,mark
+	fetch 1,mem_usb_setup_bValueH
+	beq DSC_DEVICE,dsc_device_info
+	beq DSC_CONFIG,dsc_config_info	
+	beq DSC_STRING,dsc_string_info
+	beq DSC_HID,dsc_hid_info
+	beq DSC_HID_REPORT,dsc_hid_report_info
+	branch usb0_force_stall
+
+dsc_hid_info:
+	jam 0,mem_usb_get_protocol_flag
+	fetch 1,mem_usb_setup_wIndex
+	beq 0,dsc_hid_info_interface0
+	beq 1,dsc_hid_info_interface1
+	branch usb0_force_stall
+//class_descriptor hid_descriptor--keyboard 
+dsc_hid_info_interface0:
+	fetchr regb,1,mem_confdesc+19
+	arg mem_confdesc+19,rega
+	branch usb0_respond
+//class_descriptor hid_descriptor--mouse 
+dsc_hid_info_interface1:
+	fetchr regb,1,mem_confdesc+44
+	arg mem_confdesc+44,rega
+	branch usb0_respond
+
+dsc_device_info:
+//input : pdata : data poniter 
+//input : temp: data len
+//sets the data pointer and len to correct descriptor
+	fetch 1,mem_usb_set_high_addr_flag
+	ncall usb_set_high_addr,blank
+	setarg mem_devicedesc
+	fetcht 1,mem_devicedesc
+dsc_info_set_data_len:
+	store 2,mem_dsc_info_data_pointer
+	storet 1,mem_dsc_info_len
+	fetch 1,mem_usb_setup_bLength
+	isub temp,null
+	nbranch dsc_info_set_current_data_len,positive
+dsc_info_set_initial_data_len:
+	fetch 1,mem_dsc_info_len
+dsc_info_set_data_size_completed:	
+	iforce regb
+	fetch 2,mem_dsc_info_data_pointer
+	add pdata,1,pdata
+	iforce rega
+	branch usb0_respond
+dsc_info_set_current_data_len:
+	fetch 1,mem_usb_setup_bLength
+	branch dsc_info_set_data_size_completed
+
+usb_set_high_addr:
+	fetch 1,core_usb_addr
+	ncall usb0_set_addr,blank
+	jam 0,mem_usb_set_high_addr_flag
+	rtn
+usb0_set_addr:
+	fetch 1,core_usb_addr
+   	set1 7,pdata
+    	store 1,core_usb_addr
+    	rtn
+
+dsc_config_info:
+	setarg mem_confdesc
+	fetcht 1,mem_confdesc
+	branch dsc_info_set_data_len
+
+dsc_string_info:
+	fetch 1,mem_usb_setup_bValue
+	sub pdata,3,null
+	nbranch usb0_force_stall,positive
+	fetch 1,mem_usb_setup_bValue
+	arg mem_string0,rega
+	beq 0,usb0_respond_length	
+	set1 mark_isstr,mark
+	arg mem_string1,rega
+	beq 1,usb0_respond_length
+	arg mem_string2,rega
+	beq 2,usb0_respond_length
+	arg mem_string3,rega
+	beq 3,usb0_respond_length
+	rtn
+
+dsc_hid_report_info:
+	fetch 2,mem_usb_setup_wIndex
+	beq 1,dsc_hid_report_info0
+	fetchr rega,2,mem_hidreportdesc_kb
+	branch usb0_respond_length
+dsc_hid_report_info0:
+	jam 1,mem_usb_device_enumeration_endflag
+	jam USB_GOT_REPORT_REQ,mem_usb_state
+	fetchr rega,2,mem_hidreportdesc_m
+	branch usb0_respond_length
+
+
+usb0_request_get_interface:
+	fetch 1,mem_usb0_state
+	bne DEV_CONFIGURED,usb0_force_stall		
+	fetch 1,mem_usb_setup_bmRequestType
+	bne IN_INTERFACE,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValueH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLength
+	bne 1,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex+1
+	bne 0,usb0_force_stall
+	arg 1,regb
+	branch usb_send_zero_packet
+
+
+usb0_request_get_status:
+	fetch 1,mem_usb0_state
+	beq DEV_DEFAULT,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValueH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLength
+	bne 2,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex+1
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bmRequestType
+	beq IN_DEVICE,usb0_get_status_in_device
+	beq IN_INTERFACE,usb0_get_status_in_interface
+	beq IN_ENDPOINT,usb0_get_status_in_endpoint
+	branch usb0_force_stall
+
+
+Usb0_SDsystem_dispose:
+	jam 1,mem_sdsystem_wakeup_flag
+	branch usb_send_two_packet
+
+usb0_get_status_in_device:
+	fetch 1,mem_usb_setup_wIndex
+	bne 0,usb0_force_stall
+	arg 2,regb
+	fetch 1,mem_usb_remote_wakeup
+	beq 0x01,Usb0_SDsystem_dispose
+//regb:length
+usb_send_zero_packet:
+	arg mem_usb_zero_packet,rega
+	branch usb0_respond
+usb_send_ones_packet:
+	arg mem_usb_ones_packet,rega
+	branch usb0_respond
+usb_send_two_packet:
+	arg mem_usb_two_packet,rega
+	branch usb0_respond
+
+usb0_get_status_in_interface:
+	fetch 1,mem_usb0_state
+	bne DEV_CONFIGURED,usb0_force_stall
+	arg 2,regb
+	branch usb_send_zero_packet
+
+usb0_get_status_in_endpoint:
+	fetch 1,mem_usb0_state
+	bne DEV_CONFIGURED,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	beq IN_EP1,usb0_get_status_in_ep_in_ep1
+	beq IN_EP2,usb0_get_status_in_ep_in_ep2
+	beq IN_EP3,usb0_get_status_in_ep_in_ep3
+	and_into 0x7f,pdata
+	beq 0x00,usb0_get_status_in_ep_in_ep0
+	branch usb0_force_stall
+	
+usb0_get_status_in_ep_in_ep0:
+	fetch 1,mem_usb_ep0_stall_status
+usb0_get_status_in_ep_in_ack:
+	arg 2,regb
+	beq 1,usb_send_ones_packet
+	branch usb_send_zero_packet
+usb0_get_status_in_ep_in_ep1:
+	fetch 1,mem_usb_ep1_stall_status
+	branch usb0_get_status_in_ep_in_ack
+usb0_get_status_in_ep_in_ep2:
+	fetch 1,mem_usb_ep2_stall_status
+	branch usb0_get_status_in_ep_in_ack
+usb0_get_status_in_ep_in_ep3:
+	fetch 1,mem_usb_ep3_stall_status
+	branch usb0_get_status_in_ep_in_ack
+
+usb_get_idle:
+	jam 1,mem_usb_idle_flag
+	arg mem_usb_idle_rate,rega
+	arg 1,regb
+	branch usb0_respond
+
+usb_get_report:
+	fetch 2,mem_usb_setup_bValue
+	arg PC_GET_REPORT,temp
+	isub temp,null
+	nbranch usb0_force_stall,zero
+//	set0 mark_isstr,mark
+usb_get_report_dispose:	
+	fetch 1,mem_usb0_data_ready_report
+	nbranch usb_get_report_data_success,blank
+	jam PC_GET_NONDATA,mem_usb0_get_report_data
+usb_get_report_send_data:
+	fetch 1,mem_usb_setup_bLength
+	iforce regb
+	arg mem_usb0_get_report_data,rega
+	call usb0_respond
+usb_get_report_data_release:	
+	arg mem_usb0_get_report_data,contw
+	arg 64,loopcnt
+	branch memset0
+usb_get_report_data_success:
+	jam 0,mem_usb0_data_ready_report
+	jam PC_GET_DATA,mem_usb0_get_report_data
+	branch usb_get_report_send_data
+
+usb_get_protocol_req:
+	fetch 1,mem_usb_setup_bLength
+	bne 1,usb0_force_stall
+	jam 1,mem_usb_get_protocol_flag
+	arg 1,regb //length
+	fetch 1,mem_usb_set_protocol_value
+	beq 0,usb_get_report_protocol
+	beq 1,usb_get_boot_protocol
+	branch usb_send_zero_packet
+usb_get_report_protocol:
+	branch usb_send_ones_packet
+usb_get_boot_protocol:
+	branch usb_send_zero_packet
+
+
+
+//in device
+usb0_request_clear_feature:
+	fetch 1,mem_usb0_state
+	bne DEV_CONFIGURED,usb0_force_stall
+	fetch 1,mem_usb_setup_bLength
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValueH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex+1
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bmRequestType
+	beq OUT_DEVICE,usb0_request_clear_feature_out_device
+	beq OUT_INTERFACE,usb0_request_clear_feature_out_interface
+	beq OUT_ENDPOINT,usb0_request_clear_feature_out_endpoint
+	branch usb0_force_stall
+
+usb0_request_clear_feature_out_device:
+	fetch 1,mem_usb_setup_bValue
+	bne DEVICE_REMOTE_WAKEUP,usb0_force_stall
+	fetch 1,core_usb_config
+	set0 7,pdata
+	store 1,core_usb_config
+	jam 0,mem_usb_remote_wakeup
+	jam 1,mem_usb_clear_remote_wakeup
+	fetch 1,mem_sdsystem_wakeup_flag
+	branch usb0_reply_zerolen,blank
+	jam 0,mem_sdsystem_wakeup_flag
+	jam 0,mem_usb_clear_remote_wakeup
+	jam USB_CONNECTED,mem_usb_state
+	branch usb0_reply_zerolen
+
+usb0_request_clear_feature_out_interface:
+	branch usb0_force_stall
+
+usb0_request_clear_feature_out_endpoint:
+	fetch 1,mem_usb_setup_bValue
+	bne ENDPOINT_HALT,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	beq IN_EP1,usb0_force_stall_ep1_in_off
+	beq IN_EP2,usb0_force_stall_ep2_in_off
+	beq IN_EP3,usb0_force_stall_ep3_in_off
+	and_into 0x7f,pdata
+	beq 0x00,usb0_force_stall_ep0_in_off
+	branch usb0_force_stall
+
+usb0_force_stall_ep0_in_off:
+	jam 0,mem_usb_ep0_stall_status
+	branch usb0_reply_zerolen
+usb0_force_stall_ep1_in_off:
+	jam 0,mem_usb_ep1_stall_status
+usb0_force_stall_ep1_in_off_reply:	
+	jam 1,mem_usb_clear_halt
+	branch usb0_reply_zerolen
+usb0_force_stall_ep2_in_off:
+	jam 0,mem_usb_ep2_stall_status
+	branch usb0_force_stall_ep1_in_off_reply
+usb0_force_stall_ep3_in_off:
+	jam 0,mem_usb_ep3_stall_status
+	branch usb0_force_stall_ep1_in_off_reply
+
+
+usb0_request_set_feature:
+	fetch 1,mem_usb_setup_bLength
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bmRequestType
+	beq OUT_DEVICE,usb0_request_set_feature_out_device
+	beq OUT_INTERFACE,usb0_request_set_feature_out_interface
+	beq OUT_ENDPOINT,usb0_request_set_feature_out_endpoint
+	branch usb0_force_stall
+
+usb0_request_set_feature_out_device:
+	fetch 1,mem_usb_setup_bValue
+	bne DEVICE_REMOTE_WAKEUP,usb0_force_stall
+	call dongle_set_pc_sleep_flag
+	fetch 1,core_usb_config
+	set1 7,pdata
+	store 1,core_usb_config
+	jam 1,mem_usb_remote_wakeup
+	jam USB_SLEEP,mem_usb_state
+	jam 0,mem_usb_tx_win_enable
+	call usb0_reply_zerolen
+usb_wakeup_timer_reinit:
+	call timer_reinit
+	setarg TIMER_WAKEUP_DELAY
+	arg USB_TIMER_WAKEUP,queue
+	branch timer_init
+	
+usb0_request_set_feature_out_interface:
+	branch usb0_force_stall
+
+usb0_request_set_feature_out_endpoint:
+	fetch 1,mem_usb_setup_bValue
+	bne ENDPOINT_HALT,usb0_force_stall
+	fetch 1,mem_usb_setup_bValueH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	beq IN_EP1,usb0_force_stall_ep1_in_on
+	beq IN_EP2,usb0_force_stall_ep2_in_on
+	beq IN_EP3,usb0_force_stall_ep3_in_on
+	and_into 0x7f,pdata
+	beq 0x00,usb0_force_stall_ep0_in_on
+	branch usb0_force_stall
+
+usb0_force_stall_ep0_in_on:
+	jam 1,mem_usb_ep0_stall_status
+	branch usb0_reply_zerolen
+usb0_force_stall_ep1_in_on:
+	jam 1,mem_usb_ep1_stall_status
+	branch usb0_reply_zerolen
+usb0_force_stall_ep2_in_on:
+	jam 1,mem_usb_ep2_stall_status
+	branch usb0_reply_zerolen
+usb0_force_stall_ep3_in_on:
+	jam 1,mem_usb_ep3_stall_status
+	branch usb0_reply_zerolen
+
+
+usb0_request_set_address:
+	fetch 1,mem_usb_setup_bmRequestType
+	bne OUT_DEVICE,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex+1
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLength
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValueH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	and_into 0x80,pdata
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	bne 0,usb_usb0_state_set_dev_addr
+usb_usb0_state_set_dev_default:	
+	jam DEV_DEFAULT,mem_usb0_state
+usb0_request_set_wait_address:
+	fetch 1,mem_usb_setup_bValue
+	store 1,core_usb_addr
+	call usb0_reply_zerolen
+	jam 1,mem_usb_set_high_addr_flag
+	rtn
+usb_usb0_state_set_dev_addr:
+	jam DEV_ADDRESS,mem_usb0_state
+	branch usb0_request_set_wait_address
+
+
+usb0_request_set_configuration:
+	fetch 1,mem_usb0_state
+	beq DEV_DEFAULT,usb0_force_stall
+	fetch 1,mem_usb_setup_bmRequestType
+	bne OUT_DEVICE,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex+1
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLength
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue+1
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	sub pdata,USB_MAX_NUM_CFG,null
+	nbranch usb0_force_stall,positive
+	fetch 1,mem_usb0_state
+	beq DEV_ADDRESS,usb0_request_set_cfg_addr_state
+	beq DEV_CONFIGURED,usb0_request_set_cfg_cfg_state
+	branch usb0_force_stall
+ // This software only supports config = 0,1
+usb0_request_set_cfg_addr_state:
+usb0_request_set_cfg_cfg_state:
+	fetch 1,mem_usb_setup_bValue	//1:Configured state   0:Address state
+	beq 0,usb0_request_set_cfg_stay_addr_state
+	jam DEV_CONFIGURED,mem_usb0_state
+	branch usb0_reply_zerolen
+usb0_request_set_cfg_stay_addr_state:
+	jam DEV_ADDRESS,mem_usb0_state
+	branch usb0_reply_zerolen
+
+
+usb0_request_set_interface:
+	fetch 1,mem_usb0_state
+	bne DEV_CONFIGURED,usb0_force_stall		
+	fetch 1,mem_usb_setup_bmRequestType
+	bne OUT_INTERFACE,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValueH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLength
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bLengthH
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_wIndex+1
+	bne 0,usb0_force_stall
+	branch usb0_reply_zerolen
+
+
+usb_set_idle:
+	bpatchx patch20_3,mem_patch20
+	jam 1,mem_usb_idle_flag
+	fetch 1,mem_usb_setup_bValueH
+	store 1,mem_usb_idle_rate
+	fetch 1,mem_usb_setup_wIndex
+	sub pdata,1,null
+	call usb_clear_remote_wakeup_set0,zero
+	fetch 1,mem_usb_state
+	bne USB_RESUME,usb0_reply_zerolen
+	jam USB_CONNECTED,mem_usb_state
+	call usb0_reply_zerolen
+	nop 30000
+	nop 30000
+	rtn
+usb_clear_remote_wakeup_set0:
+	jam 1,mem_usb_device_enumeration_endflag
+	jam 0,mem_usb_clear_remote_wakeup
+	jam USB_RESUME,mem_usb_state
+	rtn
+
+
+usb_set_report:
+	nop 15000		//delay 1ms
+	arg mem_usb0_set_report_data,contw
+	call usb_rx_data
+	jam 1,mem_usb0_get_set_report
+	call usb_set_report_resume_judge
+	fetch 2,mem_usb_setup_bValue
+	store 2,mem_usb_setup_bValue_temp
+	call usb0_reply_zerolen
+	fetch 1,mem_device_option
+	rtnne DVC_OP_DONGLE
+	fetch 1,mem_usb_tx_win_enable
+	rtn blank
+	fetch 1,mem_usb0_set_report_data
+usb_get_led_status:	
+	store 1,mem_24g_led_status
+	jam 0,mem_usb_tx_win_enable
+	jam KB_LED_ACKPAYLOAD,mem_24g_ackpayload_enable
+	rtn
+
+	
+usb_set_report_resume_judge:
+	fetch 2,mem_usb_setup_bValue
+	arg PC_SET_REPORT_bValue,temp
+	isub temp,null
+	nrtn zero
+	fetch 2,mem_usb_setup_wIndex
+	arg PC_SET_REPORT_wIndex,temp
+	isub temp,null
+	nrtn zero
+	fetch 2,mem_usb_setup_bLength
+	arg PC_SET_REPORT_bLength,temp
+	isub temp,null
+	nrtn zero
+	jam 1,mem_usb_tx_win_enable
+	rtn
+
+
+usb_set_protocol_req:
+	fetch 1,mem_usb_setup_bLength
+	bne 0,usb0_force_stall
+	fetch 1,mem_usb_setup_bValue
+	beq BOOT_PROTOCOL,usb_set_boot_protocol
+	beq REPORT_PROTOCOL,usb_set_report_protocol
+	branch usb0_force_stall
+usb_set_boot_protocol:
+	jam 0,mem_usb_set_protocol_status
+	jam 1,mem_usb_set_protocol_value
+	branch usb0_reply_zerolen
+usb_set_report_protocol:
+	jam 1,mem_usb_tx_mac_enable
+	jam 1,mem_usb_set_protocol_status
+	jam 0,mem_usb_set_protocol_value
+	branch usb0_reply_zerolen
+
+
+usb0_respond_length:
+	ifetchr regb,1,rega
+	increase 1,rega
+//rega=*buff,regb=size
+usb0_respond:
+	bpatchx patch20_4,mem_patch20
+	set1 mark_usb_first_resp,mark
+	bmark0 mark_isstr,usb0_respond_nostr
+	increase 1,regb
+	lshift regb,regb
+usb0_respond_nostr:
+	storer rega,2,mem_bufptr
+	storer regb,1,mem_remain
+	branch usb0_tx
+	rtn
+
+usb_no_respond_data:
+	arg 0,queue
+	branch usb_trig
+
+
+
+//mem_bufptr=*buff,mem_remain=size,loopcnt=i,rega=len
+usb0_tx:
+	bpatchx patch20_5,mem_patch20
+	fetch 1,core_usb_txbusy
+	rtnbit1 0
+	fetch 1,mem_remain
+	rtn blank
+	copy pdata,loopcnt
+	iforce temp
+	fetch 2,mem_usb_setup_bLength
+	sub pdata,EP0_PACKET_SIZE,null
+	branch usb0_tx_short,positive
+	sub loopcnt,EP0_PACKET_SIZE,null
+	branch usb0_tx_info,positive
+	force EP0_PACKET_SIZE,loopcnt
+	branch usb0_tx_info
+usb0_tx_short:
+	isub loopcnt,null
+	branch usb0_tx_info,positive
+	iforce loopcnt
+	store 1,mem_remain
+usb0_tx_info:
+	fetch 1,mem_remain
+	isub loopcnt,pdata
+	store 1,mem_remain
+	add loopcnt,-1,pdata
+	store 1,mem_usb_txbuf
+	bmark0 mark_isstr,usb0_tx_nostr
+	rshift pdata,pdata
+	add loopcnt,-1,pdata
+	store 1,mem_usb_txbuf
+	bmark0 mark_usb_first_resp,usb0_tx_nostr
+	set0 mark_usb_first_resp,mark
+	istoret 1,contw
+	setarg 3
+	istore 1,contw
+	increase -1,loopcnt
+	copy loopcnt,pdata
+	nbranch usb0_tx_nostr,zero
+	increase 1,loopcnt
+usb0_tx_nostr:
+	fetch 2,mem_bufptr
+	copy pdata,contr
+usb0_tx0:
+	ifetch 1,contr
+	istore 1,contw
+	bmark0 mark_isstr,usb0_tx1
+	setarg 0
+	istore 1,contw
+usb0_tx1:
+	loop usb0_tx0
+	copy contr,pdata
+	store 2,mem_bufptr				//mem_bufptr += len
+	setarg mem_usb_txbuf
+	store 2,core_usb_tx_saddr0
+	arg 0,queue
+	call usb_trig
+	fetch 1,mem_remain
+	nrtn blank
+	jam 2,core_usb_clear_nak			// clear OUT nak for last packet
+	fetch 1,mem_usb_state
+	rtnne USB_GOT_REPORT_REQ
+	jam USB_CONNECTED,mem_usb_state
+	rtn
+
+
+
+usb_tx_ep1:
+	arg mem_usb_txbuf1,rega
+	arg 1,queue
+	storer rega,2,core_usb_tx_saddr1
+usb_tx_buf:
+	add loopcnt,-1,pdata
+	istore 1,rega
+usb_tx_loop:
+	ifetch 1,contr
+	istore 1,contw
+	loop usb_tx_loop
+usb_trig:
+	setarg 0
+	qset1 pdata
+	store 1,core_usb_trig
+	rtn
+
+usb_tx_ep2:
+	arg 2,queue
+	arg mem_usb_txbuf2,rega
+	storer rega,2,core_usb_tx_saddr2
+	branch usb_tx_buf
+
+usb_tx:
+	bpatchx patch20_6,mem_patch20
+	fetch 1,mem_usb_tx_enable
+	rtn blank
+	fetch 1,core_usb_txbusy
+	and_into 0x0f,pdata
+	nbranch usb_inwake_state_tx_dispose,blank
+	fetch 1,mem_usb_device_enumeration_endflag
+	branch usb_tx_fifo_release,blank
+	fetch 1,mem_usb_state
+	beq USB_SLEEP,usb_windows_wakeup
+	bne USB_CONNECTED,usb_tx_fifo_release
+	fetch 1,mem_usb_clear_remote_wakeup
+	nbranch usb_tx_fifo_release,blank
+	call usb_tx_data_ep1
+	branch usb_tx_data_ep2
+
+usb_tx_data_ep1:
+	fetch 1,core_usb_txbusy
+	rtnbit1 1
+	fetch 1,mem_usb_tx_enable
+	rtnbit0 1
+	fetch 1,mem_usb_tx_enable
+	set0 1,pdata
+	store 1,mem_usb_tx_enable
+	fetch 1,mem_usb_ep1_data
+	rtn blank
+	beq USB_EP1_KB,usb_tx_kb_normal_data
+	branch assert
+
+usb_tx_data_ep2:
+	fetch 1,core_usb_txbusy
+	rtnbit1 2
+	fetch 1,mem_usb_tx_enable
+	rtnbit0 2
+	fetch 1,mem_usb_tx_enable
+	set0 2,pdata
+	store 1,mem_usb_tx_enable
+	fetch 1,mem_usb_ep2_data
+	rtn blank
+	beq USB_EP2_MS,usb_tx_ms_data
+	beq USB_EP2_MULTIKEY,usb_tx_kb_multikey_data
+	beq USB_EP2_SYSTEMKEY,usb_tx_kb_systemkey_data
+	branch assert
+
+usb_tx_fifo_release:
+	//clear mem_usb_mouse_data/mem_usb_kb_data/mem_usb_kb_multikey/mem_usb_kb_system
+	arg mem_usb_mouse_data,contw
+	arg 64,loopcnt
+	branch memset0
+	
+usb_tx_ms_data:
+	fetch 1,mem_usb_idle_flag
+	fetcht 1,mem_usb_get_protocol_flag
+	iand temp,pdata
+	branch usb_tx_ms_data_normal_mode,blank
+	fetcht 1,mem_usb_set_protocol_status
+	iadd temp,pdata
+	beq MAC_BOOT_MODE,usb_tx_ms_data_mac_boot_mode
+	branch usb_tx_ms_data_normal_mode
+
+usb_tx_ms_data_mac_boot_mode:
+	jam 0,mem_usb_ep2_data
+usb_tx_ms_data_mac_boot_regroup:
+	fetch 1,mem_usb_mouse_data+1	//key
+	beq R_KEY,usb_tx_mac_boot_ms_regroup_r_or_lrkey
+	beq LR_KEY,usb_tx_mac_boot_ms_regroup_r_or_lrkey
+	fetch 1,mem_usb_mouse_data+1	//key
+	store 1,mem_usb_mouse_data
+	fetch 1,mem_usb_mouse_data+2	//x low
+	istore 1,contw
+	fetch 1,mem_usb_mouse_data+4	//y low
+	istore 1,contw
+	fetch 1,mem_usb_mouse_data+6	//wheel
+	istore 1,contw
+	arg 4,loopcnt
+	arg mem_usb_mouse_data,contr
+	branch usb_tx_ep2
+	
+usb_tx_ms_data_normal_mode:
+	jam 0,mem_usb_ep2_data
+usb_tx_mac_boot_ms_regroup_r_or_lrkey:	
+	arg 8,loopcnt		
+	arg mem_usb_mouse_data,contr
+	branch usb_tx_ep2
+
+usb_tx_kb_multikey_data:
+	jam 0,mem_usb_ep2_data
+	arg 3,loopcnt
+	arg mem_usb_kb_multikey,contr
+	branch usb_tx_ep2
+
+usb_tx_kb_normal_data:
+	jam 0,mem_usb_ep1_data
+	arg 8,loopcnt
+	arg mem_usb_kb_data,contr
+	branch usb_tx_ep1
+
+usb_tx_kb_systemkey_data:
+	jam 0,mem_usb_ep2_data
+	arg 2,loopcnt
+	arg mem_usb_kb_system,contr
+	branch usb_tx_ep2
+
+usb_inwake_state_tx_dispose:
+	fetch 1,mem_usb_state
+	beq USB_CONNECTED,usb_mac_wakeup_trig
+	rtn
+usb_mac_wakeup_trig:
+	fetch 1,core_usb_config
+	set1 7,pdata
+	store 1,core_usb_config
+	jam 1,mem_usb_mac_wakeup_trig
+	rtn
+
+usb_mac_wakeup_judge:
+	fetch 1,mem_usb_state
+	rtneq USB_SLEEP
+	beq USB_CONNECTED,usb_mac_wakeup
+	rtn
+usb_mac_wakeup:
+	fetch 1,mem_usb_mac_wakeup_trig
+	rtn blank
+	jam 1,mem_usb_wakestate_onetime_flag
+	branch usb_wakeup
+
+usb_windows_wakeup:
+	arg USB_TIMER_WAKEUP,queue
+	call timer_check
+	nrtn blank
+usb_wakeup:
+	fetch 1,core_usb_config
+	rtnbit0 7	//endpoint wakeup enable
+	jam 0xfc,core_usb_config
+	nop 30000
+	jam 0x3c,core_usb_config
+	rtn
+
+
+endif
+

@@ -1,0 +1,1052 @@
+
+
+le_parse_att:
+	copy contr,rega
+	fetch 1,mem_device_option
+	beq DVC_OP_SHUTTER_DY,shutter_dy_le_parse_att
+	beq DVC_OP_KEYBOARD,keyboard_le_att_auto_reco_process
+	copy rega,contr
+	ifetch 3,contr
+	store 3,mem_le_att_opcode
+le_parse_att2:
+	beq ATTOP_EXCHANGE_MTU_REQUEST,le_parse_att_exchange_mtu_request
+	beq ATTOP_EXCHANGE_MTU_RESPONSE,le_parse_att_exchange_mtu_response
+	beq ATTOP_FIND_INFORMATION_REQUEST,le_parse_att_find_information_request
+	beq ATTOP_FIND_BY_TYPE_VALUE_REQUEST,le_parse_att_find_by_type_value_request
+	beq ATTOP_READ_BY_TYPE_REQUEST,le_parse_att_read_by_type_request
+	beq ATTOP_READ_REQUEST,le_parse_att_read_request
+	beq ATTOP_READ_BLOB_REQUEST,le_parse_att_read_blob_request
+	beq ATTOP_READ_BY_GROUP_TYPE_REQUEST,le_parse_att_read_by_group_type_request
+	beq ATTOP_WRITE_REQUEST,le_parse_att_write_request
+	beq ATTOP_PREPARE_WRITE_REQUEST,le_parse_att_prepare_write_request
+	beq ATTOP_EXECUTE_WRITE_REQUEST,le_parse_att_execute_write_request
+	beq ATTOP_HANDLE_VALUE_CONFIRMATION,le_parse_handle_value_confirmation
+	beq ATTOP_WRITE_COMMAND,le_parse_att_write_command
+	rtn
+
+
+le_send_att_exchange_mtu_requset:
+	force 3,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_EXCHANGE_MTU_REQUEST
+le_send_att_exchange_mtu_common:
+	istore 1,contw
+	fetch 2,mem_le_local_mtu
+	istore 2,contw
+	rtn
+
+
+le_parse_att_exchange_mtu_request:
+	call le_parse_att_exchange_mtu_response
+le_send_att_exchange_mtu_response:
+	force 3,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_EXCHANGE_MTU_RESPONSE
+	branch le_send_att_exchange_mtu_common
+
+le_parse_att_exchange_mtu_response:
+	rshift8 pdata,pdata
+	store 2,mem_le_remote_mtu
+	rtn
+
+le_parse_att_find_information_request:
+	call le_get_search_handle_start_end_common
+	call enable_user
+	branch le_send_att_find_information_response
+
+/* blank:end of list, positive:in range */
+le_att_handle_inrange:
+	ifetch 2,contr
+	and_into 0xff,pdata
+	rtn blank
+	isub regb,null			/* less than start ? */
+	rtn zero
+	nrtn positive
+	isub regc,null			/* greater than end ? */
+	rtn zero
+	branch le_att_handle_blank,positive
+	force 1,null
+	rtn
+le_att_handle_blank:
+	force 0,pdata
+	rtn
+
+	
+le_send_att_find_information_response:
+	arg 3,timeup
+	call le_init_attlist_search
+le_send_att_find_information_res_loop:
+	call le_att_handle_inrange
+	branch le_send_att_find_information_res_end,blank
+	nbranch le_send_att_find_information_res_next,positive
+	increase -2,contr
+	call store_contr
+	call get_contw
+	nbranch le_send_att_find_information_res_store_info2,user
+	call push_stack_rega_b_c
+	storer timeup,4,mem_timeup
+	force 30,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	fetchr timeup,4,mem_timeup
+	call pop_stack_rega_b_c
+	call disable_user
+	setarg ATTOP_FIND_INFORMATION_RESPONSE
+	istore 1,contw
+	call get_contr
+	ifetch 2,contr
+	ifetchr rega, 1,contr
+	sub rega,16,null
+	branch le_send_att_find_information_res_uuid128,zero
+	sub rega,2,null
+	nbranch le_send_att_error_response_notfound,zero
+le_send_att_find_information_res_uuid16:
+	setarg UUID_SIZE_16BIT
+	istore  1,contw
+	branch le_send_att_find_information_res_store_info
+	
+le_send_att_find_information_res_uuid128:
+	setarg UUID_SIZE_128BIT
+	istore 1,contw
+	arg 1,timeup
+	branch le_send_att_find_information_res_store_info
+		
+le_send_att_find_information_res_store_info2:
+	call get_contr
+	ifetch 2,contr
+	ifetch 1,contr
+	isub rega,null //uuid size format
+	nbranch le_send_att_find_information_res_end,zero
+	
+le_send_att_find_information_res_store_info:
+	call get_contr
+	ifetch 2,contr
+	and_into 0xff,pdata
+	istore 2,contw
+	ifetchr loopcnt, 1,contr
+	call memcpy
+	call store_contw
+	increase -1,timeup
+	branch le_send_att_find_information_res_end,zero
+le_send_att_find_information_res_cont:
+	call le_att_contr_add_len
+	branch le_send_att_find_information_res_loop
+	
+le_send_att_find_information_res_next:
+	call le_att_contr_add_len
+	branch le_send_att_find_information_res_cont
+	
+le_send_att_find_information_res_end:
+	branch le_send_att_error_response_notfound,user
+	branch le_send_auto_len_by_mem
+
+
+le_parse_att_find_by_type_value_request:
+	call le_get_search_handle_start_end_common
+	ifetch 2,contr
+	store 2,mem_le_search_uuid
+	call store_contr
+	arg mem_le_search_att_type_length,contw
+	fetch 2,mem_le_l2cap_size
+	increase -7,pdata
+	call le_get_search_common2
+	branch le_send_att_find_by_type_value_response
+
+
+le_start_end_handle_check_1:
+	disable user
+	fetcht 2,mem_le_search_handle_start
+	fetch 2,mem_le_search_handle_end
+	isub temp,null
+	nbranch le_start_end_handle_check_1_fail,positive
+	deposit temp
+	rtnne 0
+le_start_end_handle_check_1_fail:
+	enable user
+	jam ATT_ERR_INVALID_HANDLE,mem_le_err_code
+	branch le_send_att_error_response
+
+
+le_send_att_find_by_type_value_response:
+	call le_start_end_handle_check_1
+	rtn user
+	fetcht 2,mem_le_search_uuid
+	setarg UUID_GATT_PRIMARY_SERVICE
+	isub temp,null
+	branch le_send_att_find_by_type_value_res_primary,zero
+	branch le_send_att_error_response_notfound
+	
+
+le_send_att_find_by_type_value_res_primary:
+	jam LE_FIND_BY_TYPE_VAL_RES_NOT_FOUND,mem_le_search_res
+	fetcht 2,mem_le_search_handle_start
+	storet 2,mem_temp
+	call le_att_get_handle_info
+	nbranch le_send_att_error_response_notfound,blank
+le_send_att_find_primary_search_loop:
+	fetcht 2,mem_temp
+	call le_att_get_handle_info
+	nbranch le_send_att_error_response_notfound2,blank	
+	copy contr,rega
+	fetch 1,mem_le_curr_att_len
+	copy pdata,loopcnt
+	fetcht 1,mem_le_search_att_type_length
+	isub temp,null
+	nbranch le_send_att_find_primary_search_loop1,zero
+	arg mem_le_search_att_type,regb
+	call string_compare
+
+	branch le_send_att_find_primary_search_end_start_handle_found,zero
+
+	fetch 2,mem_le_cur_uuid
+	fetcht 2,mem_le_search_uuid
+	isub temp,null
+	branch le_send_att_find_primary_search_end_ending_handle_found,zero
+le_send_att_find_primary_search_loop1:
+	fetch 2,mem_temp
+	increase 1,pdata
+	store 2,mem_temp
+	branch le_send_att_find_primary_search_loop
+
+le_send_att_error_response_notfound2:
+	fetch 1,mem_le_search_res
+	beq LE_FIND_BY_TYPE_VAL_RES_FOUND_STARTING_HANDLE,le_send_att_find_primary_search_end_ending_handle_found
+	branch le_send_att_error_response_notfound
+
+	
+le_send_att_find_primary_search_end_start_handle_found:
+	fetch 2,mem_le_cur_uuid
+	fetcht 2,mem_le_search_uuid
+	isub temp,null
+	nbranch  le_send_att_find_primary_search_loop1,zero
+	jam LE_FIND_BY_TYPE_VAL_RES_FOUND_STARTING_HANDLE,mem_le_search_res
+//	copy rega,temp
+	fetcht 2,mem_temp
+	storet 2,mem_le_cur_handle_start
+	branch le_send_att_find_primary_search_loop1
+
+le_send_att_find_primary_search_end_ending_handle_found:
+	fetch 1,mem_le_search_res
+	beq LE_FIND_BY_TYPE_VAL_RES_NOT_FOUND,le_send_att_find_primary_search_loop1
+	jam LE_FIND_BY_TYPE_VAL_RES_FOUND_ENDING_HANDLE,mem_le_search_res
+	fetcht 2,mem_temp
+	increase -1,temp
+	storet 2,mem_le_cur_handle_end
+	
+le_send_att_find_primary_search_end:
+	arg 5,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_FIND_BY_TYPE_VALUE_RESPONSE
+	istore 1,contw
+	fetch 2,mem_le_cur_handle_start
+	istore 2,contw
+	fetch 2,mem_le_cur_handle_end
+	istore 2,contw
+	rtn
+
+
+
+le_parse_att_read_by_type_request:
+	call le_get_search_handle_start_end_common
+	call le_get_search_att_type
+	branch le_send_att_read_by_type_response
+	
+le_send_att_read_by_type_response:
+	fetcht 2,mem_le_search_handle_start
+	storet 2,mem_temp
+	call le_init_attlist_search
+	call le_att_get_handle_ptr2
+	increase -2,contr
+	copy contr,pdata
+	store 2,mem_le_cur_attlist_start_ptr
+
+	fetcht 2,mem_le_search_att_type
+	setarg UUID_CHRCTR_DEVICE_NAME
+	isub temp,null
+	branch le_send_att_read_by_type_res_device_name,zero
+	setarg UUID_GATT_CHARACTERISTIC
+	isub temp,null
+	nbranch le_send_att_read_by_type_res_not_characteristic,zero
+	arg 2,timeup
+le_send_att_read_by_type_response_loop:
+	call le_att_check_handle_end
+	nbranch le_send_att_read_by_type_response_end,positive
+	fetcht 2,mem_temp
+	call le_att_get_handle_info_from_ptr
+	nbranch le_send_att_read_by_type_response_end,blank
+	call le_att_same_type
+	nbranch le_send_att_read_by_type_response_next_handle,zero
+	nbranch le_send_att_read_by_type_res_found_next,user
+	disable user
+ 	call le_get_search_max_mtu_data
+	copy pdata,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_READ_BY_TYPE_RESPONSE
+	istore 1,contw
+	copy contw,alarm
+	increase 1,contw
+	
+	call le_send_att_read_by_type_write_properties
+	call le_att_next_handle
+	call le_att_get_handle_info_from_ptr
+	call le_send_att_read_by_type_write_uuid
+	fetch 1,mem_le_cur_uuid_length
+	add pdata,5,rega
+	istorer rega,1,alarm
+	
+	sub rega,7,null
+	ncall enable_user2,zero
+	call disable_user2,zero
+ 	call le_get_search_max_mtu_data
+ 	increase -2,pdata
+	idiv rega
+	call wait_div_end
+	quotient timeup
+	increase -1,timeup
+	branch le_send_att_read_by_type_response_end,zero
+le_send_att_read_by_type_response_next_handle:
+	call le_att_next_handle
+	branch le_send_att_read_by_type_response_loop
+le_send_att_read_by_type_response_end:
+	branch le_send_att_error_response_notfound,user
+	branch le_send_auto_len_by_mem
+
+le_send_att_read_by_type_res_found_next:
+	call le_store_att_record
+	call le_att_next_handle
+	call le_att_get_handle_info_from_ptr
+	call le_send_att_read_by_type_res_check_pair_length_type
+	nbranch le_send_att_read_by_type_response_end,blank
+
+	call get_contw
+	fetch 2,mem_temp
+	increase -1,pdata
+	istore 2,contw
+	call le_write_att_record_common
+	call le_send_att_read_by_type_write_uuid
+	increase -1,timeup
+	branch le_send_att_read_by_type_response_end,zero
+	branch le_send_att_read_by_type_response_next_handle
+
+	
+le_send_att_read_by_type_write_properties:
+	fetch 2,mem_temp
+	istore 2,contw
+	
+	fetch 1,mem_le_curr_att_len
+	copy pdata,loopcnt
+	call get_contr
+	call memcpy_fast
+	branch store_contw
+le_send_att_read_by_type_write_uuid:
+	call get_contw
+	fetch 2,mem_temp
+	istore 2,contw
+	call store_contw
+	fetch 1,mem_le_cur_uuid_length
+	copy pdata,loopcnt
+	call get_contw	
+	call get_contr
+	isub loopcnt,contr
+	increase -1,contr
+	call memcpy_fast
+	branch store_contw
+
+le_send_att_read_by_type_res_not_characteristic:
+	bpatchx patch2a_5,mem_patch2a
+	call le_att_get_uuid_ptr
+	branch le_send_att_error_response_notfound,blank
+	copy contr,regc
+	
+	call le_get_search_max_mtu_data
+	copy regc,contr
+	ifetcht 1,contr
+	increase 4, temp
+	call not_greater_than
+	copy pdata,regc
+	copy pdata,rega
+	call store_contr
+	call le_fifo_malloc_tx_l2cap_gatt
+
+	setarg ATTOP_READ_BY_TYPE_RESPONSE
+	istore 1,contw
+	add regc,-2,pdata
+	add pdata ,-2,loopcnt
+	istore 1,contw
+	fetch 2,mem_le_cur_handle
+	istore 2,contw
+	call get_contr
+	branch  memcpy_fast
+
+	
+le_send_att_read_by_type_res_device_name:
+	call le_att_get_uuid_ptr
+	branch le_send_att_error_response_notfound,blank
+	increase -5,contr // point to handle
+	ifetch 2,contr		
+	store 2,mem_temp
+	call le_get_search_max_mtu_data
+	fetcht 1,mem_le_name_len
+	increase 4, temp
+	call not_greater_than
+	copy pdata,regc
+	copy pdata,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_READ_BY_TYPE_RESPONSE
+	istore 1,contw
+	add regc,-2,pdata
+	add pdata ,-2,loopcnt
+	istore 1,contw
+	fetch 2,mem_temp
+	istore 2,contw
+	arg mem_le_name,contr
+	branch memcpy_fast
+	
+
+le_init_attlist_search:
+	bpatchx patch2a_6,mem_patch2a
+	fetch 2,mem_le_search_handle_start
+	iforce regb
+	fetch 2,mem_le_search_handle_end
+	iforce regc
+	fetch 2,mem_ui_le_uuid_table
+	iforce contr
+	branch enable_user
+
+
+	/* handle in temp, return pointer in contr to length, blank not found */
+le_att_get_handle_ptr:
+	call le_att_get_handle_ptr2
+	branch le_att_get_handle_ptr_found,zero
+	rtn
+	
+le_att_get_handle_ptr2:
+	bpatchx patch2a_7,mem_patch2a
+	fetch 2,mem_ui_le_uuid_table
+	iforce contr
+le_att_get_handle_loop1:
+	ifetch 2,contr
+	and_into 0xff,pdata
+	rtn blank
+	isub temp,null
+	rtn zero
+	call le_att_contr_add_len
+	call le_att_contr_add_len
+	branch le_att_get_handle_loop1
+	
+le_att_get_handle_ptr_found:
+le_att_contr_add_len:
+	ifetch 1,contr
+	iadd contr,contr	
+	rtn	
+	
+
+le_att_get_uuid_ptr:
+	bpatchx patch2b_0,mem_patch2b
+	fetch 2,mem_ui_le_uuid_table
+	iforce contr
+le_att_get_uuid_loop:
+	ifetch 2,contr
+	and_into 0xff,pdata
+	rtn blank
+	store 2,mem_le_cur_handle  //handle
+	ifetch 1,contr
+	copy contr,contw
+	iadd contr,contr
+	fetcht 1,mem_le_search_att_type_length
+	isub temp,null
+	nbranch le_att_get_uuid_ptr_next,zero
+	copy pdata,loopcnt
+	copy contw,regb
+	arg mem_le_search_att_type ,rega
+	call string_compare
+	rtn zero
+	fetch 1,mem_le_search_att_type_length
+le_att_get_uuid_ptr_next:	
+	iadd contw,contr
+	call le_att_contr_add_len
+	branch le_att_get_uuid_loop	
+
+
+
+
+//output:temp:new handle num
+//contr:address write data
+le_att_get_last_handle:
+	arg 0x01,temp
+	fetch 2,mem_ui_le_uuid_table
+	iforce contr
+	copy contr,contw
+le_att_get_last_handle_loop:
+	ifetch 2,contr
+	and_into 0xff,pdata
+	rtn blank
+	add pdata,1,temp
+	call le_att_contr_add_len
+	call le_att_contr_add_len
+	copy contr,contw
+	branch le_att_get_last_handle_loop
+
+
+le_att_get_handle_info_from_ptr:
+	fetch 2, mem_le_cur_attlist_start_ptr
+	branch le_att_get_handle_info_fast
+
+le_att_get_handle_info:
+	bpatchx patch2b_1,mem_patch2b
+	fetch 2,mem_ui_le_uuid_table
+le_att_get_handle_info_fast:
+	iforce contr
+le_att_get_handle_loop:
+	ifetch 2,contr
+	and_into 0xff,pdata
+	branch le_att_unfind_handle,blank
+	isub temp,null
+	branch le_att_finded_handle, zero
+	call le_att_contr_add_len
+	call le_att_contr_add_len
+	branch le_att_get_handle_loop
+	
+le_att_unfind_handle:
+	branch disable_blank
+
+le_att_finded_handle:
+	ifetch 1,contr
+	store 1,mem_le_cur_uuid_length
+	copy pdata,loopcnt
+	arg mem_le_cur_uuid,contw
+	call memcpy_fast
+	ifetch 1,contr
+	store 1,mem_le_curr_att_len
+	call store_contr
+	branch enable_blank
+
+
+
+le_parse_att_read_request:
+	call le_check_encrypt_state
+	fetcht 2,mem_le_att_handle
+	fetch 1,mem_le_configuration
+	bbit1 BIT_BLE_READ_AUTH,le_send_att_read_response_check_auth
+
+//input:temp is handle
+le_send_att_read_response:
+	call le_att_get_handle_ptr2
+	nbranch le_send_att_error_response_notfound,zero
+	call le_send_att_read_response_check_handle,user
+	rtn user
+	call le_att_get_handle_ptr_found
+	increase -2,contr
+	ifetch 2,contr
+	arg UUID_CHRCTR_DEVICE_NAME,temp
+	isub temp,null
+	branch le_send_device_name,zero
+	copy contr,regc
+	call le_get_search_max_mtu_data
+	copy regc,contr
+	ifetcht 1,contr
+	increase 1,temp
+	call not_greater_than
+le_send_att_read_response_less:
+	copy pdata,regc
+	copy pdata,rega
+	call store_contr
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_READ_RESPONSE
+	istore 1,contw
+	add regc,-1,loopcnt
+	call get_contr
+	branch memcpy
+
+le_send_device_name:
+	call le_get_search_max_mtu_data
+	fetcht 1,mem_le_name_len
+	increase 1, temp
+	call not_greater_than
+	copy pdata,regc
+	copy pdata,rega
+
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_READ_RESPONSE
+	istore 1,contw
+	add regc,-1,loopcnt
+	arg mem_le_name,contr
+	branch memcpy
+	
+	
+le_send_att_read_response_check_auth:
+	fetch 2,mem_le_pairing_handle
+	isub temp,null
+	nbranch le_send_att_read_response,zero
+	nbranch le_send_att_read_response,user
+le_send_att_read_response_error_insufficient_auth:
+	jam ATT_ERR_INSUFFICIENT_AUTHENTICATION,mem_le_err_code
+	branch le_send_att_error_response
+
+le_send_att_read_response_check_handle:
+	increase -2,contr
+	ifetch 2,contr
+	bbit1 BIT_OF_ATT_HANDLE_READ_AUTHENTICATED,le_send_att_read_response_error_insufficient_auth
+	branch disable_user
+
+le_parse_att_read_blob_request:
+	ifetch 2,contr
+	store 2,mem_le_att_offset
+	iforce rega
+	fetcht 2,mem_le_att_handle
+le_send_att_read_blob_response:
+	call le_att_get_handle_ptr 
+	branch le_send_att_error_response_notfound,blank
+	ifetch 1,contr
+	isub rega,loopcnt
+	nbranch le_send_att_error_response_notfound,positive
+	call store_contr
+	call le_get_search_max_mtu_data
+	add loopcnt,1,temp
+	call not_greater_than
+le_send_att_read_blob_response_less:
+	copy pdata,rega
+	copy pdata,regc
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_READ_BLOB_RESPONSE
+	istore 1,contw
+	add regc,-1,loopcnt
+	fetcht 2,mem_le_att_offset
+	call get_contr
+	iadd temp,contr
+	branch memcpy_fast
+
+
+//²éÑ¯server
+le_parse_att_read_by_group_type_request:
+	call le_get_search_handle_start_end_common
+ 	call le_get_search_att_type
+	branch le_send_att_read_by_group_type_response
+
+
+//mem_le_search_att_type
+//mem_le_search_handle_start
+//mem_le_search_handle_end
+le_send_att_read_by_group_type_response:
+	arg 2,timeup
+	fetcht 2,mem_le_search_handle_start
+	storet 2,mem_temp
+	call le_att_get_handle_ptr2
+	increase -2,contr
+	copy contr,pdata
+	store 2,mem_le_cur_attlist_start_ptr
+le_send_att_read_by_group_type_response_loop:
+	call le_att_check_handle_end		//check current handle >= ending handle
+	nbranch le_send_att_read_by_group_type_end0,positive
+	fetcht 2,mem_temp
+	call le_att_get_handle_info_from_ptr	//get current handle info
+	nbranch le_send_att_read_by_group_type_end1,blank
+
+	call le_att_same_type				//compair attr group type
+	nbranch le_send_att_read_by_group_type_next_handle,zero
+	copy timeup,pdata
+	beq 0,le_send_att_read_by_group_type_end1	//loop count
+	nbranch le_send_att_read_by_group_type_store_write_record,user		//un first
+	disable user
+	//first att uuid
+ 	call le_get_search_max_mtu_data
+ 	copy pdata,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_READ_BY_GROUP_TYPE_RESPONSE
+	istore 1,contw
+	fetch 1,mem_le_curr_att_len
+	add pdata,4,rega
+	istorer rega,1,contw
+	call store_contw
+	sub rega,6,null
+	ncall enable_user2,zero
+	call disable_user2,zero
+ 	call le_get_search_max_mtu_data
+ 	increase -2,pdata
+	idiv rega
+	call wait_div_end
+	quotient timeup
+	branch le_send_att_read_by_group_type_store_record
+le_send_att_read_by_group_type_store_write_record:
+	call le_send_att_read_by_group_type_check_pair_length_type
+	nbranch le_send_att_read_by_group_type_end1,blank
+	fetch 2,mem_temp
+	increase -1,pdata
+	store 2,mem_le_cur_handle_end
+	call le_write_att_record
+le_send_att_read_by_group_type_store_record:
+	fetch 2,mem_temp
+	store 2,mem_le_cur_handle_start
+	call le_store_att_record
+	increase -1,timeup
+//	branch le_send_att_read_by_group_type_last_find,zero		
+le_send_att_read_by_group_type_next_handle:
+	call le_att_next_handle
+	branch le_send_att_read_by_group_type_response_loop
+
+le_send_att_read_by_type_res_check_pair_length_type:
+	fetch 1,mem_le_cur_uuid_length
+	branch le_send_att_read_by_group_type_check_pair_length_type+1
+
+//output:blank is same
+le_send_att_read_by_group_type_check_pair_length_type:
+	fetch 1,mem_le_curr_att_len
+	branch le_send_att_read_by_group_type_check_pair_length_type_16byte,user2
+	increase -2,pdata
+	rtn
+
+le_send_att_read_by_group_type_check_pair_length_type_16byte:
+	increase -16,pdata
+	rtn
+
+le_send_att_read_by_group_type_end0:	//> att handle end
+	fetch 2,mem_temp
+	store 2,mem_le_cur_handle_end
+	branch le_send_att_read_by_group_type_end_common
+le_send_att_read_by_group_type_end1:	//>att max list handle or diff len 
+	fetch 2,mem_temp
+	increase -1,pdata
+	store 2,mem_le_cur_handle_end
+	branch le_send_att_read_by_group_type_end_common
+le_send_att_read_by_group_type_end_common:
+	branch le_send_att_error_response_notfound,user
+	call le_write_att_record
+	branch le_send_auto_len_by_mem
+
+
+
+
+le_parse_att_write_request:
+	copy contr,rega
+	fetch 2,mem_le_l2cap_size
+	add pdata,-3,regb
+	call le_writeatt_cb
+le_send_att_write_response_check_auth:
+	bpatchx patch2b_2,mem_patch2b
+	call le_check_encrypt_state
+	fetcht 2,mem_le_att_handle
+	call le_att_get_handle_ptr2
+	nbranch le_send_att_write_response_error_invalid_handle,zero
+	call le_send_att_write_response_check_handle,user
+	rtn user
+
+	fetch 1,mem_le_configuration
+	bbit0 BIT_BLE_WRITE_AUTH,le_send_att_write_response
+
+	fetcht 2,mem_le_att_handle
+	fetch 2,mem_le_pairing_handle
+	isub temp,null
+	nbranch le_send_att_write_response,zero
+	call le_check_encrypt_state
+	nbranch le_send_att_write_response,user
+	branch le_send_att_read_response_error_insufficient_auth
+
+
+le_send_att_write_response:
+	force 1,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_WRITE_RESPONSE
+	istore 1,contw
+	rtn
+
+le_send_att_write_response_check_handle:
+	increase -2,contr
+	ifetch 2,contr
+	bbit1 BIT_OF_ATT_HANDLE_WRITE_AUTHENTICATED,le_send_att_read_response_error_insufficient_auth
+	branch disable_user
+
+le_send_att_write_response_error_invalid_handle:
+	jam ATT_ERR_INVALID_HANDLE,mem_le_err_code
+	branch le_send_att_error_response
+
+
+le_check_encrypt_state:
+	bpatchx patch2b_3,mem_patch2b
+	call disable_user
+	fetch 1,mem_le_pairing_mode
+	rtneq LE_PAIRING_MODE_NONE
+	fetch 1,mem_context
+	rtnbit1 lestate_encryption
+	branch enable_user
+
+
+le_parse_att_prepare_write_request:
+	add contr,2,rega
+	fetch 2,mem_le_l2cap_size
+	add pdata,-5,regb
+	call le_writeatt_cb
+	branch le_send_att_prepare_write_response
+
+
+le_send_att_prepare_write_response:
+	fetch 2,mem_le_l2cap_size
+	copy pdata,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_PREPARE_WRITE_RESPONSE
+	istore 1,contw
+	fetch 2,mem_le_att_handle
+	istore 2,contw
+	fetch 2,mem_le_l2cap_size
+	add pdata,-5,loopcnt	
+	fetch 2,mem_le_payload_ptr
+	add pdata,7,contr
+	ifetch 2,contr		//offset
+	istore 2,contw
+	branch memcpy_fast
+
+
+
+le_parse_att_execute_write_request:
+
+le_send_att_execute_write_response:
+	force 1,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_EXECUTE_WRITE_RESPONSE
+	istore 1,contw
+	rtn
+
+le_parse_handle_value_confirmation:
+	fetch 1,mem_le_l2cap_att_states
+	set0 BLE_L2CAP_RECV_CONFIRMATION_PACKET,pdata
+	store 1,mem_le_l2cap_att_states
+	rtn
+
+le_parse_att_write_command:
+	copy contr,rega
+	fetch 2,mem_le_l2cap_size
+	add pdata,-3,regb
+	branch le_writeatt_cb
+
+
+
+//rga:len temp:handle;rgea,regb,regc already used
+le_att_malloc_tx_notify:
+	copy temp,regc
+	increase 3,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	increase -3,rega
+	setarg ATTOP_HANDLE_VALUE_NOTIFICATION
+	istore 1,contw
+	copy regc,temp
+	istoret 2,contw
+	rtn
+
+//rga:len temp:handle;rgea,regb,regc already used
+le_att_malloc_tx_indication:
+	fetch 1,mem_le_l2cap_att_states
+	set1 BLE_L2CAP_SEND_INDICATION_PACKET,pdata
+	store 1,mem_le_l2cap_att_states
+	copy temp,regc
+	increase 3,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	increase -3,rega
+	setarg ATTOP_HANDLE_VALUE_INDICATION
+	istore 1,contw
+	copy regc,temp
+	istoret 2,contw
+	rtn
+
+
+///////////////////////////ATT common function////////////////////////////////////
+
+le_send_att_error_response_notfound:	
+	bpatchx patch2b_4,mem_patch2b
+	jam ATT_ERR_ATTRIBUTE_NOT_FOUND,mem_le_err_code
+le_send_att_error_response:	
+	force 5,rega
+	call le_fifo_malloc_tx_l2cap_gatt
+	setarg ATTOP_ERROR_RESPONSE
+	istore 1,contw
+	fetch 1,mem_le_att_opcode
+	istore 1,contw
+	fetch 2,mem_le_att_handle
+	istore 2,contw
+	fetch 1,mem_le_err_code
+	istore 1,contw
+	rtn
+
+
+le_fifo_malloc_tx_l2cap_gatt:
+	bpatchx patch2b_5,mem_patch2b
+	force LE_L2CAP_CID_ATT,regb
+	branch le_fifo_malloc_tx_l2cap
+
+
+le_att_next_handle:
+	fetcht 2,mem_temp
+	increase 1,temp
+	storet 2,mem_temp
+	rtn
+
+le_att_check_handle_end:
+	fetcht 2,mem_temp
+	fetch 2,mem_le_search_handle_end
+	isub temp,null
+	rtn
+
+
+le_att_same_type:
+	bpatchx patch2b_6,mem_patch2b
+	fetcht 1,mem_le_search_att_type_length
+	arg mem_le_search_att_type,rega
+le_att_check_same_common:
+	fetch 1,mem_le_cur_uuid_length
+	copy pdata,loopcnt
+	isub temp,null
+	nrtn zero
+	arg mem_le_cur_uuid ,regb
+	branch string_compare
+
+
+le_store_att_record:
+	bpatchx patch2b_7,mem_patch2b
+	fetch 1,mem_le_curr_att_len
+	store 1, mem_temp_block0
+	copy pdata,loopcnt
+	call get_contr
+	branch memcpy_fast
+
+
+le_write_att_record:
+	bpatchx patch2c_0,mem_patch2c
+	call get_contw
+	fetch 2,mem_le_cur_handle_start
+	istore 2,contw
+	fetch 2,mem_le_cur_handle_end
+	istore 2,contw
+le_write_att_record_common:
+	fetch 1,mem_temp_block0
+	copy pdata,loopcnt
+	call memcpy_fast
+	branch store_contw
+
+
+
+le_send_auto_len_by_mem:
+	bpatchx patch2c_1,mem_patch2c
+	call get_contw
+	call le_fifo_get_last_att_ptr
+	copy contw,pdata
+	isub contr,rega
+	call le_fifo_get_last_l2cap_ptr
+	copy rega,pdata
+	istore 2,contr
+	increase 4,rega
+	call le_fifo_get_last_tx_ptr
+	copy rega,pdata
+	istore 1,contr
+	rtn
+
+
+le_get_search_handle_start_end_common:
+	rshift8 pdata,pdata
+	store 2,mem_le_search_handle_start
+	ifetch 2,contr
+	store 2,mem_le_search_handle_end
+	rtn
+
+
+le_get_search_max_mtu_data:
+	bpatchx patch2c_2,mem_patch2c
+	fetch 2,mem_le_remote_mtu
+//	increase -2,pdata
+	fetcht 2,mem_le_local_mtu
+//	increase -2,temp
+//	call not_greater_than
+//	arg 240,temp
+	branch not_greater_than
+	//pdata is max mtu size
+
+
+le_get_search_att_type:
+	bpatchx patch2c_3,mem_patch2c
+	call store_contr
+	arg mem_le_search_att_type_length,contw
+le_get_search_common:	
+	fetch 2,mem_le_l2cap_size
+	increase -5,pdata
+le_get_search_common2:		
+	istore 1,contw
+	copy pdata,loopcnt
+	call get_contr
+	branch memcpy_fast	
+
+
+
+le_parse_writing_attribute_start:
+	fetch 2,mem_le_rxbuf_data_att_cid//CID
+	rtnne LE_L2CAP_CID_ATT
+	fetch 1,mem_le_l2cap_att_states
+	set1 BLE_L2CAP_DEAL_WITH_CONTINUE_PACKET,pdata
+	store 1,mem_le_l2cap_att_states
+	fetch 3,mem_le_rxbuf_data_att_opcode
+	store 3,mem_le_att_opcode
+	set1 mark_old_packet,mark
+	beq ATTOP_WRITE_REQUEST,le_parse_attribute_write_request
+	beq ATTOP_WRITE_COMMAND,le_parse_attribute_write_command
+	beq ATTOP_EXECUTE_WRITE_REQUEST,le_parse_att_execute_write_request
+	beq ATTOP_EXCHANGE_MTU_REQUEST,le_parse_att_exchange_mtu_request
+	beq ATTOP_HANDLE_VALUE_CONFIRMATION,le_parse_handle_value_confirmation
+	set0 mark_old_packet,mark
+le_clear_l2cap_att_states_deal_with_contiune_packet:
+	fetch 1,mem_le_l2cap_att_states
+	set0 BLE_L2CAP_DEAL_WITH_CONTINUE_PACKET,pdata
+	store 1,mem_le_l2cap_att_states
+	rtn
+
+le_parse_writing_attribute_continue:
+	fetch 1,mem_le_l2cap_att_states
+	rtnbit0 BLE_L2CAP_DEAL_WITH_CONTINUE_PACKET
+	set1 mark_old_packet,mark
+	call le_parse_l2cap_continue_common
+	call le_parse_attribute_check_complete_packet
+	call le_clear_l2cap_att_states_deal_with_contiune_packet,user
+	fetch 1,mem_le_att_opcode
+	beq ATTOP_WRITE_REQUEST,le_send_att_write_response_check_auth
+	rtn
+
+
+le_parse_attribute_write_request:
+	call le_parse_attribute_write_command
+	branch le_send_attribute_write_response_check_auth
+
+le_send_attribute_write_response_check_auth:
+	call le_parse_attribute_check_complete_packet
+	nrtn user
+	branch le_send_att_write_response_check_auth
+
+
+le_parse_attribute_write_command:
+	bpatchx patch2c_4,mem_patch2c
+	call le_parse_attribute_check_complete_packet_init
+	arg mem_le_rxbuf_data_att_write_payload,rega
+	branch le_writeatt_cb
+
+
+le_parse_attribute_check_complete_packet_init:
+	fetch 1,mem_le_rxbuf_data_att_write_length
+	add pdata,-7,regb
+	increase -4,pdata
+	store 2,mem_le_packet_len_recved	//payload length
+	fetcht 2,mem_le_rxbuf_data_att_write_l2cap_length	//l2cap length
+	storet 2,mem_le_l2cap_size
+	rtn
+
+
+le_parse_l2cap_continue_common:
+	fetchr regb,1,mem_le_rxbuf_data_continue_length
+	fetch 2,mem_le_packet_len_recved
+	iadd regb,temp
+	storet 2,mem_le_packet_len_recved
+	arg mem_le_rxbuf_data_continue_payload,rega
+	branch le_writeatt_cb
+
+
+//enable user,recevie complete packet
+le_parse_attribute_check_complete_packet:
+	call disable_user
+	fetch 2,mem_le_packet_len_recved
+	fetcht 2,mem_le_l2cap_size
+	isub temp,null
+	nrtn zero
+	branch enable_user
+

@@ -1,0 +1,373 @@
+/************************************/
+/*initialize L2CAP related variables*/
+/************************************/
+l2cap_init:
+	branch l2cap_init_wake,wake
+	setarg mem_l2cap_xmem_end
+	arg mem_l2cap_xmem_start,contw
+	isub contw,loopcnt
+	call clear_mem
+l2cap_init_wake:	
+//	branch l2cap_lpm_load_txbuf
+	rtn
+	
+
+/*
+l2cap_check_map:
+//	call l2cap_malloc_is_fifo_full
+//	nrtn blank
+	bpatch patch16_5,mem_patch16
+	call l2cap_malloc_get_full_map
+	fetch 1,mem_used_map
+	beq 0,set_pdata_0
+	beq 1,set_pdata_0
+	beq 2,set_pdata_0
+	beq 3,set_pdata_0
+	beq 0x81,set_pdata_0
+	beq 0xc0,set_pdata_0
+	beq 0x80,set_pdata_0
+	beq 0x40,set_pdata_0
+	rtn
+*/
+
+check_l2cap_map:
+	arg 0,queue
+	arg 0,regb
+
+check_l2cap_map_loop:
+	sub queue,7,null
+	nrtn positive
+	qisolate1 rega
+	branch check_l2cap_map_used,true
+	branch check_l2cap_map_used2
+
+check_l2cap_map_used:
+	copy temp,pdata
+	branch check_l2cap_map_used2,blank
+	qset1 regb
+	increase -1,temp
+
+check_l2cap_map_used2:
+	increase 1,queue
+	branch check_l2cap_map_loop
+
+
+
+/*********************************************************/
+//char* malloc(short len)
+//input: rega -> len
+//rtn: regb -> pbuff;return from pdata
+//val: queue -> i
+//val: timeup -> buff_cnt
+/*********************************************************/
+
+
+ble_l2cap_malloc:
+	fetchr regd,2,mem_ble_l2cap_tx_buff0_ptr
+	fetchr rege,2,mem_ble_l2cap_tx_buff_size_ptr
+	call disable_user
+	branch host_l2cap_malloc
+
+/*
+	malloc l2cap buffer
+	input:
+	BT is enable user
+	BLE is disable user
+	rega is want malloc buffer size
+	regd is l2cap buffer start ptr
+	rege is l2cap buffer size
+	output:
+	pdata & contw is buffer ptr
+*/
+host_l2cap_malloc:
+	bpatch patch16_6,mem_patch16
+	call l2cap_malloc_is_fifo_full
+	nbranch assert,blank//assert when fifo full
+	call l2cap_malloc_get_full_map
+	arg 8,loopcnt
+host_l2cap_malloc_loop:
+	fetcht 1,mem_used_map
+	sub loopcnt,8,queue
+	qisolate1 temp
+	branch host_l2cap_malloc_next_buffer,true//if(1 == (used_map & (1 << i)))goto next;
+	call host_l2cap_malloc_check_buffer_enough
+	nbranch host_l2cap_malloc_next_buffer,positive//if(buff_cnt <= 0)goto next;
+	call host_l2cap_malloc_into_fifo
+	branch host_l2cap_malloc_succ//return (pbuff);
+host_l2cap_malloc_next_buffer:
+	copy rege,pdata
+	iadd regd,regd		//pbuff += BUFF_SIZE;//point to next buff
+	loop host_l2cap_malloc_loop
+	branch assert	//return NULL
+host_l2cap_malloc_succ:
+	copy regd,pdata
+	copy regd,contw
+	rtn//return pointer via pdata
+
+/*********************************************************/
+//char is_size_enough(char buff_index, short len)
+//input: rega -> len
+//input: loopcnt -> 8-buff_index
+//rtn: positive is diable mean no buffer
+//positive is enable mean get buffer
+/*********************************************************/
+host_l2cap_malloc_check_buffer_enough:
+	bpatch patch16_7,mem_patch16
+	sub loopcnt,8,queue
+	arg 0,temp
+	arg 0,timeup
+host_l2cap_malloc_check_buffer_enough_loop:
+	copy queue,pdata
+	beq 8,host_l2cap_malloc_check_buffer_enough_end
+	fetch 1,mem_used_map
+	qisolate1 pdata		//the buffer is used
+	branch host_l2cap_malloc_check_buffer_enough_end,true
+	qset1 timeup
+	copy rege,pdata
+	iadd temp,temp
+	increase 1,queue
+	copy rega,pdata
+	isub temp,null
+	branch host_l2cap_malloc_check_buffer_enough_end,zero//(max_size_fom_buff_index ==  len)
+	branch host_l2cap_malloc_check_buffer_enough_loop,positive//(max_size_fom_buff_index <  len)
+host_l2cap_malloc_check_buffer_enough_end:
+	copy temp,pdata
+	isub rega,null
+	nrtn zero
+	qset1 timeup
+	rtn
+
+/*********************************************************/
+//void buff_into_fifo(char buff_index, char buff_cnt, short len)
+//input: rega -> len
+//input: regc -> buff_index
+//input: timeup -> buff_cnt
+//val:temp ->   (fifo->map)
+/*********************************************************/
+host_l2cap_malloc_into_fifo:
+	bpatch patch17_0,mem_patch17
+	call l2cap_malloc_is_fifo_full
+	nbranch assert,blank //fifo full
+	call l2cap_malloc_is_fifo_empty
+	branch host_l2cap_malloc_into_fifo_no_push,blank//fifo empty, no need to push
+	fetch 9,mem_tx_fifo1
+	store 9,mem_tx_fifo0
+	setarg 0
+	istore 3,contw//mem_tx_fifo3
+host_l2cap_malloc_into_fifo_no_push:
+	storer timeup,1,mem_tx_fifo3_map
+	storer regd,2,mem_tx_fifo3_ptr
+	rtn
+
+
+/*********************************************************/
+//void* l2cap_malloc_fifo_out(void)
+//output:len -> temp
+//output:ptr ->pdata
+//only get ptr,not free
+/*********************************************************/
+l2cap_malloc_fifo_out:
+	bpatch patch17_1,mem_patch17
+	call l2cap_malloc_fifo_get_first_ptr
+	increase 1,contr
+	ifetch 2,contr //ptr ->pdata
+	rtn
+
+
+/*********************************************************/
+//void free_first_buff_in_fifo(void)
+//only free the first one
+/*********************************************************/
+l2cap_malloc_free:
+	bpatch patch17_2,mem_patch17
+	call l2cap_malloc_fifo_get_first_ptr
+	copy contr,contw
+	copy contr,temp
+	setarg 0
+	istore 3,contw
+	rtn
+
+
+/*********************************************************/
+//void l2cap_malloc_discard(void)
+//discard the latest malloc
+/*********************************************************/
+l2cap_malloc_discard:
+	bpatch patch17_3,mem_patch17
+	call l2cap_malloc_is_fifo_empty
+	branch assert,blank
+	fetch 3,mem_tx_fifo2
+	store 3,mem_tx_fifo3
+	fetch 3,mem_tx_fifo1
+	store 3,mem_tx_fifo2
+	fetch 3,mem_tx_fifo0
+	store 3,mem_tx_fifo1
+	rtn
+
+
+/*********************************************************/
+//bool fifo_is_full(void)
+//blank == 1: not full
+//blank == 0: full
+/*********************************************************/
+l2cap_malloc_is_fifo_full:
+	bpatch patch17_4,mem_patch17
+	fetch 3,mem_tx_fifo0
+	rtn
+
+
+/*********************************************************/
+//bool fifo_nearly_full(void)
+//blank == 1: nearly full
+//blank == 0: not nearly full
+/*********************************************************/
+l2cap_malloc_is_fifo_nearly_full:
+	bpatch patch17_5,mem_patch17
+	fetch 3,mem_tx_fifo1
+	rtn
+
+
+/*********************************************************/
+//bool fifo_is_empty(void)
+//blank == 1: empty
+//blank == 0: not empty
+/*********************************************************/
+l2cap_malloc_is_fifo_empty:
+	bpatch patch17_6,mem_patch17
+	fetch 3,mem_tx_fifo3
+	rtn
+
+
+/*********************************************************/
+//char* l2cap_malloc_fifo_get_first_ptr(void)
+//output:contr  -->ptr
+/*********************************************************/	
+l2cap_malloc_fifo_get_first_ptr:
+	call l2cap_malloc_is_fifo_empty
+	branch l2cap_malloc_fifo_get_first_ptr_empty,blank // fifo is empty
+	arg mem_tx_fifo0,contr
+l2cap_malloc_free_loop:
+	ifetch 3,contr
+	branch l2cap_malloc_free_loop,blank
+l2cap_malloc_fifo_get_first_ptr_empty:
+	increase -3,contr
+	rtn
+
+
+/*********************************************************/
+//char* l2cap_malloc_get_full_map(void)
+//output:mem_used_map  -->full_map
+//add all maps into one
+/*********************************************************/	
+l2cap_malloc_get_full_map:
+	bpatch patch17_7,mem_patch17
+	arg 4,loopcnt
+	arg mem_tx_fifo0_map,contr
+	arg 0,temp
+l2cap_malloc_get_full_map_loop:	
+	ifetch 3,contr
+	and pdata,0xff,pdata
+	ior temp,temp
+	loop l2cap_malloc_get_full_map_loop
+	storet 1,mem_used_map
+	rtn
+
+
+l2cap_lpm_get_wake_lock:
+	arg wake_lock_l2cap_tx,queue
+	branch lpm_get_wake_lock
+
+l2cap_lpm_put_wake_lock:
+	arg wake_lock_l2cap_tx,queue
+	branch lpm_put_wake_lock
+
+	
+/*
+
+
+l2cap_lpm_save_calc_len:
+	bpatch patch18_0,mem_patch18
+	arg 0,regb
+	arg mem_tx_fifo0_map,rega
+	increase -2,rega
+l2cap_lpm_save_calc_len_loop:
+	increase 2,rega
+	setarg mem_tx_fifo_end
+	isub rega,null
+	branch l2cap_lpm_save_calc_len_end,zero //end of 2lcap tx fifo
+	ifetch 1,rega
+	increase 1,rega
+	branch l2cap_lpm_save_calc_len_loop,blank
+	ifetcht 2,rega
+	ifetch 2,temp
+	iadd regb,regb
+	increase 4,regb //l2cap header len
+	branch l2cap_lpm_save_calc_len_loop
+l2cap_lpm_save_calc_len_end:
+	copy regb,pdata
+	rtn
+	
+l2cap_lpm_save_txbuf:
+	call l2cap_malloc_get_full_map
+	fetch 1,mem_used_map
+	rtn blank
+	call l2cap_lpm_save_calc_len
+	arg l2cap_lpm_txbuf_len,temp
+	isub temp,null
+	branch l2cap_lpm_get_wake_lock,positive //no enougth space to save l2cap tx data
+	call l2cap_lpm_put_wake_lock
+//	arg mem_l2cap_lpm_txbuf,contw
+	fetch 2,mem_l2cap_lpm_txbuf_ptr
+	copy contr,contw
+	arg mem_tx_fifo0,rega
+l2cap_lpm_save_txbuf_loop:
+	setarg mem_tx_fifo_end
+	isub rega,null
+	rtn zero //end of 2lcap tx fifo
+	ifetch 1,rega  //mem_tx_fifoX_map
+	increase 1,rega
+	nbranch l2cap_lpm_save_txbuf_nempty,blank
+	istore 2,contw // length = 0
+	increase 2,rega
+	branch l2cap_lpm_save_txbuf_loop
+l2cap_lpm_save_txbuf_nempty:
+	ifetch 2,rega //ptr
+	increase 2,rega
+	copy pdata,contr
+	ifetch 2,contr  //l2cap len
+	istore 2,contw
+	copy pdata,loopcnt
+	increase 2,loopcnt //add CID len
+	call memcpy
+	branch l2cap_lpm_save_txbuf_loop
+
+l2cap_lpm_load_txbuf:
+	call l2cap_malloc_get_full_map
+	fetch 1,mem_used_map
+	rtn blank
+	arg mem_tx_fifo0_ptr,rega
+	increase -3,rega //mem_tx_fifo0_ptr -3
+//	arg mem_l2cap_lpm_txbuf,contr
+	copy contr,contw
+	fetch 2,mem_l2cap_lpm_txbuf_ptr
+	copy contw,contr
+l2cap_lpm_load_txbuf_loop:
+	increase 3,rega //mem_tx_fifoX_ptr
+	setarg mem_tx_fifo_end+1
+	isub rega,null
+	rtn zero //end of 2lcap tx fifo
+	ifetch 2,contr
+	branch l2cap_lpm_load_txbuf_loop,blank
+	increase 4,pdata //l2cap header len
+	copy pdata,loopcnt
+	copy contr,regb
+	ifetch 2,rega //ptr
+	copy pdata,contw
+	copy regb,contr
+	increase -2,contr
+	call memcpy
+	branch l2cap_lpm_load_txbuf_loop
+	
+*/
+
+	

@@ -1,0 +1,132 @@
+
+ifdef COMPLIE_ADPCM
+/*
+input:
+	mem_ad_in_numSamples
+	mem_ad_in_ptr
+	mem_ad_out_ptr
+*/
+adpcm_decode:
+	fetch 8,mem_ad_state_valpred
+	store 8,mem_ad_valpred
+	jam  0,mem_ad_bufferstep
+	fetch 1,mem_ad_index
+	lshift2 pdata,pdata
+	arg mem_ad_stepsizeTable,temp
+	iadd temp,temp
+	ifetch 4,temp
+	store 4,mem_ad_step
+adpcm_decode_loop:
+	fetch 1,mem_ad_bufferstep
+	nbranch adpcm_next_byte,blank
+	fetcht 2,mem_ad_in_ptr
+	ifetch 1,temp
+	store 1,mem_ad_inputbuffer
+	increase 1,temp
+	storet 2,mem_ad_in_ptr
+	rshift4 pdata,pdata
+	store 1,mem_ad_delta
+	branch adpcm_cal
+adpcm_next_byte:
+	fetch 1,mem_ad_inputbuffer
+	and pdata,0x0f,pdata
+	store 1,mem_ad_delta
+adpcm_cal:	
+	fetch 1,mem_ad_bufferstep
+	setflip 0,pdata
+	store 1,mem_ad_bufferstep
+	arg mem_ad_indexTable,temp
+	fetch 1,mem_ad_delta
+	iadd temp,temp
+	ifetch 1,temp
+	fetcht 1,mem_ad_index
+	call adpcm_cal_index
+	store 1,mem_ad_index
+
+	fetch 1,mem_ad_delta
+	and pdata,0x08,temp
+	storet 1,mem_ad_sign
+	and pdata,0x07,temp
+	storet 1,mem_ad_delta
+
+	call adpcm_cal_vpdiff
+	storet 4,mem_ad_vpdiff
+	
+	fetch 1,mem_ad_sign
+	branch adpcm_cal_valpred,blank
+	fetch 4,mem_ad_valpred
+	fetcht 4,mem_ad_vpdiff
+	isub temp,pdata
+	branch adpcm_cal_valpred_end
+adpcm_cal_valpred:
+	fetch 4,mem_ad_valpred
+	fetcht 4,mem_ad_vpdiff
+	iadd temp,pdata
+adpcm_cal_valpred_end:	
+	store 4,mem_ad_valpred
+	arg 32767,temp
+	isub temp,pdata
+	bbit1 31,adpcm_cal_valpred_overflow
+	storet 4,mem_ad_valpred
+	branch adpcm_cal_valpred_overflow_end
+adpcm_cal_valpred_overflow:	
+	fetch 4,mem_ad_valpred
+	arg 32768,temp
+	iadd temp,pdata
+	bbit0 31,adpcm_cal_valpred_overflow_end
+	arg -32768,temp
+	storet 4,mem_ad_valpred
+adpcm_cal_valpred_overflow_end:	
+	fetch 1,mem_ad_index
+	lshift2 pdata,pdata
+	arg mem_ad_stepsizeTable,temp
+	iadd temp,temp
+	ifetch 4,temp
+	store 4,mem_ad_step
+
+	fetch 2,mem_ad_out_ptr
+	fetcht 2,mem_ad_valpred
+	istoret 2,pdata
+	increase 2,pdata
+	store 2,mem_ad_out_ptr
+
+	fetch 1,mem_ad_in_numSamples
+	increase -1,pdata
+	store 1,mem_ad_in_numSamples
+	nbranch adpcm_decode_loop, blank
+	fetch 8,mem_ad_valpred
+	store 8,mem_ad_state_valpred
+	rtn
+
+adpcm_cal_index:
+	iadd temp,pdata
+	bbit0 7,adpcm_cal_bigger_zero
+	setarg 0
+	rtn
+adpcm_cal_bigger_zero:
+	and pdata,0xff,pdata
+	sub pdata,88,null
+	rtn positive
+	setarg 88
+	rtn
+
+adpcm_cal_vpdiff:
+	fetchr rega,4,mem_ad_step
+	rshift3 rega,temp
+	fetch 1,mem_ad_delta
+	bbit0 2,adpcm_cal_vpdiff1
+	copy rega,pdata
+	iadd temp,temp
+adpcm_cal_vpdiff1:
+	fetch 1,mem_ad_delta
+	bbit0 1,adpcm_cal_vpdiff2
+	rshift rega,pdata
+	iadd temp,temp
+adpcm_cal_vpdiff2:
+	fetch 1,mem_ad_delta
+	rtnbit0 0
+	rshift2 rega,pdata
+	iadd temp,temp
+	rtn
+endif
+

@@ -1,0 +1,139 @@
+mem_device_option:ff
+mem_le_lap:11 22 33
+mem_le_adv_enable:01
+mem_le_adv_interval:00 02 
+mem_le_adv_channel_map:07
+mem_le_adv_data_len:03
+mem_le_adv_data:
+02 01 0e
+
+mem_le_scan_data_len:0a
+mem_le_scan_data:
+'\09test1305
+
+mem_ui_le_uuid_table:mem_module_le_att_list
+
+#attribute list: handle 2bytes, uuid 2bytes, length 1bytes, attribute Nbytes
+mem_module_le_att_list:
+#Primary service GAP ------
+01 00 02 00 28 02 00 18
+
+
+#Appearance
+02 00 02 03 28 01 02
+03 00 02 01 2a 02 c8 00 #3c2=hid mouse
+
+#Device name
+04 00 02 03 28 01 0a
+05 00 02 00 2a 14 41 73 74 20 4c 45 20 4d 6f 75 73 65 20 20 20 20 20 20 20 20
+
+
+#Peripheral Preferred Connection Parameters
+06 00 02 03 28 01 02
+07 00 02 04 2a 08 06 00 06 00 64 00 2c 01 # interval 6ms, latency 100, timeout 300
+
+
+#privcy flag
+08 00 02 03 28 01 02
+09 00 02 02 2a 01 01
+
+#reconnecting addr 
+0a 00 02 03 28 01 08
+0b 00 02 03 2a 06 00 00 00 00 00 00
+
+#Primary service GATT ------
+0c 00 02 00 28 02 01 18
+
+#Service changed
+0d 00 02 03 28 01 20
+0e 00 02 05 2a 00
+#Client Characteristic Configuration
+0f 00 02 02 29 02 00 00
+
+#Primary service TX power ------
+10 00 02 00 28 02 04 18
+#Characteristic Tx power level
+11 00 02 03 28 01 16
+12 00 02 07 2a 01 00
+13 00 02 02 29 02 00 00
+
+#Primary service Battery ------
+14 00 02 00 28 02 0f 18
+#Characteristic Battery level
+15 00 02 03 28 01 12
+16 00 02 19 2a 01 38
+
+#Primary service device infomation
+17 00 02 00 28 02 0a 18
+#Characteristic system id
+18 00 02 03 28 01 02
+19 00 02 23 2a 03 00 00 00
+
+#Characteristic manufactor name
+1a 00 02 03 28 01 02
+1b 00 02 29 2a 08 46 6c 61 67 74 72 69 70
+
+#Characteristic module number
+1c 00 02 03 28 01 02
+1d 00 02 24 2a 06 79 69 63 68 69 70
+
+#Characteristic serial number
+1e 00 02 03 28 01 02
+1f 00 02 25 2a 04 63 6f 6d 33
+
+#Characteristic firmware version
+20 00 02 03 28 01 02
+21 00 02 26 2a 03 31 2e 30
+
+#Characteristic software version
+22 00 02 03 28 01 02
+23 00 02 28 2a 03 31 2e 30
+
+#Characteristic hardware version
+24 00 02 03 28 01 02
+25 00 02 2a 2a 03 31 2e 30
+
+#Characteristic regulatory version
+26 00 02 03 28 01 02
+27 00 02 25 2a 04 63 6f 6d 33
+
+#Primary service yichip transmit ------
+28 00 02 00 28 10 55 e4 05 d2 af 9f a9 8f e5 4a 7d fe 43 53 53 49
+#Characteristic tx--notify read
+29 00 02 03 28 01 12
+2a 00 10 16 96 24 47 C6 23 61 BA D9 4B 4D 1E 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+#Client Characteristic Configuration
+2b 00 02 02 29 02 00 00
+
+#Characteristic rx--write
+2c 00 02 03 28 01 08
+2d 00 10 b3 9b 72 34 be ec d4 a8 f4 43 41 88 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+#Characteristic rx-- write without Response
+2e 00 02 03 28 01 04
+2f 00 10 fe 69 ca 9a 56 19 f6 ab 02 4d aa 6d 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+#Characteristic rx tx --read write notify
+30 00 02 03 28 01 2a
+31 0010 18 03 A6 28 5E D8 EC 91 1C 48 A3 AC 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+#Client Characteristic Configuration
+32 00 02 02 29 02 00 00
+
+#Primary service yichip transmit ------
+33 00 02 00 28 02 e7 fe 
+#Characteristic tx--indicate
+34 00 02 03 28 01 20
+35 00 02 c8 fe 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+#Client Characteristic Configuration
+36 00 02 02 29 02 00 00
+
+#Characteristic rx--write,read
+37 00 02 03 28 01 0a
+38 00 02 c7 fe 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+#Characteristic - read
+39 00 02 03 28 01 02
+3a 00 02 c9 fe 06 11 22 33 44 55 66
+
+#End of Attribute list
+00 00

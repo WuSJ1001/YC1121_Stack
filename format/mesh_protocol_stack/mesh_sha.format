@@ -1,0 +1,15 @@
+
+memalloc (
+	0 memresult
+	0 mem_sp_calc_result
+	4 memh
+	4 memg
+	4 memf
+	4 meme
+	0 mem_sp_calc_result_high
+	4 memd
+	4 memc
+	4 memb
+	4 mema
+)
+

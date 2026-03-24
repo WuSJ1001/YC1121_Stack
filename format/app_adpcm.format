@@ -1,0 +1,22 @@
+
+xmemalloc g24_rx_car_adpcm(
+	16 mem_ad_indexTable
+	356 mem_ad_stepsizeTable
+
+	4 mem_ad_state_valpred
+	4 mem_ad_state_index
+	1 mem_ad_in_numSamples
+	2 mem_ad_in_ptr
+	2 mem_ad_out_ptr
+	1 mem_ad_sign
+	1 mem_ad_delta
+	4 mem_ad_step
+	4 mem_ad_valpred
+	4 mem_ad_index
+	4 mem_ad_vpdiff
+	4 mem_ad_inputbuffer
+	1 mem_ad_bufferstep
+)
+
+
+

@@ -1,0 +1,211 @@
+
+
+mem_le_adv_enable: 01
+
+#mem_mesh_three_tuple_ProductID:
+#��
+#00 5F 74 FC
+#18 14 6c 11 eb f1
+#33 42 99 b0 e7 0b f6 5e 68 67 bd 9a a7 42 b9 b9
+
+#���ȵ�
+#00 5F 7A D1
+#486e703cafa8
+#55c742493aac4fba2d9aae6c5b6cc061
+
+#00 5F 7A D1
+#486e703cafa9
+#c435c7f0e6e2b4c6a9dc4f6f3eaf9fa3
+
+#�ļ�����
+#00 5F 7C 48
+#486e703efaff
+#f5816553a881fbc734b6562ebdeb6d58
+
+mem_le_scan_interval:0a 00	#6.25ms
+mem_le_scan_window:03 00	#40ms
+
+mem_le_adv_type:00
+#ADV_NONCONN_IND
+
+
+#########mesh fast pairing setting#############
+mem_mesh_Device_PID:51 
+# Bit0,1,2,3:  BLE ADV VERSION   
+#bit4:1 (defult) 
+#bit5:suport OTA 1(defult) 
+#bit 6,7:
+#00	(BLE 4.0)
+#01 (defult BLE 4.2) 
+#10 (BLE 5.0) 
+#11 (BLE above 5.0 )
+
+mem_mesh_UUID_FeatureFlag:02 #bit 1-7:UUID VERSION bit0:ADV STATE
+mem_mesh_UUID_FeatureFlag1:83
+mem_mesh_PDU_RFU: 20
+#Bit0: ֧�ּ���������־λ
+#Bit1: ��չAuthValue��־λ
+#Bit2: ֧��Tiny Mesh app ������־λ
+#Bit3: RFU
+#Bit7~4: Genie Bt Mesh Stack��־��δʹ����0
+#Bit7~4:1��ʾ����TG7111B (YC1059)�����
+
+mem_mesh_OOB_information:00 00
+
+#################
+
+
+mem_device_option:0b
+
+mem_mesh_send_message_TTL:05
+
+
+mem_mesh_sha256_ConfirmationKey_ascii:
+43 6f 6e 66 69 72 6d 61 74 69 6f 6e
+4b 65 79
+
+mem_mesh_sha256_SessionKey_ascii:
+53 65 73 73 69 6f 6e
+4b 65 79
+
+mem_mesh_sha256_DeviceKey_ascii:
+44 65 76 69 63 65
+4b 65 79
+
+
+mem_k2_P_len:
+01 00
+mem_k2_SALT:
+4f 90 48 0c 18 71 bf bf fd 16 97 1f 4d 8d 10 b1
+
+mem_k3_SALT:
+00 36 44 35 03 f1 95 cc 8a 71 6e 13 62 91 c3 02
+mem_k3_id64_01:
+69 64 36 34 01
+
+mem_k4_SALT:
+0e 9a c1 b7 ce fa 66 87 4c 97 ee 54 ac 5f 49 be
+mem_k4_id6_01:
+69 64 36 01
+
+
+mem_mesh_element_number:
+01
+mem_mesh_element_device_ptr:mem_mesh_element_device
+
+mem_mesh_element_device_length:
+1B 00
+
+mem_mesh_element_device:
+#c1 03     #����̺�鲥��ַ
+c0 00	#���鲥��ַ
+#c0 01	#�����鲥��ַ
+
+
+mem_mesh_network_relay_queue_each_size:
+22 04 
+
+mem_mesh_element_device1:
+c0 01	#�����鲥��ַ
+
+mem_mesh_element_device2:
+c0 01	#�����鲥��ַ
+#00 00
+
+
+mem_mesh_core_feature:
+00
+#bit0 MESH_FEATURE_LOG
+#bit1 
+
+
+#proxy adv init
+mem_le_adv_interval:f0 00
+mem_le_adv_channel_map:07
+
+mem_le_local_mtu:28
+
+mem_le_scan_data_len:0e
+02 01 06
+'\09Tiny Mesh
+
+
+mem_ui_le_uuid_table:mem_mesh_le_att_list
+mem_mesh_le_att_list:
+#Primary service yichip transmit ------
+01 00 02 00 28 02 01 18
+#Service Changed
+02 00 02 03 28 01 20
+03 00 02 05 2a 01 00
+#Client Characteristic Configuration
+04 00 02 02 29 02 01 00
+
+#Primary service GAP ------
+05 00 02 00 28 02 00 18
+
+#Device name
+06 00 02 03 28 01 4e
+07 00 02 00 2a 13 41 73 74 20 4c 45 20 4d 6f 75 73 65 20 20 20 20 20 20 20
+
+#Apperance
+08 00 02 03 28 01 4e
+09 00 02 01 2a 02 00 00
+
+#Perpheral Preferred Connection Parameters
+0a 00 02 03 28 01 02
+0b 00 02 04 2a 08 10 00 20 00 05 00 2c 01
+
+#Mesh Proxy Service Declaration
+0c 00 02 00 28 02 28 18
+#Mesh Proxy Data In Characteristic Declaration
+#Mesh Proxy Data In Characteristic Value
+#Characteristic --write without response
+0d 00 02 03 28 01 04
+0e 00 02 DD 2A 01 00
+#Mesh Proxy Data Out Characteristic Declaration
+#Mesh Proxy Data Out Characteristic Value
+#Mesh Proxy Data Out Client Characteristic Configuration
+#Characteristic --notify
+0f 00 02 03 28 01 10
+10 00 02 DE 2A 01 00
+#Client Characteristic Configuration
+11 00 02 02 29 02 00 00
+
+#Mesh Provisioning Service Declaration
+12 00 02 00 28 02 27 18
+#Mesh Provisioning Data In Characteristic Declaration
+#Mesh Provisioning Data In Characteristic Value
+#Characteristic --write without response
+13 00 02 03 28 01 04
+14 00 02 DB 2A 01 00
+#Mesh Provisioning Data Out Characteristic Declaration
+#Mesh Provisioning Data Out Characteristic Value
+#Mesh Provisioning Data Out Client Characteristic Configuration
+#Characteristic --notify
+15 00 02 03 28 01 10
+16 00 02 DC 2A 01 00
+#Client Characteristic Configuration
+17 00 02 02 29 02 00 00
+
+
+00 00
+
+
+
+
+
+
+
+
+mem_rf_init_data:
+# xtal 16M
+ff
+mem_rf_init_ptr:mem_rf_init_data
+
+mem_mesh_segmented_access_message_SegN_upper_limit:01
+mem_mesh_segmented_access_message_Segment_ptr:mem_mesh_segmented_access_message_Segment
+
+mem_mesh_vendor_mesh_receive_tid: ff
+
+mem_mesh_chip_select: 02
+

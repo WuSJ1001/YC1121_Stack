@@ -1,0 +1,66 @@
+
+// Rf debug
+
+/*****************************************************************************************************************************************************************************************
+    txon     txoff       rxon		      sync             crc pass    shutdown radio          match
+     _________          ______________    _________________     ___        ___                     
+    |         |        |              |  |                 |   |   |      |   |                   
+    |	      |        |              |  |                 |   |   |      |   |                   
+____|tx data  |________|   rx window  |__| rx data         |___|   |______|   |_______       __________
+
+*****************************************************************************************************************************************************************************************/
+
+rf_debug_rx_gpio_low:
+	fetch 1,mem_rf_debug_rx_gpio
+rf_debug_gpio_low:
+	arg gpcfg_output_low,temp
+	branch gpio_config_function
+
+rf_debug_rx_on_line:
+rf_debug_rx_gpio_high:
+	fetch 1,mem_rf_debug_rx_gpio
+rf_debug_gpio_high:
+	arg gpcfg_output_high,temp
+	branch gpio_config_function
+
+rf_debug_rx_gpio_h_l_h:
+	call rf_debug_rx_gpio_high
+rf_debug_rx_gpio_l_h:
+	call rf_debug_rx_gpio_low
+	branch rf_debug_rx_gpio_high
+
+rf_debug_rx_gpio_l_h_l:
+rf_debug_shutdown_radio_line:
+	call rf_debug_rx_gpio_l_h
+rf_debug_rx_crc_line:
+	branch rf_debug_rx_gpio_low
+
+rf_debug_rx_sync_line:
+	branch rf_debug_rx_gpio_l_h
+
+rf_debug_rx_crc_fail_line:
+	call rf_debug_rx_gpio_l_h
+	branch rf_debug_rx_gpio_l_h_l
+
+rf_debug_rx_match_line:
+rf_debug_rx_crc_error_line:
+rf_debug_rx_sync_timeout_line:
+	branch rf_debug_rx_gpio_low
+
+
+rf_debug_tx_off_line:
+rf_debug_tx_gpio_low:
+	fetch 1,mem_rf_debug_tx_gpio
+	branch rf_debug_gpio_low
+
+rf_debug_tx_on_line:
+rf_debug_tx_gpio_high:
+	fetch 1,mem_rf_debug_tx_gpio
+	branch rf_debug_gpio_high
+
+rf_debug_tx_gpio_l_h_l:
+	call rf_debug_tx_gpio_low
+	call rf_debug_tx_gpio_high
+	branch rf_debug_tx_gpio_low
+
+	

@@ -1,0 +1,40 @@
+
+xmemalloc g24(
+1 mem_rssi_buff_index
+)
+
+
+xmemalloc g24_tx(
+1 mem_rssi_signal_index
+2 mem_rssi_signal_buf_ptr
+
+)
+
+
+xmemalloc g24_rx(
+1 mem_rssi_noise_avg
+1 mem_rssi_noise_index
+
+1 mem_rssi_noise_self_avg
+1 mem_rssi_noise_device1_avg
+1 mem_rssi_noise_device2_avg
+1 mem_rssi_noise_self_index
+1 mem_rssi_noise_device1_index
+1 mem_rssi_noise_device2_index
+
+2 mem_rssi_noise_buffer_ptr
+2 mem_rssi_noise_self_buffer_ptr
+2 mem_rssi_noise_device1_buffer_ptr
+2 mem_rssi_noise_device2_buffer_ptr
+
+)
+
+
+
+(
+0x50 RSSI_THRESH_NOISE
+)
+
+
+
+

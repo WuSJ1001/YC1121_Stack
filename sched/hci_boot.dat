@@ -1,0 +1,7 @@
+
+mem_device_option:0c
+
+mem_rf_init_data:
+ff
+mem_rf_init_ptr:mem_rf_init_data
+

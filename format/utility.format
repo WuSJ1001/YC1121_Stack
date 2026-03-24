@@ -1,0 +1,88 @@
+
+memalloc(
+
+1 mem_fifo_temp
+
+8 mem_pdatatemp
+8 mem_temp //8 bytes
+4 mem_timeup // 4 bytes
+4 mem_rega //4 bytes
+4 mem_regb //4 bytes
+3 mem_regc //3 bytes
+2 mem_contr //2 bytes
+2 mem_contw //2 bytes
+2 mem_contus
+2 mem_contue
+2 mem_contu
+2 mem_queue
+2 mem_loopcnt
+
+4 mem_saved_gpio_in
+
+0 mem_module_rx_error_data_buffer
+0 mem_le_adv_channel_map_temp
+0 mem_le_data_len_temp	//1byte
+0 mem_event_cmd_response_content	//2byte
+0 mem_le_prand		//16byte
+0 mem_AES_CMAC_k	 //16 bytes
+0 mem_regext_index 	//1 bytes
+1 mem_temp_block0
+0 mem_le_data_temp	//15bytes
+15 mem_temp_block1
+0 mem_le_tx_buf_temp //48byte
+0 mem_le_aes_128	//16byte
+0 mem_regext   //64 bytes
+0 mem_AES_CMAC_k1  //16 bytes
+16 mem_temp_block2
+0 mem_AES_CMAC_k2  //16 bytes
+16 mem_temp_block3
+0 mem_AES_CMAC_temp  // 16 bytes
+16 mem_temp_block4
+0 mem_AES_CMAC_M_last // 16 bytes
+1 mem_module_uart_cmd
+1 mem_module_uart_opcode
+1 mem_module_uart_len
+1 mem_module_temp_nl_discard_packet
+12 mem_temp_block5
+0 mem_le_mackey //16 bytes
+0 mem_app_receive_temp
+2 mem_key_value_temp
+2 mem_key_value
+1 mem_key_value_temp1
+1 mem_key_value_temp2
+1 mem_key_value_temp3
+1 mem_key_value_temp4
+1 mem_key_value_temp5
+1 mem_key_value_temp6
+6 mem_temp_block6
+
+3 mem_scale_ratio
+3 mem_xcnt
+2 mem_scale_ratio_temp
+)
+
+
+amemalloc mem_temp_block2(
+	2 mem_inter1v_adc_now_data
+	2 mem_Vinter1v_adc_data
+	2 mem_inter1p2v_adc_now_data
+	2 mem_Vinter1p2v_adc_data
+	2 mem_gpio_gnd_adc_now_data
+	2 mem_channel2_gnd_adc_now_data
+	2 mem_difference_between_ext_gnd_and_in_gnd
+	2 mem_adc_gpio_k
+	2 mem_adc_gpio_b
+	
+	1 mem_adc_gpio_gnd_channel
+	2 mem_gpio_adc_value
+	2 mem_vdcdc_adc_value
+)
+
+//util fifo param
+(
+
+8 UTIL_FIFO_LEN
+-1 UTIL_FIFO_OFFSET
+)
+
+

@@ -1,0 +1,275 @@
+
+
+/*
+	阿里极速配网协议配网阶段包的解析与组包
+*/
+
+
+/*
+	function name mesh_send_Unprovisioned_Beacons
+	input:three tuple data 
+	mem_mesh_three_tuple_ProductID
+	mem_mesh_three_tuple_MAC
+	mem_mesh_three_tuple_secret
+*/
+mesh_send_Unprovisioned_Beacons:
+	bpatchx patch34_7,mem_patch34
+	jam UNPROVISIONED_BEACON_STATUS,mem_mesh_provisioned_flag
+	jam 0x00,mem_mesh_Provisioning_State_Flag
+	jam 1,mem_mesh_advertising_unprovisioned_device_beacon_switch
+	setarg ADV_UNPROVISIONED_DEVICE_BEACON_TIMEOUT
+	store 2, mem_mesh_advertising_unprovisioned_device_beacon_timer
+	rtn
+
+//初始化UUID 三元组参数和feature Flag
+ali_mesh_config_device_uuid_by_three_tuple:
+	setarg COMPANY_IDENTIFIERS_ALIBABA
+	store 2,mem_mesh_Device_UUID
+	fetch 1,mem_mesh_Device_PID
+	istore 1,contw
+	fetch 4,mem_mesh_three_tuple_ProductID
+	call inverse_data_4Byte
+	istore 4,contw
+	fetch 6,mem_le_lap
+	istore 6,contw
+	fetch 3,mem_mesh_UUID_FeatureFlag
+	istore 3,contw
+	rtn
+
+ali_mesh_send_Unprovisioned_Beacons_tmall:
+	call ali_mesh_init_adv_data_tmall_Unprovisioned_beacons_package
+	branch mesh_le_send_adv
+
+ali_mesh_init_adv_data_tmall_Unprovisioned_beacons_package:
+//mem Beacon Tmall Length
+	jam 0x15,mem_mesh_adv_data_len
+	setarg 0x14
+	store 1,mem_mesh_adv_data
+	setarg GAP_ADTYPE_MESH_BEACON
+	istore 1,contw
+	setarg UNPROVISIONED_DEVICE_BEACON
+	istore 1,contw
+ali_mesh_advertising_send_Unprovisioned_Beacons_store_device_uuid:
+	arg mem_mesh_Device_UUID,contr
+	call memcpy16
+	fetch 2,mem_mesh_OOB_information
+	istore 2,contw
+	rtn
+
+/*
+
+input:
+	temp is len
+	contr is read ptr
+*/
+
+ali_mesh_receive_adtype_manufacturer_specific:
+	call ali_mesh_receive_provisioning_package_check_header
+	nrtn user
+	ifetch 1,contr	//provisioning type
+	beq PROVISIONING_RANDOM,ali_mesh_advertising_receive_Privisioning_Random
+	beq PROVISIONING_DATA,ali_mesh_decrypt_tmall_Privisioning_Data_package
+	bpatchx patch35_0,mem_patch35
+	rtn
+
+
+//receive provisioning random
+ali_mesh_advertising_receive_Privisioning_Random:
+	call ali_mesh_advertising_receive_Privisioning_Random_check_states
+	nrtn user
+ali_mesh_advertising_calc_encrypt_random_data:
+	call ali_mesh_encrypt_calc_random_data
+//	call mesh_reset_adv_timer
+	call ali_mesh_advertising_send_Provisioning_Confirmation
+	call ali_mesh_send_pairing_data
+ifdef mesh_debug_log
+	branch loggint_tx_info_send_confirmation_packet
+endif
+	rtn
+//send provisioning confirmation
+ali_mesh_advertising_send_Provisioning_Confirmation:
+	arg PROVISIONING_PACKET_CONFIRMATION_MAC+PROVISIONING_PACKET_CONFIRMATION_DEVICE,temp
+	call ali_mesh_advertising_send_packet_common
+	setarg PROVISIONING_CONFIRMATION
+	istore 1,contw
+	fetch 2,mem_mesh_three_tuple_MAC+4
+	istore 2,contw
+	arg mem_mesh_ConfirmationDevice,contr
+	branch memcpy16
+
+//output:disable user mean is cannot true package
+ali_mesh_advertising_receive_Privisioning_Random_check_states:
+	call disable_user
+	ifetcht 2,contr
+	arg mem_mesh_provisioning_random_A,contw
+	call memcpy16
+	fetch 2,mem_mesh_three_tuple_MAC+4
+	isub temp,null
+	nrtn zero	
+
+	
+	fetch 1,mem_mesh_Provisioning_State_Flag
+	rtnbit1 RECEIVE_PROVISIONING_RANDOM
+	set1 RECEIVE_PROVISIONING_RANDOM,pdata			// FLAG bit1:Provisioning Confirmation
+	store 1,mem_mesh_Provisioning_State_Flag
+
+	jam PAIRING_STATUS,mem_mesh_provisioned_flag		//
+ifdef mesh_debug_log
+	call loggint_tx_info_receive_random_packet
+endif
+	branch enable_user
+
+ali_mesh_decrypt_tmall_Privisioning_Data_package:
+	call ali_mesh_advertising_receive_Privisioning_Data
+	fetcht 2,mem_mesh_provisioning_data_Mac_addr
+	fetch 2,mem_mesh_three_tuple_MAC+4
+	isub temp,null
+	nrtn zero
+	call ali_mesh_encrypt_base_function_k3
+	call ali_mesh_send_pairing_data
+	fetch 1,mem_mesh_fast_pair_packet_type
+	rtnne MESH_MESSAGE_PROXY
+	jam WAIT_RECEIVE_APPKEY,mem_mesh_provisioned_flag
+	rtn
+
+//receive provisioning data
+ali_mesh_advertising_receive_Privisioning_Data:
+	bpatchx patch35_1,mem_patch35
+	copy contr,rega
+	fetch 1,mem_mesh_provisioned_flag
+	rtneq PAIRED_STATUS	
+	fetch 1,mem_mesh_Provisioning_State_Flag
+	rtnbit0 RECEIVE_PROVISIONING_RANDOM
+	rtnbit1 RECEIVE_PROVISIONING_DATA
+	copy rega,contr
+	arg 0x16,loopcnt
+	arg mem_mesh_Encrypt_Provisioning_Data,contw
+	call memcpy
+
+	call ali_mesh_encrypt_calc_provisioning_data
+	
+	fetcht 2,mem_mesh_provisioning_data_Mac_addr
+	fetch 2,mem_mesh_three_tuple_MAC+4
+	isub temp,null
+	nrtn zero
+ali_mesh_resolve_Privisioning_Data_package:
+ifdef mesh_debug_log
+	call loggint_tx_info_receive_data_packet
+endif
+	fetch 1,mem_mesh_Provisioning_State_Flag
+	set1 RECEIVE_PROVISIONING_DATA,pdata
+	store 1,mem_mesh_Provisioning_State_Flag
+
+	call ali_mesh_encrypt_calc_network_key_by_k2
+
+	fetch 1,mem_mesh_last_IV_Index_byte
+	store 1,mem_mesh_IV_Index+3
+	call ali_mesh_advertising_send_Provisioning_Complete
+ifdef mesh_debug_log
+	branch loggint_tx_info_send_complete_packet
+endif
+	rtn
+
+
+//send provisioning complete
+ali_mesh_advertising_send_Provisioning_Complete:
+	arg PROVISIONING_PACKET_COMPLETE_MAC,temp
+	call ali_mesh_advertising_send_packet_common
+	setarg PROVISIONING_COMPLETE
+	istore 1, contw
+	fetch 6,mem_mesh_three_tuple_MAC
+	istore 6,contw
+	rtn
+
+
+ali_mesh_advertising_send_packet_common:
+	bpatchx patch35_2,mem_patch35
+	setarg FAST_PAIRING_TIMEOUT_PROVISIONING		//about 11s
+	store 2,mem_mesh_fast_pairing_timer
+	fetch 1,mem_mesh_fast_pair_packet_type
+	sub pdata,MESH_MESSAGE_TMALL,null
+	call ali_mesh_control_ble_advertising_on_advertising,zero
+	ncall ali_mesh_control_ble_advertising_off_advertising,zero
+	add temp,PROVISIONING_PACKET_LENGTH_AD_TYPE_COMPANY_ID_VID_PROVISIONING_TYPE+PROVISIONING_PACKET_LENGTH_FLAGS,pdata
+	store 1,mem_mesh_adv_data_len
+	call ali_mesh_advertising_add_adtype_flags
+	add temp,PROVISIONING_PACKET_AD_TYPE_COMPANY_ID_VID_PROVISIONING_TYPE,pdata
+	istore 1,contw
+	setarg GAP_ADTYPE_MANUFACTURER_SPECIFIC
+	istore 1,contw
+	setarg COMPANY_IDENTIFIERS_ALIBABA
+	byteswap pdata,pdata
+	istore 2,contw
+	fetch 1,mem_mesh_receive_VID
+	istore 1,contw
+	rtn
+
+
+
+ifdef mesh_debug_log
+logging_tx_debug_receive_provisioning_packet:
+	add contr,-3,rega
+	arg MESH_RECEIVE_PROVISIONING_PACKET,regb
+	branch logging_tx_debug
+
+
+loggint_tx_info_receive_random_packet:
+	arg 1,loopcnt
+	arg MESH_RECEIVE_PROVISIONING_RANDOM_PACKET,regb
+	arg mem_mesh_Provisioning_State_Flag,rega
+	branch logging_tx_info
+
+loggint_tx_info_send_confirmation_packet:
+	fetchr loopcnt,1,mem_mesh_adv_data_len
+	arg MESH_SEND_PROVISIONING_CONFIRMATION_PACKET,regb
+	arg mem_mesh_adv_data,rega
+	branch logging_tx_info
+
+loggint_tx_info_receive_data_packet:
+	arg 1,loopcnt
+	arg MESH_RECEIVE_PROVISIONING_DATA_PACKET,regb
+	arg mem_mesh_Provisioning_State_Flag,rega
+	branch logging_tx_info
+
+
+loggint_tx_info_send_complete_packet:
+	fetchr loopcnt,1,mem_mesh_adv_data_len
+	arg MESH_SEND_PROVISIONING_COMPLETE_PACKET,regb
+	arg mem_mesh_adv_data,rega
+	branch logging_tx_info
+endif
+
+
+
+
+
+
+
+ali_mesh_receive_provisioning_package_check_header:
+	call disable_user
+	ifetcht 2,contr
+	setarg COMPANY_IDENTIFIERS_ALIBABA
+	byteswap pdata,pdata
+	isub temp,null
+	nrtn zero	
+	ifetch 1,contr
+	store 1,mem_mesh_receive_VID
+	branch enable_user
+ifdef mesh_debug_log
+	call logging_tx_debug_receive_provisioning_packet
+endif
+//	rtn
+
+ali_mesh_fast_pairing_timer:
+	arg mem_mesh_fast_pairing_timer,regc
+	arg ali_mesh_fast_pairing_timeout, regb
+	branch timer_single_step_2B
+
+ali_mesh_fast_pairing_timeout:
+ali_mesh_fast_pairing_failed:
+	branch ali_mesh_advertising_init_send_unprovisioned_device_beacon
+//	branch ali_mesh_app_prov_fail
+
+
+
+

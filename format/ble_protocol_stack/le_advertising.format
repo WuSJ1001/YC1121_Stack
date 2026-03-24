@@ -1,0 +1,104 @@
+
+xmemalloc(
+// parameters
+1 mem_le_scan_enable
+2 mem_le_scan_interval
+2 mem_le_scan_window
+
+
+1 mem_le_adv_data_len
+31 mem_le_adv_data
+1 mem_le_scan_data_len
+31 mem_le_scan_data
+
+//START of LE adv parameter structure
+1 mem_le_adv_enable
+0 mem_le_adv_param
+2 mem_le_adv_interval
+1 mem_le_adv_type
+1 mem_le_adv_own_addr_type
+6 mem_le_adv_direct_addr
+1 mem_le_adv_channel_map
+//END of LE adv parameter structure
+
+//START of LE scan parameter structure
+0 mem_le_scan_params
+1 mem_le_scan_type
+1 mem_le_scan_own_addr_type
+//END of LE scan parameter structure
+)
+
+amemalloc mem_le_rxbuf(
+//advertising channel PDU
+	1 mem_le_rxbuf_adv_header
+	1 mem_le_rxbuf_adv_length
+	255 mem_le_rxbuf_adv_payload
+)
+
+amemalloc mem_le_rxbuf(
+//advertising channel PDU
+//Scan Req
+	1 mem_le_rxbuf_adv_scan_req_header
+	1 mem_le_rxbuf_adv_scan_req_length
+	6 mem_le_rxbuf_adv_scan_req_scan_address
+	6 mem_le_rxbuf_adv_scan_req_adv_address
+)
+
+amemalloc mem_le_rxbuf(
+//advertising channel PDU
+//Connect IND
+	1 mem_le_rxbuf_adv_connect_ind_header
+	1 mem_le_rxbuf_adv_connect_ind_length
+	6 mem_le_rxbuf_adv_connect_ind_init_address
+	6 mem_le_rxbuf_adv_connect_ind_adv_address
+	4 mem_le_rxbuf_adv_connect_ind_access_address
+	3 mem_le_rxbuf_adv_connect_ind_crc_init
+	1 mem_le_rxbuf_adv_connect_ind_win_size
+	2 mem_le_rxbuf_adv_connect_ind_win_offset
+	2 mem_le_rxbuf_adv_connect_ind_interval
+	2 mem_le_rxbuf_adv_connect_ind_latency
+	2 mem_le_rxbuf_adv_connect_ind_timeout
+	5 mem_le_rxbuf_adv_connect_ind_channel_map
+	1 mem_le_rxbuf_adv_connect_ind_hop_and_sca
+)
+
+(
+0x01	GAP_ADTYPE_FLAGS
+0x02	GAP_ADTYPE_16BIT_MORE
+0x03	GAP_ADTYPE_16BIT_COMPLETE
+0x04	GAP_ADTYPE_32BIT_MORE
+0x05	GAP_ADTYPE_32BIT_COMPLETE
+0x06	GAP_ADTYPE_128BIT_MORE
+0x07	GAP_ADTYPE_128BIT_COMPLETE
+0x08	GAP_ADTYPE_LOCAL_NAME_SHORT
+0x09	GAP_ADTYPE_LOCAL_NAME_COMPLETE
+0x0a	GAP_ADTYPE_POWER_LEVEL
+0x16	GAP_ADTYPE_SERVICE_DATA
+0x2a	GAP_ADTYPE_MESH_MESSAGE
+0x2b 	GAP_ADTYPE_MESH_BEACON
+0xff	GAP_ADTYPE_MANUFACTURER_SPECIFIC
+)
+
+/* advertising channel PDU type */
+(
+0 ADV_IND
+1 ADV_DIRECT_IND
+2 ADV_NONCONN_IND
+3 SCAN_REQ
+3 AUX_SCAN_REQ
+4 SCAN_RSP
+5 CONNECT_REQ
+5 AUX_CONNECT_REQ
+6 ADV_SCAN_IND
+)
+
+(
+0 BIT_ADV_CHANNEL_MAP_37
+1 BIT_ADV_CHANNEL_MAP_38
+2 BIT_ADV_CHANNEL_MAP_39
+)
+
+(
+0xa0 param_le_sca
+)
+

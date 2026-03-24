@@ -1,0 +1,111 @@
+memalloc ali_mesh(
+	// sha256
+	0 mem_mesh_sha256_chunk_start
+	64 mem_mesh_sha256_chunk1
+	64 mem_mesh_sha256_chunk2
+	64 mem_mesh_sha256_chunk3
+	64 mem_mesh_sha256_chunk4
+
+	//obfuscation network PDU Header
+	0 mem_mesh_Privacy_Plaintext
+	5 mem_mesh_Privacy_Plaintext_Zero_String
+	4 mem_mesh_Privacy_Plaintext_IV_Index
+	0 mem_mesh_Privacy_Plaintext_Privacy_Random
+	2 mem_mesh_Privacy_Plaintext_Privacy_Random_EncDST
+	5 mem_mesh_Privacy_Plaintext_Privacy_Random_EncTransportPDU_or_NetMIC
+	16 mem_mesh_PECB
+
+	//basic function
+	//aes-ccm
+	2 mem_nonce_ptr
+	1 mem_ccm_data_len
+	2 mem_ccm_data_ptr
+	8 mem_ccm_mic
+	1 mem_ccm_type
+
+
+)
+
+xmemalloc ali_mesh(
+
+	0 mem_mesh_calc_ConfirmationCloud_data
+	8 mem_mesh_ConfirmationCloud_RandomB
+	8 mem_mesh_ConfirmationCloud_RandomA
+	16 mem_mesh_AuthValueProv
+	16 mem_mesh_ConfirmationCloud
+
+
+	//provisioning random  / provisioning_confirmation
+	0 mem_mesh_ConfirmationDevice
+	0 mem_mesh_calc_ConfirmationDevice_data
+	8 mem_mesh_provisioning_random_A
+	8 mem_mesh_provisioning_random_B
+	16 mem_mesh_AuthValueDevice
+
+	16 mem_mesh_Device_Key
+
+
+// CMAC Key
+	16 mem_mesh_Confirmationkey
+
+	//sha256 init data
+	15 mem_mesh_sha256_ConfirmationKey_ascii
+	10 mem_mesh_sha256_SessionKey_ascii
+	9 mem_mesh_sha256_DeviceKey_ascii
+
+	//sha256
+	1 mem_mesh_sha256_load_first_data_flag
+
+	8 mem_mesh_sha256_data_len_byte
+	8 mem_mesh_sha256_data_len_bit
+	2 mem_mesh_sha256_data_end_addr
+	2 mem_mesh_sha256_data_len_addr
+	1 mem_mesh_sha256_chunk_count
+	2 mem_mesh_sha256_chunk_data_ptr
+	2 mem_mesh_sha256_chunk_ptr
+
+
+	//function K2
+	//f2 input
+	1 mem_k2_P_len
+	16 mem_k2_P
+	16 mem_k2_N
+	//f2 init data
+	16 mem_k2_SALT
+	//f2 output
+	16 mem_k2_T
+	0 mem_k2_T0
+	16 mem_k2_T1
+	1 mem_k2_NID
+	16 mem_k2_T3
+	16 mem_k2_T2
+
+
+	//k4 function
+	16 mem_k4_SALT
+	16 mem_k4_T
+	16 mem_k4_id6_01
+	16 mem_k4_k4N
+	1 mem_mesh_transport_AID
+
+	16 mem_k3_SALT
+	16 mem_k3_T
+	5 mem_k3_id64_01
+	8 mem_k3_k4N
+	8 mem_mesh_network_id
+
+
+)
+
+(
+0x2c COMMA
+-4 DECREASED_FOUR
+
+)
+
+(
+0x19 MIC_SIZE_64BIT
+0x09 MIC_SIZE_32BIT
+)
+
+

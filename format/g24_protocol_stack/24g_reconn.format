@@ -1,0 +1,29 @@
+xmemalloc g24_tx(
+2 mem_24g_reconn_timeout_init
+2 mem_24g_reconn_timeout
+2 mem_24g_reconn_count
+1 mem_24g_reconn_type
+1 mem_24g_fast_conn_enable
+4 mem_24g_fast_conn_addr
+4 mem_24g_receiver_addr
+1 mem_24g_fast_conn_temp_ch
+1 mem_24g_receiver_temp_ch
+1 mem_24g_device_temp_ch
+
+)
+
+xmemalloc g24_rx(
+4 mem_24g_transmitter_addr
+4 mem_24g_device1_addr
+4 mem_24g_device2_addr
+
+)
+
+(//mem_24g_reconn_type
+0 DEFAULT_24G_DEVICE
+1 FAST_CONN_AND_RECEIVER
+2 FAST_CONN_AND_3_0_ADDR
+3 RECEIVER_AND_3_0_ADDR
+4 PAIR_AND_3_0_ADDR
+)
+

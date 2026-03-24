@@ -1,0 +1,81 @@
+
+/*
+	mesh协议中bearer layer
+	主要是负责mesh中实际发送数据包内容
+*/
+
+ali_mesh_bearer_layer_send_packet_by_network_layer:
+	bpatchx patch34_1,mem_patch34
+	setarg mem_mesh_queue_each_size
+	store 2,mem_mesh_element_device_queue_buffer_ptr
+	setarg mem_mesh_element_device
+	store 2,mem_mesh_rega_temp
+	jam ADV_PAIRING_MESH_MESSAGE_DURATION,mem_mesh_queue_ele_duration
+	fetch 1,mem_mesh_gatt_package_send_msg_id
+	store 1,mem_mesh_queue_ele_gatt_msg_id
+
+	fetch 1,mem_mesh_lower_transport_layer_payload_len
+	pincrease 11
+	add pdata,-2,loopcnt
+	//长度+11的原因
+	//uint8_t AD length
+	//uint8_t AD type:GAP_ADTYPE_MESH_MESSAGE
+	//uint8_t IVI & NID
+	//uint8_t CTL & TTL
+	//uint24_t SEQ
+	//uint16_t SRC
+	//uint16_t DST
+	store 1,mem_mesh_queue_ele_len
+	pincrease -1
+	//-1的原因
+	//uint8_t AD length
+	istore 1,contw
+	setarg GAP_ADTYPE_MESH_MESSAGE
+	istore 1,contw
+	arg mem_mesh_send_upper_layer_IVI_and_NID,contr
+	call memcpy_fast
+	fetchr rega,2,mem_mesh_rega_temp
+	call ali_mesh_advertising_bearer_layer_init_queue
+	call queue_push
+ali_mesh_bearer_layer_gatt_send_packet_by_network_layer:
+	fetch 2,mem_ui_state_map
+	isolate1 UI_STATE_BLE_CONNECTED,pdata
+	nrtn true
+ali_mesh_send_ble_data_control_package:
+	call ali_mesh_network_layer_init_gatt_queue_param
+	arg mem_mesh_queue_ele_temp,rega
+	branch queue_push
+
+ali_mesh_advertising_bearer_layer_init_queue:
+	add rega,ELEMENT_DEVICE_QUEUE_BUFFER_PTR,contr
+	ifetch 2,contr
+	store 2,mem_queue_ptr
+	arg mem_mesh_queue_ele_temp,rega
+	rtn
+	
+
+ali_mesh_advertising_bearer_layer_init_queue_param:
+	setarg mem_mesh_queue_each_size
+	store 2,mem_queue_ptr
+	rtn
+
+ali_mesh_advertising_bearer_layer_load_packet_from_advertising_queue:
+ 
+ali_mesh_advertising_bearer_layer_load_packet_from_advertising_queue_deal:
+	fetch 1,mem_mesh_upper_tran_layer_packet_advertising
+	rtnne PACKET_IN_BEARER
+	jam PACKET_IN_ADVERTING,mem_mesh_upper_tran_layer_packet_advertising
+	branch ali_mesh_control_ble_advertising_on_advertising
+
+ali_mesh_advertising_bearer_layer_send_packet_by_app_bearer_calc_param:
+	arg mem_mesh_queue_ele_payload+2,rega
+	arg MAX_APP_MSSAGE_PAYLOAD_LENGTH,temp
+	setarg 0x21		//
+	nrtn true
+	arg mem_mesh_queue_ele_payload+20,rega		//MAX_APP_MSSAGE_PAYLOAD_LENGTH+2
+	fetcht 1,mem_mesh_queue_ele_len
+	increase -18,temp		//MAX_APP_MSSAGE_PAYLOAD_LENGTH
+	setarg 0x22
+	rtn
+
+

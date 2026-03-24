@@ -1,0 +1,176 @@
+
+/****************************g24 reconn transmitter start********************************/
+
+g24_reconn_timeout_timer:
+	arg mem_24g_reconn_timeout,regc
+	arg g24_stop_24g_mode,regb
+	branch timer_single_step_2B
+
+
+g24_reconn_start:
+	bpatchx patch31_7,mem_patch31
+	set1 mark_24g,mark
+	fetch 1,mem_24g_conn_sm
+	set0 STATE_24G_PAIR,pdata
+	set1 STATE_24G_RECONN,pdata
+	store 1,mem_24g_conn_sm
+	fetch 1,mem_24g_fast_conn_enable
+	branch g24_reconn_receiver_addr,blank
+	fetch 1,mem_24g_reconn_type
+	beq FAST_CONN_AND_RECEIVER,g24_reconn_fast_conn
+	beq FAST_CONN_AND_3_0_ADDR,g24_reconn_fast_conn
+	beq RECEIVER_AND_3_0_ADDR,g24_reconn_device_3_0_addr
+	beq PAIR_AND_3_0_ADDR,g24_reconn_device_3_0_addr
+g24_reconn_fast_conn:
+	fetch 1,mem_24g_pair_tx_power
+	store 1,mem_tx_power
+	fetcht 1,mem_24g_fast_conn_temp_ch
+	storet 1,mem_24g_current_ch_number
+	fetch 4,mem_24g_fast_conn_addr
+	call g24_ch_syncword_crc8_init
+	storet 1,mem_24g_fast_conn_temp_ch
+	rtn
+	 
+g24_reconn_receiver_addr:
+	jam TX_POWER_3DB,mem_tx_power
+	fetcht 1,mem_24g_receiver_temp_ch
+	storet 1,mem_24g_current_ch_number
+	fetch 4,mem_24g_receiver_addr
+	call g24_ch_syncword_crc8_init
+	storet 1,mem_24g_receiver_temp_ch
+	rtn
+
+g24_reconn_device_3_0_addr:
+	jam TX_POWER_3DB,mem_tx_power
+	fetcht 1,mem_24g_device_temp_ch
+	storet 1,mem_24g_current_ch_number
+	fetch 4,mem_24g_device_addr
+	call g24_ch_syncword_crc8_init
+	storet 1,mem_24g_device_temp_ch
+	rtn	
+
+g24_store_receiver_addr:
+	fetch 4,mem_24g_rxpayload+2
+	rtn blank
+	store 4,mem_24g_receiver_addr	
+g24_ch_syncword_crc8_init:	
+	call g24_update_addr_and_synccrc8
+	branch g24_ch
+
+
+g24_reconn_dispatch:
+	bpatchx patch32_0,mem_patch32
+	fetch 2,mem_24g_reconn_count
+	arg 0x01f8,temp
+	iand temp,pdata
+	branch g24_reconn_dispatch_next,blank
+	fetch 2,mem_24g_reconn_count
+	increase 1,pdata
+	store 2,mem_24g_reconn_count
+	rtn
+
+g24_reconn_dispatch_next:
+	call g24_reconn_data_prep
+	call g24_transmit_receive_ack
+	nbranch g24_reconn_device_fail,sync
+	nbranch g24_reconn_device_fail,user3
+	call g24_ackpayload_parse
+	fetch 4,mem_24g_pair_addr
+	fetcht 4,mem_24g_addr
+	isub temp,null
+	branch g24_pair_start,zero
+	fetch 4,mem_24g_device_addr
+	fetcht 4,mem_24g_addr
+	isub temp,null
+	call g24_store_receiver_addr,zero
+	fetch 1,mem_24g_conn_sm
+	set0 STATE_24G_RECONN,pdata
+	store 1,mem_24g_conn_sm
+	setarg 0
+	store 2,mem_24g_pair_timeout
+	store 2,mem_24g_reconn_count
+	store 2,mem_24g_reconn_timeout
+	jam BT_EVT_24G_ATTEMPT_SUCCESS,mem_fifo_temp
+	call ui_ipc_send_event
+g24_txbuf_clear:
+	bpatchx patch32_1,mem_patch32
+	arg 32,loopcnt
+	arg mem_24g_txbuf,contw
+	branch memset0
+
+g24_reconn_data_prep:
+	jam DATATYPE_ATTEMP,mem_24g_txbuf
+	fetch 1,mem_24g_data_type
+	store 1,mem_24g_txbuf+1
+	fetch 4,mem_24g_device_addr
+	store 4,mem_24g_txbuf+2
+	jam 6,mem_24g_datalen
+	branch g24_transmit_prep
+
+g24_reconn_device_fail:
+	bpatchx patch32_2,mem_patch32
+	fetch 1,mem_24g_fast_conn_enable
+	branch g24_ch,blank
+	fetch 2,mem_24g_reconn_count
+	increase 1,pdata
+	store 2,mem_24g_reconn_count
+	isolate1 9,pdata
+	fetch 1,mem_24g_reconn_type
+	beq FAST_CONN_AND_RECEIVER,g24_reconn_fast_conn_and_receiver
+	beq FAST_CONN_AND_3_0_ADDR,g24_reconn_fast_conn_and_3_0
+	beq RECEIVER_AND_3_0_ADDR,g24_reconn_receiver_and_3_0
+	beq PAIR_AND_3_0_ADDR,g24_reconn_pair_and_3_0
+	branch g24_reconn_receiver_addr
+
+
+g24_reconn_fast_conn_and_receiver:
+	branch g24_reconn_receiver_addr,true
+	branch g24_reconn_fast_conn
+
+g24_reconn_fast_conn_and_3_0:
+	branch g24_reconn_device_3_0_addr,true
+	branch g24_reconn_fast_conn
+	
+g24_reconn_receiver_and_3_0:
+	branch g24_reconn_device_3_0_addr,true
+	branch g24_reconn_receiver_addr
+
+g24_reconn_pair_and_3_0:
+	branch g24_reconn_device_3_0_addr,true
+	branch g24_pair_init_param
+
+/****************************g24 reconn transmitter end********************************/
+
+
+
+
+
+/****************************g24 reconn receiver start********************************/
+
+g24_data_attemp:
+	fetch 1,mem_24g_rxdata_temp+3
+	beq DATATYPE_DEVICE1,g24_data_attemp_device1
+	beq DATATYPE_DEVICE2,g24_data_attemp_device2
+	rtn
+g24_data_attemp_device1:
+	fetch 1,mem_24g_device1_bind_disable
+	nrtn blank
+	fetch 4,mem_24g_rxdata_temp+4
+	store 4,mem_24g_transmitter_addr
+g24_store_device1_addr:
+	store 4,mem_24g_device1_addr
+	rtn
+g24_data_attemp_device2:
+	fetch 1,mem_24g_device2_bind_disable
+	nrtn blank
+	fetch 4,mem_24g_rxdata_temp+4
+	store 4,mem_24g_transmitter_addr	
+g24_store_device2_addr:
+	store 4,mem_24g_device2_addr
+	rtn
+
+/****************************g24 reconn receiver end********************************/
+
+
+
+

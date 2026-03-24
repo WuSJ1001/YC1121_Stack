@@ -1,0 +1,466 @@
+ifdef COMPILE_REMOTE_CAR
+//define REMOTE_TEST_FUNCTION
+remote_car_init:
+	rtn wake	
+	call remote_car_default_init
+	call keyscan_key_init
+	setarg remote_car_g24_package_data
+	store 2,mem_cb_24g_transmit_data
+
+	setarg remote_car_process_lpm_before
+	store 2,mem_cb_24g_lpm_before
+	
+	setarg remote_car_le_before_hibernate
+	store 2,mem_cb_before_hibernate
+	
+	setarg remote_car_scale_process_idle
+	store 2,mem_cb_idle_process	
+	
+	setarg remote_car_scale_process_bb_event
+	store 2,mem_cb_bb_event_process
+
+	setarg remote_car_event_timer
+	store 2,mem_cb_event_timer
+	
+	setarg remote_car_power_off_signal
+	store 2,mem_remote_car_power_off_cb
+	
+	setarg remote_car_soft_switch_power_on_signal
+	store 2,mem_remote_car_power_standby_cb
+	
+	
+	bpatch patch06_3,mem_patch06
+	call set_eeprom_size_2k
+	call remote_car_init_environment
+
+	call queue_init
+	fetch 1,mem_remote_car_config_soft_switch_enable
+	store 1,mem_remote_car_hard_soft_switch
+	beq HARD_SWITCH, remote_car_hard_switch_power_on_signal
+	fetch 1,mem_remote_car_config_soft_switch_gpio
+	store 1,mem_ui_button_gpio
+remote_car_soft_switch_power_on_init:
+	call remote_car_ui_led_init
+	call ui_button_init
+	call ui_button_polling
+	jam POWER_STARTING,mem_remote_car_power_state
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BTN_DOWN
+	branch app_enter_hibernate
+
+
+
+remote_car_hard_switch_power_on_signal:
+	jam POWER_STANDBY,mem_remote_car_power_state
+remote_car_soft_switch_power_on_signal:
+	call remote_car_ui_led_init
+	arg 0,rega
+	call ui_led_blink_start_global
+ifdef REMOTE_TEST_FUNCTION	
+	branch g24_pair_start
+endif //REMOTE_TEST_FUNCTION	
+	call remote_car_g24_load_commom_addr
+	fetch 4,mem_remote_24g_commom_addr
+	store 4,mem_24g_addr	
+	branch g24_pair_start,blank
+	fetch 4,mem_24g_addr
+	store 4,mem_24g_receiver_addr
+	fetch 2,mem_24g_reconn_timeout_init
+	store 2,mem_24g_reconn_timeout
+	branch g24_reconn_start
+
+remote_car_set_24g_addr_eeprom:
+	arg 4,temp
+	arg mem_24g_addr,rega
+	arg REMOTE_INFO_EEPROM_OFFECT,regb
+	rtn
+
+
+remote_car_power_off_signal:	
+remote_car_ui_led_init:
+	bpatch patch06_4,mem_patch06
+	fetch 1,mem_remote_car_config_connect_led_gpio
+	bne INVALID_PIN_NUM,remote_car_pairing_led_gpio_set
+remote_car_ui_led_init_1:
+	fetcht 1, mem_remote_car_led_map
+	branch gpio_config_output
+remote_car_pairing_led_gpio_set:
+	store 1,mem_remote_car_led_map
+	branch remote_car_ui_led_init_1
+
+
+remote_car_init_environment:
+	call g24_transmit_init
+remote_no_data_timer_init:
+	fetch 2,mem_remote_car_no_data_timeout
+	store 2,mem_remote_car_no_data_timer
+	rtn
+
+remote_car_le_before_hibernate:
+	call remote_car_process_lpm_before
+remote_gpio_set_before_hibernate:
+	fetch 1,mem_remote_style_struct_led_gpio
+	set1 7,pdata
+	arg gpcfg_output_high,temp
+	branch gpio_config_function
+
+remote_car_process_lpm_before:
+	call gpio_set_before_lpm
+	branch keyscan_process_lpm_before
+
+remote_car_key_scan_process:
+	call keyscan_key_process
+	call get_remote_key_state
+	call remote_conn_led_state
+	branch send_data
+
+remote_conn_led_state:
+	fetch 1,mem_remote_car_24g_status
+	rtnne WORK_PAIRED
+	fetch 4,mem_remote_car_motor1_key0_press_state
+	branch remote_car_stop_state,blank
+	jam 0,mem_remote_car_no_data_check
+	enable user
+	branch check_51cmd_led_on
+remote_car_stop_state:
+	fetch 1,mem_remote_car_no_data_check
+	rtneq 0xff
+	pincrease 1
+	store 1,mem_remote_car_no_data_check
+	disable user
+	branch check_51cmd_led_off
+
+	
+get_remote_key_state:
+	fetcht 2,mem_key_value_retention
+	and temp,0x01,pdata
+	rshift temp,temp
+	store 1,mem_remote_car_motor1_key0_press_state
+	and temp,0x01,pdata
+	rshift temp,temp
+	store 1,mem_remote_car_motor1_key1_press_state
+	and temp,0x01,pdata
+	rshift temp,temp
+	store 1,mem_remote_car_motor2_key2_press_state
+	and temp,0x01,pdata
+	rshift temp,temp
+	store 1,mem_remote_car_motor2_key3_press_state
+	rtn
+send_data:
+	bpatch patch06_5,mem_patch06
+	call remote_car_fb_check
+	call remote_car_lr_check
+	call remote_car_no_data_timeout_check
+	nrtn user
+	branch remote_car_send_key 
+
+
+remote_car_no_data_timeout_check:
+	fetch 1,mem_remote_car_24g_status
+	rtnne WORK_PAIRED
+	fetch 1,mem_remote_car_no_data_check
+	rtn blank
+	sub pdata,1,null
+	nrtn positive
+	fetch 2,mem_24g_reconn_timeout_init
+	store 2,mem_24g_reconn_timeout
+	branch enable_user
+
+
+	
+remote_car_fb_check:
+	fetch 1,mem_remote_car_motor1_key0_press_state
+	nbranch remote_car_send_motor1_key0_press,blank
+	fetch 1,mem_remote_car_motor1_key1_press_state
+	nbranch remote_car_send_motor1_key1_press,blank
+	branch remote_car_send_motor1_key0_rel
+	
+remote_car_lr_check:
+	fetch 1,mem_remote_car_motor2_key2_press_state
+	nbranch remote_car_send_motor2_key2_press,blank
+	fetch 1,mem_remote_car_motor2_key3_press_state
+	nbranch remote_car_send_motor2_key3_press,blank
+	branch remote_car_send_motor2_key2_rel
+
+
+remote_car_scale_process_idle:
+	call remote_car_24g_status_process
+	branch remote_car_key_scan_process
+
+remote_car_scale_process_bb_event:
+	copy regc,pdata
+	beq BT_EVT_BUTTON_UP,app_event_button_up
+	beq BT_EVT_BUTTON_LONG_PRESSED,app_button_long_pressed
+	beq BT_EVT_24G_PAIRING_COMPLETE,remote_car_24g_pairing_complete
+	beq BT_EVT_24G_ATTEMPT_SUCCESS,remote_car_24g_attempt_success
+	beq BT_EVT_24G_ATTEMPT_FAIL,remote_car_24g_attempt_fail
+	rtn
+
+remote_car_24g_attempt_fail:
+	branch g24_txbuf_clear
+
+remote_car_24g_pairing_complete:
+	bpatch patch06_6,mem_patch06
+        fetch 4,mem_24g_receiver_addr
+        store 4,mem_remote_24g_commom_addr
+        fetch 1,mem_remote_save_addr_flag
+        ncall remote_car_g24_save_commom_addr,blank
+	fetch 4,mem_remote_24g_commom_addr
+	call g24_update_addr_and_synccrc8        
+	//call remote_car_set_24g_addr_eeprom
+	//call iicd_write_protect_eep_data
+remote_car_24g_attempt_success:
+	jam 0,mem_24g_conn_sm
+	jam WORK_PAIRED,mem_remote_car_24g_auto_work_step
+	jam WORK_PAIRED,mem_remote_car_24g_pair_success_flag
+	jam 0,mem_24g_reconn_timeout		
+	rtn
+remote_car_g24_save_commom_addr:
+    
+
+        fetch 1,mem_remote_save_addr_flag
+        rtn blank
+	fetch 1,mem_24g_lap+1				//Tx lap H
+	store 1,mem_remote_24g_commom_addr+3
+
+	fetch 1,mem_24g_receiver_addr+1		//Rx lap H
+	store 1,mem_remote_24g_commom_addr+2
+
+	fetch 1,mem_24g_lap					//Tx lap L
+	store 1,mem_remote_24g_commom_addr+1
+
+	fetch 1,mem_24g_receiver_addr		//Rx lap L
+	store 1,mem_remote_24g_commom_addr
+ifdef REMOTE_TEST_FUNCTION
+        rtn
+endif // REMOTE_TEST_FUNCTION 
+	call remote_car_g24_search_commom_addr
+	fetch 4,mem_remote_24g_commom_addr
+	fetcht 4,mem_remote_24g_commom_addr_temp 
+	isub temp,null
+	rtn zero	
+        copy regc,regb
+        arg mem_remote_24g_commom_addr,rega
+        arg 4,loopcnt        
+        branch otp_write
+        
+remote_car_g24_load_commom_addr:
+ifdef REMOTE_TEST_FUNCTION
+        rtn
+endif // REMOTE_TEST_FUNCTION 
+        fetch 1,mem_remote_save_addr_flag
+        rtn blank
+        call remote_car_g24_search_commom_addr
+        fetch 4,mem_remote_24g_commom_addr_temp
+        rtn blank
+        store 4,mem_remote_24g_commom_addr  
+        rtn
+
+/* regc=otp start address and output */        
+remote_car_g24_search_commom_addr:
+ifdef REMOTE_TEST_FUNCTION
+        rtn
+endif // REMOTE_TEST_FUNCTION 
+        fetch 1,mem_remote_save_addr_flag
+        rtn blank       
+        arg OTP_OFFSET_REMOTE_COMMOM_START_ADDR,regc
+remote_car_g24_search_commom_addr_loop:
+        copy regc,regb
+        arg mem_remote_24g_commom_addr_temp,rega
+        arg 4,loopcnt
+        call otp_read_data
+        fetch 4,mem_remote_24g_commom_addr_read
+        rtn blank        
+        store 4,mem_remote_24g_commom_addr_temp
+        copy regc,pdata
+        arg OTP_OFFSET_REMOTE_COMMOM_END_ADDR,temp
+        isub temp,null
+        rtn positive        
+        increase 4,regc
+        branch remote_car_g24_search_commom_addr_loop
+        
+remote_car_24g_status_process:
+	fetch 1,mem_remote_car_24g_auto_work_step
+	rtneq POWER_ON
+	fetch 1,mem_remote_car_24g_status
+	rtneq WORK_PAIRED
+	jam WORK_PAIRED,mem_remote_car_24g_status
+remote_car_scale_process_paired:
+	arg 0,rega
+	branch ui_led_off_global
+remote_car_scale_process_shutdown:
+	arg 0,rega
+	call ui_led_off_global
+	call remote_car_ui_led_init
+	branch app_enter_hibernate
+	
+remote_car_event_timer:
+	call app_power_timer
+	call g24_pair_timeout_timer
+	call g24_reconn_timeout_timer	
+	branch remote_car_no_data_timer
+
+remote_car_no_data_timer:
+	fetch 1,mem_remote_car_config_timeout_shutdown_enable
+	rtn blank
+	fetch 1,mem_key_value_retention
+	nbranch remote_no_data_timer_init,blank
+	arg mem_remote_car_no_data_timer,regc
+	arg remote_car_scale_process_shutdown,regb
+	branch timer_single_step_2B
+
+
+//cross key,control front-back motor layout
+remote_car_send_motor1_key0_press:	//front
+	jam MOTOR_POSITIVE,mem_remote_car_24g_motor1_payload
+	rtn
+remote_car_send_motor1_key1_press:	//back
+	jam MOTOR_NEGATIVE,mem_remote_car_24g_motor1_payload
+	rtn
+remote_car_send_motor2_key2_press:	//left
+	jam MOTOR_POSITIVE,mem_remote_car_24g_motor2_payload
+	rtn
+remote_car_send_motor2_key3_press:	//right
+	jam MOTOR_NEGATIVE,mem_remote_car_24g_motor2_payload
+	rtn
+
+
+remote_car_send_motor1_key0_rel:
+remote_car_send_motor1_key1_rel:
+	jam MOTOR_STOP,mem_remote_car_24g_motor1_payload
+	rtn
+remote_car_send_motor2_key2_rel:
+remote_car_send_motor2_key3_rel:
+	jam MOTOR_STOP,mem_remote_car_24g_motor2_payload
+	rtn
+	
+remote_car_send_key:
+	arg mem_remote_car_24g_motor_packet,rega
+	branch queue_push
+remote_car_send_attack:
+	arg mem_remote_car_24g_fire_packet,rega
+	branch queue_push
+
+remote_car_g24_package_data:
+	fetch 1,mem_remote_car_24g_pair_success_flag
+	beq WORK_PAIRED,remote_car_g24_send_empty
+	arg mem_remote_car_24g_tx_temp,rega
+	call queue_pop
+	nbranch remote_car_moto_data,user
+remote_car_g24_package_data_continue:
+	arg mem_remote_car_24g_tx_temp,contr
+	ifetch 1,contr
+	copy pdata,rega
+	arg mem_remote_car_24g_tx_temp+1,regb
+	//rega: length
+	//regb: tx buffer
+	rtn
+	
+remote_car_g24_send_empty:
+	jam 0,mem_remote_car_24g_pair_success_flag
+	enable user
+	arg 1,rega
+	arg mem_remote_car_empty_packet,regb
+	rtn
+	
+remote_car_moto_data:
+	fetch 1,mem_remote_car_24g_tx_temp+3	//cmd
+	beq CAR_CMD_L_R_MOTOR_CONTROL,remote_car_moto_data_next
+	beq CAR_CMD_F_B_MOTOR_CONTROL,remote_car_moto_data_next
+	rtn
+remote_car_moto_data_next:
+	fetch 1,mem_remote_car_24g_tx_temp+6	//data moto1
+	nbranch remote_car_moto_data_enable_user,blank
+	fetch 1,mem_remote_car_24g_tx_temp+8	//data moto2
+	nbranch remote_car_moto_data_enable_user,blank
+	fetch 1,mem_remote_car_24g_tx_temp+10	//data moto3
+	nbranch remote_car_moto_data_enable_user,blank
+	rtn
+remote_car_moto_data_enable_user:
+	enable user
+	branch remote_car_g24_package_data_continue
+
+
+
+/*************remote car default_init starting*********************/
+remote_car_default_init:
+	jam 0x14,mem_ui_button_timeout
+	jam 0x01,mem_ui_button_last_state
+	setarg 0x060f
+	store 2,mem_remote_car_queue_each_size
+	setarg mem_remote_car_queue_each_size
+	store 2,mem_queue_ptr
+	jam 0x01,mem_lpm_mode
+	jam 0x06,mem_lpm_overhead
+	jam 0x02,mem_lpm_mult_timeout
+	jam 0x00,mem_remote_car_hard_soft_switch
+	setarg mem_remote_style_led_type
+	store 2,mem_ui_led_struct_ptr
+	jam 0x01,mem_ui_led_struct_num
+	jam 0xff,mem_remote_style_blink_count
+	setarg 0x0296
+	store 2,mem_remote_style_on_time
+	setarg 0x073a
+	store 2,mem_remote_style_off_time
+	setarg mem_remote_car_soft_power
+	store 2,mem_power_param_ptr
+	setarg 0x0c0c
+	store 2,mem_remote_car_power_off_timeout
+	setarg mem_remote_car_keyscan
+	store 2,mem_keyscan_ptr
+	jam 0x00,mem_remote_car_config_soft_switch_enable
+	jam 0xff,mem_remote_car_config_connect_led_gpio
+	jam 0xff,mem_remote_car_config_soft_switch_gpio
+	jam 0x00,mem_remote_car_config_key_map
+	jam 0x00,mem_remote_car_config_layout
+	jam 0x00,mem_remote_car_config_check_way
+	jam 0x01,mem_remote_car_config_timeout_shutdown_enable
+	setarg 0x4e55
+	store 2,mem_current_vdd_value_default_mid_x
+	store 2,mem_current_vdd_value_default_mid_y
+	setarg 0x0007
+	store 2,mem_current_vdd_default_range
+	jam 0x02,mem_adc_config_flag
+	setsect 0,0x35a0c
+	setsect 1,0x11a
+	setsect 2,0x60
+	setsect 3,0x28
+	store 9,mem_remote_car_24g_motor_packet
+	setsect 0,0x2000a
+	setsect 1,0x02
+	istore 4,contw
+	setsect 0,0x35a08
+	setsect 1,0x19a
+	setsect 2,0x00
+	setsect 3,0x00
+	store 9,mem_remote_car_24g_fire_packet
+	setarg 0x0064
+	store 2,mem_remote_car_no_data_timeout
+	jam TX_POWER_0DB,mem_tx_power
+	jam 0x01,mem_24g_data_type		//24g init
+	jam 0x06,mem_24g_max_retry
+	jam 0x01,mem_24g_pair_switch
+	jam 0x00,mem_24g_fast_conn_enable
+	call g24_rx_window_init
+	call g24_interval_param_8ms
+	call g24_chmap_param_init
+
+	//call g24_pair_param_init
+	setarg 0x0708
+	store 2,mem_24g_pair_timeout_init
+	setarg 0x0050
+	store 2,mem_24g_reconn_timeout_init
+	setarg 0x0a7700
+	store 3,mem_24g_long_sleep_set
+	setarg 0x604800
+	store 3,mem_24g_enter_hibernate	
+	rtn
+
+/*************remote car default_init ending*********************/
+
+else
+remote_car_init:
+	rtn
+endif
+
+

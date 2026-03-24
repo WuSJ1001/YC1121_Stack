@@ -1,0 +1,167 @@
+
+xmemalloc g24_tx_remote(
+1 mem_remote_car_hard_soft_switch
+
+1 mem_remote_car_queue_each_size
+1 mem_remote_car_queue_length
+
+1 mem_remote_car_queue_curr_num
+1 mem_remote_car_queue_read_ptr
+1 mem_remote_car_queue_write_ptr
+90 mem_remote_car_queue_ele
+
+1 mem_remote_style_led_type
+1 mem_remote_style_blink_count
+1 mem_remote_style_struct_led_gpio
+2 mem_remote_style_on_time
+2 mem_remote_style_off_time
+2 mem_remote_style_cb_ledon
+2 mem_remote_style_cb_ledoff
+
+
+1 mem_remote_car_led_num
+8 mem_remote_car_led_map
+
+0 mem_remote_car_keyscan
+1 mem_remote_car_key_num
+2 mem_cb_remote_car_keyscan
+
+0 mem_remote_car_key_conf0
+1 mem_remote_car_key_conf0_pin
+0 mem_remote_car_key_conf1
+1 mem_remote_car_key_conf1_pin
+0 mem_remote_car_key_conf2
+1 mem_remote_car_key_conf2_pin
+0 mem_remote_car_key_conf3
+1 mem_remote_car_key_conf3_pin
+0 mem_remote_car_key_conf4
+1 mem_remote_car_key_conf4_pin
+0 mem_remote_car_key_conf5
+1 mem_remote_car_key_conf5_pin
+0 mem_remote_car_key_conf6
+1 mem_remote_car_key_conf6_pin
+
+
+//rocker
+1 mem_rocker_negative_flag
+1 mem_rocker_work_status
+2 mem_current_vdd_value_default_mid_x
+2 mem_current_vdd_value_default_mid_y
+2 mem_current_vdd_value_default_mid_temp
+2 mem_current_vdd_default_range
+2 mem_rocker_last_status
+0 mem_rocker_status
+1 mem_rocker_x_status
+1 mem_rocker_y_status
+
+0 mem_remote_car_config_param
+1 mem_remote_car_config_setting_flag
+1 mem_remote_car_config_key_map
+1 mem_remote_car_config_layout
+1 mem_remote_car_config_connect_led_gpio
+1 mem_remote_car_config_check_way
+1 mem_remote_car_config_soft_switch_enable
+1 mem_remote_car_config_soft_switch_gpio
+1 mem_remote_car_config_timeout_shutdown_enable
+
+0 mem_remote_car_24g_motor_packet
+1 mem_remote_car_24g_motor_packet_lenght
+2 mem_remote_car_24g_motor_send_packet_head
+1 mem_remote_car_24g_motor_send_cmd
+2 mem_remote_car_24g_motor_send_length
+0 mem_remote_car_24g_motor_send_payload
+2 mem_remote_car_24g_motor1_payload
+2 mem_remote_car_24g_motor2_payload
+2 mem_remote_car_24g_motor3_payload
+1 mem_remote_car_24g_motor_send_checksum
+
+0 mem_remote_car_24g_fire_packet
+1 mem_remote_car_24g_fire_packet_lenght
+2 mem_remote_car_24g_fire_send_packet_head
+1 mem_remote_car_24g_fire_send_cmd
+2 mem_remote_car_24g_fire_send_length
+2 mem_remote_car_24g_fire_send_payload
+1 mem_remote_car_24g_fire_send_checksum
+
+15 mem_remote_car_24g_tx_temp
+
+2 mem_remote_car_no_data_timeout
+2 mem_remote_car_no_data_timer
+
+0 mem_remote_car_soft_power
+1 mem_remote_car_power_state
+1 mem_remote_car_power_timer
+1 mem_remote_car_power_off_timeout
+1 mem_remote_car_power_starting_timeout
+2 mem_remote_car_power_off_cb
+2 mem_remote_car_power_starting_cb
+2 mem_remote_car_power_standby_cb
+
+1 mem_remote_key_status
+1 mem_remote_car_24g_status
+
+1 mem_remote_car_24g_auto_work_step
+1 mem_remote_car_24g_pair_success_flag
+1 mem_remote_car_empty_packet
+
+1 mem_remote_car_motor1_key0_press_state
+1 mem_remote_car_motor1_key1_press_state
+1 mem_remote_car_motor2_key2_press_state
+1 mem_remote_car_motor2_key3_press_state
+1 mem_remote_car_motor1_rel_state
+1 mem_remote_car_motor2_rel_state
+
+1 mem_remote_car_no_data_check
+
+4 mem_remote_24g_commom_addr
+4 mem_remote_24g_commom_addr_temp
+4 mem_remote_24g_commom_addr_read
+1 mem_remote_save_addr_flag
+)
+
+
+(
+// eeprom config
+0xb0 REMOTE_PARAM_EEPROM_CONFIG_ADDR
+//eeprom address offect
+0X00 REMOTE_INFO_EEPROM_OFFECT
+
+)
+
+
+(
+0x00 CONTROL_F_B_MOTOR
+0x02 CONTROL_L_R_MOTOR
+)
+
+(
+0x00 KEY_MAP_TEN
+0x01 KEY_MAP_LR
+)
+
+(
+0x00 CONTROL_F_B_TEN
+0x02 CONTROL_L_R_TEN
+0x03 CONTROL_L_R_LR
+)
+
+(
+0 KEY_CHECK
+1 ROCKER_CHECK
+)
+
+(
+1 MOTOR_POSITIVE
+2 MOTOR_NEGATIVE
+)
+
+(
+0 ROCKER_MIDDLE_KEY
+1 ROCKER_POSITIVE_KEY
+2 ROCKER_NEGATIVE_KEY
+)
+(
+0x700 OTP_OFFSET_REMOTE_COMMOM_START_ADDR 
+0x7cc OTP_OFFSET_REMOTE_COMMOM_END_ADDR 
+)
+

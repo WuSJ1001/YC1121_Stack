@@ -1,0 +1,57 @@
+
+
+mem_system_clk:0c
+mem_lpm_xtalcnt:35 3f 64
+mem_lpm_isogate:db 7b 3b
+mem_lpm_hibernate_switch:20
+mem_lpm_ldo_sel:00
+mem_lpm_sysctl:08
+mem_lpm_hv_sel:b4
+
+mem_fcomp_div:18
+mem_xtal_c_sel:3e
+mem_gpio_wakeup_cfg:00 00 00 00 00 00 00 00 00 00 00 02
+
+mem_version:08 0e 05 03 00
+mem_le_tx2m_delay:20
+
+mem_rx_window_sniff:00 0c
+
+mem_gain_fix:ff	#00:soft agc; ff:hw agc
+mem_gain_table:04 00 00
+mem_gain_second_agc_en:08	#hw agc: 0:second agc disable
+
+
+#adc config
+mem_adc_config_flag:01
+#01 ADC_CONFIG_HVIN
+#02 ADC_CONFIG_GPIO
+mem_adc_clkdiv:0a
+mem_adc_channel:00
+#00 ADC_CH_VBAT
+#01 ADC_CH_VDCDC5V
+#06 ADC_CH_GPIO18
+#07 ADC_CH_GPIO10
+#08 ADC_CH_GPIO9
+#09 ADC_CH_GPIO12
+#0a ADC_CH_GPIO6
+#0b ADC_CH_GPIO20
+#0c ADC_CH_GPIO21
+#0d ADC_CH_GPIO22
+#0e ADC_CH_GPIO13
+
+mem_adc_dma_enable:00
+mem_adc_saddr_ptr:00 07
+mem_adc_eaddr_ptr:ff 07
+
+mem_ring_ibias_trim:a0
+mem_ring_ibias_vtune_high:bc 02 #700mv
+mem_ring_ibias_vtune_low:90 01 #400mv
+mem_ring_ibias_calc_adc_gpio:03
+mem_ring_ibias_calc_adc_channel:09
+
+mem_rf_init_data:
+ff
+mem_rf_init_ptr:mem_rf_init_data
+
+

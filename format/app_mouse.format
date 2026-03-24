@@ -1,0 +1,827 @@
+
+memalloc mouse(
+2 mem_init_cnt
+2 mem_data_pre
+2 mem_data_current
+3 mem_data_sum
+2 mem_data_value
+
+
+)
+//dpi eeprom addr
+xmemalloc g24_tx_hid(
+
+// adc
+//adc struct
+0 mem_mouse_vdd_calculate_set
+2 mem_mouse_vdd_full_vol
+2 mem_mouse_vdd_empty_vol
+2 mem_mouse_vdd_low_vol
+2 mem_mouse_vdd_now_vol
+1 mem_adc_channel_gpio
+1 mem_adc_mux_status
+1 mem_mouse_adc_last_low_voltage_flag
+2 mem_mouse_discovery_timeout
+2 mem_mouse_24g_pair_timeout_init
+1 mem_mouse_direct_timeout
+1 mem_mouse_24g_reconn_timeout_init
+1 mem_mouse_24g_pair_tx_power
+1 mem_rssi_dis_min_24g_init
+1 mem_rssi_dis_max_24g_init
+1 mem_rssi_hex_received_max_value_init
+1 mem_rssi_dis_min_ble_init
+1 mem_rssi_dis_max_ble_init
+
+0 mem_mouse_param_config
+1 mem_lbutton_gpio
+1 mem_mbutton_gpio
+1 mem_rbutton_gpio
+1 mem_bk_button_gpio
+1 mem_fw_button_gpio
+1 mem_dpi_button_gpio
+1 mem_whee_a_data_gpio
+1 mem_whee_b_data_gpio
+1 mem_mouse_sensor_sclk_gpio
+1 mem_mouse_sensor_sdio_gpio
+1 mem_select_sensor_angle_gpio
+1 mem_sensor_angle_default
+1 mem_sensor_angle_switch
+1 mem_config_sensor_dpi	
+1 mem_whee_ta_data_gpio
+1 mem_whee_tb_data_gpio
+1 mem_matrix_public_gpio
+1 mem_config_select_device_button_gpio
+1 mem_customer_key_gpio
+1 mem_firebutton_gpio
+1 mem_dpi_another_button_gpio
+1 mem_sensor_motion_gpio
+1 mem_device_switch_gpio
+1 mem_mouse_reuse_2ice_gpio
+1 mem_mouse_logo_led_gpio
+1 mem_mouse_1io2led_multi_24gled
+1 mem_mouse_1io2led_multi_bt1led
+1 mem_mouse_1io2led_multi_bt2led
+1 mem_mouse_low_voltage_alarm_gpio
+1 mem_mouse_dpi_gpio
+0 mem_mouse_param_config_end
+
+// usb
+1 mem_wire_usb_interval
+1 mem_usb_addr
+1 mem_mouse_usb_vdd_status
+1 mem_mouse_usb_keyboard_flag
+
+//three devices param
+//eeprom/flash
+0 mem_mouse_information_start
+1 mem_device_flag
+1 mem_device1_type
+6 mem_device1_addr
+6 mem_device1_locall_addr
+
+1 mem_device2_type
+6 mem_device2_addr
+6 mem_device2_locall_addr
+
+1 mem_device3_type
+6 mem_device3_addr
+6 mem_device3_locall_addr
+2 mem_store_flag
+1 mem_mouse_dpi
+4 mem_mouse_24g_addr
+2 mem_random_addr_increase_count
+79 mem_mouse_retention
+0 mem_mouse_information_end
+
+6 mem_mouse_compare_addr
+3 mem_flash_base
+4 mem_write_flash_head_temp
+1 mem_store_information_delay_timer
+1 mem_store_information_delay_timer_init
+
+// 2.4G
+1 mem_mouse_search_dongle_interval
+1 mem_mouse_search_dongle_ch
+1 mem_mouse_search_dongle_count
+1 mem_mouse_search_dongle_action
+1 mem_24g_enter_lpm_timer
+1 mem_mouse_24g_enter_lpm_enable
+
+//	LED
+//mediacy
+1 mem_mouse_multi_led_blink_enable
+1 mem_mouse_multi_led_type
+1 mem_mouse_multi_led_state
+1 mem_mouse_multi_led_blink_type				//00:rtn	01:24g blink	02:le blink		03:reconn blink 	04:low blink	05:dpi blink
+
+//time parm
+1 mem_mouse_le_reconn_blink_limit
+1 mem_mouse_multi_led_powon_timer_init		//power on time
+1 mem_mouse_multi_led_powon_timer
+1 mem_mouse_multi_24gled_blink_timer_init	//24gled blink time
+1 mem_mouse_multi_le_discovery_blink_timer_init	//le discovery blink time
+1 mem_mouse_multi_le_reconn_blink_timer_init	//le reconn blink time
+1 mem_mouse_dpi_led_blink_timer_init		//dpi blink time
+1 mem_mouse_multi_led_blink_timer
+1 mem_mouse_low_led_blink_timer			//low blink time
+1 mem_mouse_low_led_blink_half_timer
+1 mem_adc_low_volatage_led_timer_count
+//blink count
+1 mem_mouse_multi_24gled_blink_count_init	//24g count
+1 mem_mouse_multi_le_reconn_blink_count_init	//le reconn count
+1 mem_mouse_multi_led_blink_count
+1 mem_mouse_multi_lowled_blink_count_init	//low count
+1 mem_mouse_multi_low_led_blink_count
+2 mem_mouse_logo_led_on_time_init
+1 mem_mouse_dpi_led_delay_count
+1 mem_mouse_dpi_led_delay_count_init
+//	LED end
+
+// mouse configured param
+8 mem_mouse_flag 
+1 mem_device_number
+2 mem_mouse_page_to
+1 mem_mouse_fast_direct_timeout
+2 mem_mouse_fast_page_to
+2 mem_mouse_24g_power_on_fast_conn_timer
+2 mem_mouse_24g_search_dongle_time_init
+2 mem_mouse_no_data_timeout
+
+1 mem_mouse_commbination_key_bt
+1 mem_mouse_commbination_key_24g
+
+1 mem_mouse_customer_function
+9 mem_customer_key_press
+9 mem_customer_key_release
+3 mem_mouse_set_high_impedance_bit_set
+
+1 mem_sensor_shutdown_flag
+1 mem_24g_long_sleep_set_level
+
+2 mem_tx_power_factory_param
+
+//lost-packet compensation
+3 mem_mouse_24g_short_sleep_set_4ms
+3 mem_mouse_24g_long_sleep_set_4ms
+1 mem_mouse_24g_fast_hop_count_4ms
+3 mem_mouse_24g_short_sleep_set_8ms
+3 mem_mouse_24g_long_sleep_set_8ms
+1 mem_mouse_24g_fast_hop_count_8ms
+
+4 mem_mouse_24g_tsniff
+4 mem_mouse_24g_tsniff_4ms
+4 mem_mouse_24g_tsniff_8ms
+3 mem_mouse_24g_short_sleep_set_init
+
+1 mem_mouse_24g_tx_count
+6 mem_mouse_24g_tx_time_last
+4 mem_mouse_24g_tx_time_last_delt
+5 mem_mouse_24g_tx_time_sum
+1 mem_mouse_24g_tx_time_sum_count
+1 mem_mouse_24g_tx_time_offset
+1 mem_mouse_24g_sleep_miss
+4 mem_mouse_24g_sleep_time_temp
+4 mem_mouse_24g_sleep_miss_temp
+
+1 mem_mouse_sleep_deal_type
+
+1 mem_mouse_24g_long_sleep_flag
+
+//no motion pin
+1 mem_mouse_long_mult_flag
+1 mem_mouse_current_mult_timer
+
+1 mem_reconn_times
+1 mem_reconn_times_init
+2 mem_mouse_no_data_timer
+8 mem_mouse_rssi_signal_buf				
+4 mem_btclk_sensor
+1 mem_mouse_bluetooth_fast_conn_flag
+2 mem_mouse_discovery_timer
+1 mem_mouse_bluetooth_reconnect_timeout
+1 mem_mouse_need_soft_reset
+
+// le
+1 mem_mouse_le_bb_connected_flag
+1 mem_mouse_le_reconnect_flag
+1 mem_mouse_send_secutiry_request_timer
+
+3 mem_mouse_le_lap_temp
+3 mem_le_adv_ind
+3 mem_le_adv_direct_ind
+20 mem_le_adv_swift_pair
+1 mem_le_data_len
+2 mem_le_keyboard_handle
+2 mem_le_multimedia_handle
+2 mem_le_systemctrl_handle
+2 mem_le_battery_level_handle
+1 mem_le_battery_level_percentage
+2 mem_le_battery_level_updata_timer_init
+2 mem_le_battery_level_updata_timer
+1 mem_mouse_le_conn_param_reject
+32 mem_le_tx_buffer0_omemalloc
+32 mem_le_tx_buffer1_omemalloc
+32 mem_le_tx_buffer2_omemalloc
+32 mem_le_tx_buffer3_omemalloc
+1 mem_le_connect_status_flag
+1 mem_le_start_encrypt_timer
+1 mem_mouse_direct_timer
+
+)
+
+xmemalloc g24_tx_hid_mouse(
+// Mouse Work Area
+1 mem_mouse_key
+2 mem_mouse_x
+2 mem_mouse_y
+1 mem_mouse_z
+1 mem_mouse_tz
+1 mem_mouse_xy_h
+1 mem_mouse_key_last
+
+//mouse wheel
+1 mem_wheel_tb_old_pinlevel
+1 mem_wheel_tb_new_pinlevel
+1 mem_wheel_tog 
+1 mem_mouse_tz_data
+1 mem_mwheel_b_old_pinlevel
+1 mem_mwheel_b_new_pinlevel
+1 mem_mwheel_tog 
+1 mem_mouse_z_data
+1 mem_mouse_wheel_trigger
+1 mem_mouse_wheel_trigger_timer
+
+//sensor param
+1 mem_sensor_id1
+1 mem_sensor_id2
+
+1 mem_sensor_shutter_hi
+1 mem_sensor_shutter_lo
+1 mem_sensor_smart_flag
+1 mem_sensor_squal_reg
+1 mem_sensor_iqc
+1 mem_mouse_move_flag
+
+1 mem_mouse_asm_flag
+2 mem_mouse_x_pre
+2 mem_mouse_y_pre
+1 mem_mouse_data_xtemp
+1 mem_mouse_data_ytemp
+
+0 mem_mouse_dpi_seting
+1 mem_320x_dpi_0
+1 mem_320x_dpi_1
+1 mem_320x_dpi_2
+1 mem_320x_dpi_3
+1 mem_3212_dpi_0
+1 mem_3212_dpi_1
+1 mem_3212_dpi_2
+1 mem_3212_dpi_3
+1 mem_ka8g2_dpi_0
+1 mem_ka8g2_dpi_1
+1 mem_ka8g2_dpi_2
+1 mem_ka8g2_dpi_3
+//S210x
+0 mem_sensor_s201_dpi
+1 mem_sensor_s201_dpi_0
+1 mem_sensor_s201_dpi_1
+1 mem_sensor_s201_dpi_2
+1 mem_sensor_s201_dpi_3
+1 mem_sensor_s201_dpi_4
+
+1 mem_mouse_cpi_count
+1 mem_mouse_dpi_button_state
+1 mem_mouse_dpi_long_press_flag
+
+10 mem_sensor_3212_init
+10 mem_sensor_3204_init
+10 mem_sensor_3205_init
+26 mem_sensor_32xx_init
+34 mem_sensor_32xx_init_1
+38 mem_sensor_8650_init
+30 mem_sensor_ka8ul_init
+16 mem_sensor_8009_init
+16 mem_sensor_ka8g2_init
+12 mem_sensor_p6520_init
+8 mem_sensor_poweron_init
+8 mem_sensor_ka8g2_poweron_init
+	
+1 mem_mouse_clear_sensor_data_flag
+1 mem_config_sensor_type
+1 mem_config_sensor_angle
+1 mem_bluetooth_125hz_cnt
+
+//bt
+7 mem_device_addr_temp
+1 mem_mouse_bt_boot_mode
+5 mem_mouse_bt_boot_data
+1 mem_bt_send_max_slot_req_accept_after_switch
+1 mem_mouse_bt_send_first_package_timer
+1 mem_mouse_bt_send_first_package_flag
+1 mem_lmi_opcode_temp 
+1 mem_lpm_mult_init
+
+// mouse key
+1 mem_customer_key
+1 mem_customer_data_trigger
+1 mem_customer_data_trigger_last
+
+1 mem_mouse_lkey_press_status
+1 mem_mouse_rkey_press_status
+1 mem_mouse_mkey_press_status
+1 mem_mouse_bkkey_press_status
+1 mem_mouse_fwkey_press_status
+1 mem_mouse_dpikey_press_status
+1 mem_mouse_pbkey_press_status
+1 mem_mouse_customerkey_press_status
+1 mem_mouse_key_temp
+1 mem_mouse_key_status
+
+1 mem_mouse_matrix_key_cow_count
+1 mem_mouse_matrix_key_row_count
+1 mem_mouse_ghost_flag
+1 mem_bt_discovery_count
+1 mem_select_device_count
+1 mem_mouse_commbination_key
+1 mem_select_device_button_statue
+1 mem_commbination_key_statue
+1 mem_combination_ui_button_count
+
+//fire key
+1 mem_fire_key_status
+4 mem_fire_key_delay
+1 mem_fire_key_flag
+
+//another dpi key
+1 mem_dpi_another_press_status
+1 mem_dpi_another_button_state
+1 mem_dpi_another_button_down_enable
+1 mem_mouse_key_temp_patch
+
+//le name modify
+1 mem_le_name_patch_len
+19 mem_le_name_patch
+
+//device otp data
+1 mem_device_flag_last
+1 mem_device_flag_temp
+1 mem_device_flag_value
+
+6 mem_mouse_le_addr1_last
+6 mem_mouse_le_addr1_temp
+6 mem_mouse_le_locall_addr1_last
+6 mem_mouse_le_locall_addr1_temp
+
+6 mem_mouse_le_addr2_last
+6 mem_mouse_le_addr2_temp
+6 mem_mouse_le_locall_addr2_last
+6 mem_mouse_le_locall_addr2_temp
+
+1 mem_mouse_dpi_last
+1 mem_mouse_dpi_temp
+1 mem_mouse_otp_dpi_value
+
+4 mem_mouse_24g_addr_last
+4 mem_mouse_24g_addr_temp
+
+2 mem_random_addr_increase_count_last
+2 mem_random_addr_increase_count_temp
+
+//otp store info offset
+2 mem_otp_offset_device_flag
+2 mem_otp_offset_device_flag_end
+
+2 mem_otp_offset_24g_addr
+2 mem_otp_offset_24g_addr_end
+
+2 mem_otp_offset_le_addr1
+2 mem_otp_offset_le_addr1_end
+
+2 mem_otp_offset_le_locall_addr1
+2 mem_otp_offset_le_locall_addr1_end
+
+2 mem_otp_offset_le_addr2
+2 mem_otp_offset_le_addr2_end
+
+2 mem_otp_offset_le_locall_addr2
+2 mem_otp_offset_le_locall_addr2_end
+
+2 mem_otp_offset_dpi
+2 mem_otp_offset_dpi_end
+
+2 mem_otp_offset_le_addr_increase_count
+2 mem_otp_offset_le_addr_increase_count_end
+
+2 mem_otp_offset_app_initflag
+
+)
+
+
+xmemalloc g24_tx_hid_mouse_flippen(
+16 mem_24g_txpayload_buf
+1 mem_release_data_from_receiver_enable
+1 mem_release_data_from_transmiter_enable
+
+1 mem_flippen_key0_gpio
+1 mem_flippen_key1_gpio
+1 mem_flippen_key2_gpio
+1 mem_flippen_key3_gpio
+1 mem_flippen_key4_gpio
+1 mem_flippen_key5_gpio
+1 mem_flippen_key6_gpio
+1 mem_flippen_key7_gpio
+
+1 mem_flippen_key0_press_status
+1 mem_flippen_key1_press_status
+1 mem_flippen_key2_press_status
+1 mem_flippen_key3_press_status
+1 mem_flippen_key4_press_status
+1 mem_flippen_key5_press_status
+1 mem_flippen_key6_press_status
+1 mem_flippen_key7_press_status
+
+0 mem_key_press_data
+9 mem_key_pageup_data
+9 mem_key_pagedown_data
+9 mem_key_shift_f5_data
+9 mem_key_esc_data
+9 mem_key_b_data
+9 mem_key_tab
+9 mem_key_enter
+9 mem_key_alt_tab
+9 mem_key_alt_f4
+9 mem_key_play_pause
+9 mem_key_vol_up
+9 mem_key_vol_down
+9 mem_standard_key_release
+9 mem_system_ctrl_key_release
+9 mem_media_key_release
+
+1 mem_key0_long_press_flag
+1 mem_key1_long_press_flag
+1 mem_key2_long_press_flag
+1 mem_key3_long_press_flag
+1 mem_key4_long_press_flag
+
+1 mem_key0_long_press_event
+1 mem_key1_long_press_event
+1 mem_key2_long_press_event
+1 mem_key3_long_press_event
+1 mem_key4_long_press_event
+
+1 mem_key0_short_press_flag
+1 mem_key1_short_press_flag
+1 mem_key2_short_press_flag
+1 mem_key3_short_press_flag
+1 mem_key4_short_press_flag
+
+1 mem_key0_press_timer_count
+1 mem_key1_press_timer_count
+1 mem_key2_press_timer_count
+1 mem_key3_press_timer_count
+1 mem_key4_press_timer_count
+
+1 mem_combination_key_down_flag
+1 mem_combination_key_longpress_flag
+1 mem_key_disable_timer
+1 mem_24g_calculate_package_id_disable
+1 mem_24g_package_id_abandon_flag
+1 mem_24g_package_id
+
+1 mem_key_state
+1 mem_key_press_state
+1 mem_poweron_first_blank_data_enable
+
+2 mem_flippen_no_data_timeout
+2 mem_flippen_start_pair_no_data_timeout
+2 mem_key_longpress_timer_init
+2 mem_key_longpress_timer
+
+1 mem_low_voltage_led_blink_flag
+1 mem_low_voltage_led_blink_start_timer
+1 mem_poweron_led_blink_flag
+
+1 mem_24g_pair_enable_flag
+1 mem_24g_ch_work
+1 mem_24g_pair_key_down_flag
+1 mem_24g_pairing_stop_flag
+1 mem_longpress_24g_enter_hibernate_flag
+1 mem_g24_connected_state
+1 mem_g24_pairing_stop_flag
+1 mem_send_package_before_check
+)
+
+(
+(
+0x00 PEN_KEY0
+0x01 PEN_KEY1
+0x02 PEN_KEY2
+0x03 PEN_KEY3
+0x04 PEN_KEY4
+0x05 PEN_KEY5
+0x06 PEN_KEY6
+0x07 PEN_KEY7
+)
+
+(
+0x07 KEY_PRESS_COUNT
+0x00 KEY_PRESS_NONE
+)
+
+)
+
+
+(
+//combination
+0x01 MOUSE_L_BUTTON
+0X02 MOUSE_R_BUTTON
+0x03 MOUSE_LR_BUTTON
+0X04 MOUSE_M_BUTTON
+0X05 MOUSE_LM_BUTTON
+0X06 MOUSE_RM_BUTTON
+0X07 MOUSE_LMR_BUTTON
+0x09 MOUSE_L_BK_BUTTON
+0x0a MOUSE_R_BK_BUTTON
+0x11 MOUSE_L_FW_BUTTON
+0x12 MOUSE_R_FW_BUTTON
+0x12 MOUSE_M_BK_BUTTON
+0x14 MOUSE_M_FW_BUTTON
+0X18 MOUSE_BK_FW_BUTTON
+//mouse default gpio
+0x1B MOUSE_DEFAULT_XA_GPIO
+0x1C MOUSE_DEFAULT_XB_GPIO
+
+//ui led blink
+0X00C8  LED_RECONNECT_BLINK //200
+0X0190  LED_DPI_BLINK //400
+0X03E8  LED_DPI_BLINK_FIXED    //1000
+0X03E8  LED_DISCOVERY_BLINK    //1000
+0XFF    LED_LONG_BLINK
+0x05	LED_SENSOR_BLINK_CNT
+//mode device number
+0x00 MODE_24G_DEVICE
+0x01 MODE_BT_DEVICE1
+0x02 MODE_BT_DEVICE2
+0x03 MODE_BT_DEVICE3
+//mouse  flag
+0X00 WRITE_REQ_ENABLE_FLAG
+0X01 LL_START_ENC_FLAG
+0X02 LL_PAIRING_SUCCESS_FLAG
+
+
+//mouse_function_flag
+0x08 MOUSE_FLAG_LEN
+//byte 1
+0x00 MOUSE_SELECT_DEVICE_FLAG
+0x01 MOUSE_24G_PAIRING_FLAG
+0x02 MOUSE_STORE_EEPROM_FLAG
+0x03 MOUSE_BT_CANNEL_RECONN_FLAG
+0x04 MOUSE_LOW_VOLTAGE_FLAG
+0x05 MOUSE_BT_DISCOVERY_BUTTON_DOWN_FLAG
+0x06 MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG
+
+//byte 2
+0x08 MOUSE_ENABLE_BLE_RANDOM_ADDRE
+0x09 MOUSE_ENABLE_2K_EEPROM
+0x0a MOUSE_ENABLE_INIT_DELAY
+0x0b MOUSE_ENABLE_WAKEUP_FROM_POWER
+0x0c MOUSE_ENABLE_16M
+0x0d MOUSE_ENABLE_USB
+0x0e MOUSE_ENABLE_24G_SEARCH_DONGLE
+0x0f MOUSE_ENABLE_LOAD_AND_STORE_DPI
+
+//byte 3
+0x10 MOUSE_ENABLE_SPI2
+0x11 MOUSE_ENABLE_24G
+0x12 MOUSE_ENABLE_FLASH
+0x13 MOUSE_ENABLE_EEPROM
+0x14 MOUSE_ENABLE_OTP
+0x15 MOUSE_ENABLE_ADC
+0x16 MOUSE_ENABLE_KEYBOARD
+0x17 MOUSE_ENABLE_DOUBLE_DPI_KEY
+
+//byte 4
+0x18 MOUSE_ENABLE_24G_250Hz
+0x19 MOUSE_ENABLE_24G_500Hz
+0x1a MOUSE_ENABLE_24G_1000
+0x1b MOUSE_ENABLE_BT_125Hz
+0x1c MOUSE_ENABLE_DPI_LEVEL_4
+0x1d MOUSE_ENABLE_USB_250
+0x1e MOUSE_ENABLE_USB_500
+0x1f MOUSE_ENABLE_USB_1000
+
+//byte 5
+0x20 MOUSE_ENABLE_1IO2LED
+0x21 MOUSE_ENABLE_BT_RECONN_LED_EFFECT
+0x22 MOUSE_ENABLE_LOW_LED_BLINK_LIMIT
+0x23 MOUSE_ENABLE_LOW_LED
+0x24 MOUSE_ENABLE_LOW_FOR_LED
+0x25 MOUSE_ENABLE_DPI_FOR_LED
+0x26 MOUSE_ENABLE_DPI_LOW_FOR_LED
+
+//byte 6
+0x28 MOUSE_ENABLE_SELECT_DEVICE_BY_DPI_BUTTON
+0x29 MOUSE_ENABLE_SELECT_DEVICE_BY_PB_BUTTON
+0x2a MOUSE_ENABLE_SELECT_DEVICE_BY_SWITCH_GPIO
+0x2b MOUSE_ENABLE_DPI_KEY_CONNECT_GND
+0x2c MOUSE_ENABLE_ANOTHER_DPI_KEY_CONNECT_GND
+0x2d MOUSE_ENABLE_PB_BUTTON_CONNECT_GND
+0x2e MOUSE_ENABLE_FIRE_KEY_CONNECT_GND
+0x2f MOUSE_ENABLE_CUSTOMER_KEY_CONNECT_VIN_OR_MATRIX
+
+//byte 7 
+0x30 MOUSE_ENABLE_AUTO_24G_PARING
+0x31 MOUSE_ENABLE_24G_POWER_ON_PAIRING
+0x32 MOUSE_ENABLE_COMMBINATION_KEY_BY_24G_PAIRING
+0x33 MOUSE_ENABLE_BT_RECONNECT_TIMEOUT_ENTER_DISCOVERY
+0x34 MOUSE_ENABLE_PB_BUTTON_SHORT_PRESS_ENTER_DISCOVERY
+0x35 MOUSE_ENABLE_COMMBINATION_KEY_BY_BT_DISCOVERY
+0x36 MOUSE_ENABLE_DPI_KEY_LONG_PRESS_DISCONVERY
+0x37 MOUSE_ENABLE_PB_BUTTON_LONG_PRESS_DISCONVERY
+
+//byte 8
+0x38 MOUSE_ENABLE_SMOOTHER
+0x39 MOUSE_ENABLE_XY_OFFSET
+0x3a MOUSE_ENABLE_24G_AUTO_PAIR_NERVER_BEEN_PAIRED
+0x3b MOUSE_ENABLE_LE_BATTERY_SERVICE_CANCEL
+0x3c MOUSE_ENABLE_WHEEL_WAKE_UP_CANCEL
+0x3d MOUSE_ENABLE_24G_2M_PHY
+0x3e MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING
+//mouse dpi level
+0x00 MOUSE_DPI_LEVEL1
+0x01 MOUSE_DPI_LEVEL2
+0x02 MOUSE_DPI_LEVEL3
+0x03 MOUSE_DPI_LEVEL4
+
+
+//mouse sensor angle
+0x00 MOUSE_6CLK_ANGLE
+0X01 MOUSE_9CLK_ANGLE
+0X02 MOUSE_12CLK_ANGLE
+0X03 MOUSE_3CLK_ANGLE
+
+
+
+0xFF GPIO_DISABLE
+
+//DPI button state 
+0x00 DPI_BUTTON_STATE_UP
+0x01 DPI_BUTTON_STATE_DOWN
+
+
+//PB button state 
+0x00 PB_BUTTON_STATE_UP
+0x01 PB_BUTTON_STATE_DOWN
+
+//Commbination_key state 
+0x00 COMMBINATION_KEY_STATE_UP
+0x01 COMMBINATION_KEY_STATE_DOWN
+
+
+//eeprom address offect
+0X00 MOUSE_INFO_EEPROM_OFFECT
+0x58 MOUSE_STORE_FLAG
+0X5A MOUSE_DPI_EEPROM_OFFECT	//1byte
+0X5B MOUSE_G24_ADDR_EEPROM_OFFECT	//4bytes
+0X5F MOUSE_RANDOM_ADDR_COUNT_EEPROM_OFFSET	//2bytes
+0X61 MOUSE_EEPROM_MODULE_INIT_FLAG
+
+// Sensor id number
+0x30 P32XX_ID1
+0x31 P3065_ID1
+0x02 P3212_ID2
+0xD1 P3205_TJ3T_ID2
+0XD2 P3204_TJ3L_ID2
+0x54 PKA8_ID2
+0x70 P3065_XY_ID2
+0x00 P3065_ID2
+0x5a P_MX8650
+0xD8 P8009_ID2
+0x50 P6520A_ID2
+0x58 PKA8G2_ID1
+0x59 PKA8G2_ID2
+
+
+//Sensor type
+0X00 P3205
+0X01 P3065
+0X02 P3204
+0X03 P3212
+0X04 P3065_XY
+0x05 MX8650
+0x06 P8009
+0x07 P6520
+0X08 KA8
+0X09 KA8_UL
+0X0a KA8_HD
+0X0b KA8G2
+0X0c S201X
+
+
+//SENSOR REG
+0x00 PAN_REG_PID_L
+0x01 PAN_REG_PID_H
+0x02 PAN_REG_MOTION_STAUS
+0x03 PAN_REG_DELTA_X
+0x04 PAN_REG_DELTA_Y
+0x05 PAN_REG_OPRATION_MODE
+0x06 PAN_REG_CONFIG
+0x07 PAN_REG_IMAGE_QUALITY
+0x08 PAN_REG_OPRATION_STATE
+0x09 PAN_REG_WRITE_PROTECT
+0x0A PAN_REG_SLEEP_1
+0x0B PAN_REG_ENTER_TIME
+0x0C PAN_REG_SLEEP_2
+0x0D PAN_REG_IMAGE_THRESHOLD
+0x0E PAN_REG_IMAGE_RECGNITION
+
+
+0x06 MOUSE_DPI_ADDRESS
+0x05 MOUSE_P3610_DPI_ADDRESS
+0x0D MOUSE_P3212_DPI_XADDRESS
+0x0E MOUSE_P3212_DPI_YADDRESS
+
+)
+
+(
+0x01 ADV_FLAG_LIMITED_DISCOVERABLE
+0x04 ADV_FLAG_BREDR_NOT_SUPPORTED
+)
+
+(
+2 BIT_POWER_ON
+)
+//device option low 2
+(
+1 MODE_4_MOUSE
+)
+
+
+(
+10 LE_LPM_DISABLE_TO
+1 LE_LPM_DISABLE
+0 LE_LPM_ENABLE
+
+12 LE_INTERVAL_15MS
+9 LE_INTERVAL_11_25MS//11.25ms
+7 LE_INTERVAL_8_75MS//8.75ms
+6 LE_INTERVAL_7_5MS//7.5ms
+12 CLASSIC_INTERVAL_7_5MS
+14 CLASSIC_INTERVAL_8_75MS
+18 CLASSIC_INTERVAL_11_25MS
+)
+
+(
+0x00 MOUSE_L_KEY
+0x01 MOUSE_R_KEY
+0x02 MOUSE_M_KEY
+0x03 MOUSE_BK_KEY
+0x04 MOUSE_FW_KEY
+0x05 MOUSE_DPI_KEY
+0x06 MOUSE_PB_KEY
+0x07 MOUSE_CUSTOMER_KEY
+0x00 MOUSE_DPI_ANOTHER_KEY
+)
+
+
+(
+0 G24_DISCONN_STATE
+1 G24_CONN_STATE
+
+8 G24_CH_NUMBER
+16 G24_CH_POLL_COUNT
+)
+
+(
+0 MOUSE_ADC_CHECK_BATTERY_ONLY
+1 MOUSE_ADC_CHECK_MULTIPLE
+2 MOUSE_ADC_CHECK_GPIO_MULTIPLE
+3 MOUSE_ADC_CHECK_HVIN_MULTIPLE
+)
+
+
+(
+0x5a MOUSE_USB_INTERFACE_INSERT
+0xa5 MOUSE_USB_INTERFACE_REMOVE
+)
+
+(
+0x10 MOUSE_BLE_L2CAP_TXBUFF_SIZE
+)
+
+(
+0 MOUSE_ADC_ENABLE
+1 MOUSE_SEARCH_DONGLE_ENABLE
+2 MOUSE_24G_250HZ_ENABLE
+3 MOUSE_CLK_16M_ENABLE
+4 MOUSE_DPI_4_LEVEL_ENABLE
+5 MOUSE_KEYBOARD_ENABLE
+
+7 MOUSE_DEVICE_NUMBER_FLAG
+)
+
+(
+0 MULTI_LED_ON
+1 MULTI_LED_BLINK
+)
+

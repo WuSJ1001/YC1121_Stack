@@ -1,0 +1,52 @@
+
+
+xmemalloc g24(
+4 mem_24g_pair_addr
+1 mem_24g_pair_ch
+1 mem_24g_pair_tx_power
+
+)
+
+xmemalloc g24_tx(
+1 mem_24g_pair_sm
+1 mem_24g_pair_no_ack
+2 mem_24g_pair_timeout_init
+2 mem_24g_pair_timeout
+2 mem_24g_pair_count
+)
+
+xmemalloc g24_rx(
+1 mem_24g_device1_bind_step
+1 mem_24g_device2_bind_step
+1 mem_24g_bind_device_status
+8 mem_24g_bind_payload
+1 mem_24g_device1_bind_disable
+1 mem_24g_device2_bind_disable
+
+)
+
+(//mem_24g_pair_sm
+0 STATE_24G_PAIRING_NULL
+1 STATE_24G_PAIRING_1
+2 STATE_24G_PAIRING_2
+3 STATE_24G_PAIRING_3
+4 STATE_24G_PAIRING_4
+0X11 STATE_24G_PAIRING_1_WAITING_ACK
+0X12 STATE_24G_PAIRING_2_WAITING_ACK
+0X13 STATE_24G_PAIRING_3_WAITING_ACK
+0X14 STATE_24G_PAIRING_4_WAITING_ACK
+0XFF STATE_24G_PAIRING_SUCCESS
+)
+
+(
+0x01 DATATYPE_DEVICE1	//mouse
+0x02 DATATYPE_DEVICE2	//keyboard
+0xaa DATATYPE_BIND		//bind step 1
+0x55 DATATYPE_CONFIG	//bind step 2
+0x22 DATATYPE_OK		//bind step 3
+0xff DATATYPE_ATTEMP	//reconn
+)
+
+(
+5 BIND_MODE_CONTINUE
+)

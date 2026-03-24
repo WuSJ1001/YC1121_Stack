@@ -1,0 +1,177 @@
+
+/*
+	mesh init 函数操作
+*/
+ali_mesh_init:
+
+	call enable_authrom
+	call init_memp
+	setarg mesh_check_ble_rx_packet
+	store 2,mem_mesh_cb_receive_advertising
+
+	setarg mesh_idle_process
+	store 2,mem_cb_idle_process
+
+	setarg ali_mesh_network_layer_relay_access_message
+	store 2,mem_mesh_cb_network_relay
+
+	setarg ali_mesh_access_layer_recv_cfg_appkey_add_cb
+	store 2,mem_mesh_cb_receive_config_appkey_add
+
+	setarg mesh_store_new_subscriptuion_list_data
+	store 2,mem_mesh_cb_subscriptuion_list_changed
+
+	setarg mesh_store_new_seq_data
+	store 2,mem_mesh_cb_seq_changed
+
+	setarg mesh_cb_event_timer
+	store 2,mem_cb_event_timer
+
+	setarg ali_mesh_access_layer_check_access_message_opcode
+	store 2,mem_mesh_cb_receive_access_message
+
+	setarg mesh_le_receive_data
+	store 2,mem_cb_att_write
+
+	setarg ali_mesh_proxy_process_bb_event
+	store 2,mem_cb_bb_event_process
+
+	setarg mesh_clear_pairing_key
+	store 2,mem_mesh_clear_provisioning_data
+
+	setarg mesh_vendor_timming_chage_cb
+	store 2,mem_mesh_cb_vendor_timing_changed
+	call ali_mesh_vendor_timer_message_read
+
+	jam 36,mem_mesh_adv_scan_channel
+	call ali_mesh_ali_vendor_message_indication_info_reset_tid
+	
+
+	bpatchx patch35_3,mem_patch35
+
+	setarg 0x0428
+	store 2,mem_mesh_upper_tran_layer_queue_each_size
+	call ali_mesh_upper_transport_layer_queue_init
+
+	setarg 0x0422
+	store 2,mem_mesh_queue_each_size
+	call ali_mesh_advertising_bearer_layer_queue_init
+
+	setarg 0x0a22
+	store 2,mem_mesh_network_relay_gatt_queue_each_size
+	call ali_mesh_network_layer_gatt_queue_init
+	call ali_mesh_network_layer_queue_init
+
+ifdef mesh_debug_log
+	call mesh_uart_init
+endif
+//	call mesh_iic_init
+
+	call ali_mesh_network_layer_queue_init
+	
+	call ali_mesh_chip_peripherals_load_data
+	call mesh_inverse_three_tuple_MAC
+//	jam 0xff,mem_mesh_Network_Key
+ifdef mesh_debug_log
+	arg 1,loopcnt
+	arg mem_mesh_Network_Key,rega
+	arg MESH_CODE_INIT,regb
+	call logging_tx_info
+endif
+	fetch 1,mem_mesh_Network_Key
+	beq 0xff,mesh_send_Unprovisioned_Beacons
+	call ali_mesh_upper_transport_layer_clear_tx_buffer
+	call ali_mesh_encrypt_base_function_k3
+	call ali_mesh_encrypt_base_function_k4
+	call ali_mesh_encrypt_calc_network_key_by_k2
+
+	random pdata
+	and pdata,0x1f,pdata
+	add pdata,50,pdata
+	store 2,mem_mesh_report_full_attribute_timer
+	add pdata,5,pdata
+	store 1,mem_mesh_report_power_on_timer
+	rtn
+
+
+
+mesh_inverse_three_tuple_MAC:
+	fetch 6,mem_mesh_three_tuple_MAC
+	call inverse_data_6Byte
+	store 6,mem_le_lap
+	rtn
+
+mesh_get_element_info_config:
+	fetchr loopcnt,1,mem_mesh_element_number
+	fetchr rega,2,mem_mesh_element_device_ptr
+	fetchr regb,2,mem_mesh_element_device_length
+	rtn
+
+
+mesh_idle_process:
+	bpatchx patch35_4,mem_patch35
+	call ali_mesh_time_function
+	call ali_mesh_control_ble_adv_process
+	call ali_mesh_upper_transport_layer_control_packet
+	call ali_mesh_advertising_bearer_layer_load_packet_from_advertising_queue
+	call ali_mesh_network_layer_control_relay_packet
+	call ali_mesh_network_layer_check_gatt_relay_packet
+	branch mesh_ble_rx_packet
+
+
+mesh_cb_event_timer:
+	call ali_mesh_control_ble_adv_timer_process
+	call ali_mesh_access_layer_health_node_reset_timer
+	call ali_mesh_fast_pairing_timer
+
+
+	call ali_mesh_report_full_attribute_timer
+	call ali_mesh_report_power_on_timer
+	branch ali_mesh_upper_transport_layer_receive_new_msg_timer
+	
+
+mesh_clear_provisioning_data_only:
+	call mesh_clear_timer_data
+	fetch 2,mem_mesh_clear_provisioning_data
+	branch callback_func
+
+
+
+mesh_clear_timer_data:
+	fetch 1,mem_mesh_chip_select
+	rtnne 2
+	setarg 0x1d000
+	store 3,mem_spi_write_addr
+	branch spid_flash_erase_sector+2
+	
+
+
+ali_mesh_upper_transport_layer_queue_init:
+	call ali_mesh_upper_transport_layer_init_queue_param
+	branch queue_init
+
+ali_mesh_advertising_bearer_layer_queue_init:
+	call ali_mesh_advertising_bearer_layer_init_queue_param
+	branch queue_init
+
+ali_mesh_network_layer_gatt_queue_init:
+	call ali_mesh_network_layer_init_gatt_queue_param
+	branch queue_init
+
+ali_mesh_network_layer_init_gatt_queue_param:
+	setarg mem_mesh_network_relay_gatt_queue_each_size
+	store 2,mem_queue_ptr
+	rtn
+
+ali_mesh_advertising_init_send_unprovisioned_device_beacon:
+	jam 1,mem_le_adv_enable
+	setarg ADV_UNPROVISIONED_DEVICE_BEACON_TIMEOUT
+	store 2,mem_mesh_advertising_unprovisioned_device_beacon_timer
+	fetch 1,mem_mesh_UUID_FeatureFlag
+	set0 BIT_SILENCE_ADV_FLAG,pdata
+	store 1,mem_mesh_UUID_FeatureFlag
+	jam UNPROVISIONED_BEACON_STATUS,mem_mesh_provisioned_flag
+	jam 0x00,mem_mesh_Provisioning_State_Flag
+	jam 0x00,mem_k2_NID
+	branch ali_mesh_send_unprovisioned_device_beacon_init_advertising
+

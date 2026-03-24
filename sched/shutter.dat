@@ -1,0 +1,26 @@
+mem_device_option:09
+mem_ui_button_gpio:ff
+
+mem_le_lap:20 31 27 98 07 2a
+mem_le_name_len:
+'AB Shutter3
+
+mem_shutter_key_conf0_temp:17 0c 95 00 ff
+
+mem_shutter_soft_switch_first_power_on:00
+
+mem_tx_power:06
+
+mem_shutter_dy_conf:00
+mem_shutter_discovery_time_conf:
+b8 0b #discovery_timeout
+70 17 #connect_timeout
+70 17 #sleep_timeout
+70 17 #sleep_timer
+
+mem_shutter_reconn_or_discovery_blink_time_conf:
+96 00 #mem_ble_shutter_reconn_blink_on_time
+96 00 #mem_ble_shutter_reconn_blink_off_time
+20 03 #mem_ble_shutter_discovery_blink_on_time
+20 03 #mem_ble_shutter_discovery_blink_off_time
+

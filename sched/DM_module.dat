@@ -1,0 +1,242 @@
+
+
+mem_device_option:0a
+
+mem_module_connect_state_gpio:FF
+mem_module_mcu_wake_pin:FF
+##############ADC CONFIG##############
+mem_module_read_vdd_count:01
+mem_module_read_vdd_flag:01
+#####################################
+
+##############NVRAM CONFIG##############
+mem_nv_data_ptr:mem_module_nv_data
+mem_nv_data_number:05
+#####################################
+
+
+#####################################
+
+##############UART CONFIG##############
+mem_module_uarta_baud_rate:D0 00
+mem_module_uart_rx_buffer:00 4d
+mem_module_uart_rx_buffer_end:7f 4e
+mem_module_uart_tx_buffer:80 4e
+mem_module_uart_tx_buffer_end:ef 4f
+#####################################
+
+
+
+##############BLUETOOTH CONFIG##############
+###commom###
+mem_soft_version_num:00 11
+mem_module_state:03
+mem_module_bluetooth_stauts_by_command:07
+
+mem_module_flag:00 00
+#bit0 MODULE_FLAG_UART_FLOW_CONTROL
+#bit1 MODULE_FLAG_BLE_SEND_MTU23
+#bit2 MODULE_FLAG_BLE_DATA_ENCRYPT
+
+mem_ui_button_gpio:ff
+mem_lpm_mode:01
+mem_lpm_interval:00 01
+mem_lpm_overhead:08
+mem_lpm_mult_timeout:02
+
+mem_module_wake_up_gpio:04
+
+
+
+###ble###
+mem_le_pairing_handle:2a 00
+mem_le_configuration:08
+
+mem_le_adv_channel_map:07
+mem_le_pairing_mode:01
+
+mem_module_ble_data_uart_max_length:f0
+
+mem_le_scan_enable:00
+mem_le_scan_type:01
+mem_le_scan_interval:00 02
+mem_le_scan_window:00 01
+#mem_le_conn_peer_addr:2a 31 00 33 02 3b
+#mem_cmd_le_create_conn:1b
+
+mem_le_adv_enable:01
+mem_le_adv_interval:f0 00
+mem_module_le_lpm_mult:05
+mem_le_lap:11 fa 0d 43 05 13
+mem_le_name_len:
+'Yichip 1121s
+
+mem_le_adv_data_len:03
+mem_le_adv_data:
+02 01 0e
+
+mem_le_scan_data_len:0e
+
+mem_le_scan_data:# 1 byte length + 1 byte type + N bytes data
+'\09Yichip 1121s
+
+mem_le_pres:02 03 00 05 10 02 03
+
+mem_le_interval_min:
+08 00 #min interval
+10 00 #max interval
+00 00 #latency
+2c 01 #timeout
+
+mem_le_conn_interval:90 00
+mem_le_local_mtu:20 00
+mem_local_rx_max_octets:fb 00 48 08 fb 00 48 08  # 1b
+mem_le_local_feature:21 09 
+mem_le_tx_phys:0707
+#####################################
+
+
+mem_ui_le_uuid_table:mem_module_le_att_list
+
+#attribute list: handle 2bytes, uuid 2bytes, length 1bytes, attribute Nbytes
+mem_module_le_att_list:
+#Primary service GAP ------
+01 00 02 00 28 02 00 18
+
+
+#Appearance
+02 00 02 03 28 01 02
+03 00 02 01 2a 02 c8 00 #3c2=hid mouse
+
+#Device name
+04 00 02 03 28 01 02
+05 00 02 00 2a 14 41 73 74 20 4c 45 20 4d 6f 75 73 65 20 20 20 20 20 20 20 20
+
+
+#Peripheral Preferred Connection Parameters
+06 00 02 03 28 01 02
+07 00 02 04 2a 08 06 00 06 00 64 00 2c 01 # interval 6ms, latency 100, timeout 300
+
+
+#privcy flag
+08 00 02 03 28 01 02
+09 00 02 02 2a 01 01
+
+#reconnecting addr 
+0a 00 02 03 28 01 08
+0b 00 02 03 2a 06 00 00 00 00 00 00
+
+#Primary service GATT ------
+0c 00 02 00 28 02 01 18
+
+#Service changed
+0d 00 02 03 28 01 20
+0e 00 02 05 2a 00
+#Client Characteristic Configuration
+0f 00 02 02 29 02 00 00
+
+#Primary service TX power ------
+10 00 02 00 28 02 04 18
+#Characteristic Tx power level
+11 00 02 03 28 01 16
+12 00 02 07 2a 01 00
+13 00 02 02 29 02 00 00
+
+#Primary service Battery ------
+14 00 02 00 28 02 0f 18
+#Characteristic Battery level
+15 00 02 03 28 01 12
+16 00 02 19 2a 01 38
+
+#Primary service device infomation
+17 00 02 00 28 02 0a 18
+#Characteristic system id
+18 00 02 03 28 01 02
+19 00 02 23 2a 03 00 00 00
+
+#Characteristic manufactor name
+1a 00 02 03 28 01 02
+1b 00 02 29 2a 06 79 69 63 68 69 70
+
+#Characteristic module number
+1c 00 02 03 28 01 02
+1d 00 02 24 2a 06 79 69 63 68 69 70
+
+#Characteristic serial number
+1e 00 02 03 28 01 02
+1f 00 02 25 2a 04 63 6f 6d 33
+
+#Characteristic firmware version
+20 00 02 03 28 01 02
+21 00 02 26 2a 03 31 2e 30
+
+#Characteristic software version
+22 00 02 03 28 01 02
+23 00 02 28 2a 03 31 2e 30
+
+#Characteristic hardware version
+24 00 02 03 28 01 02
+25 00 02 2a 2a 03 31 2e 30
+
+#Characteristic regulatory version
+26 00 02 03 28 01 02
+27 00 02 25 2a 04 63 6f 6d 33
+
+#Primary service yichip transmit ------
+28 00 02 00 28 10 55 e4 05 d2 af 9f a9 8f e5 4a 7d fe 43 53 53 49
+#Characteristic tx--notify read
+29 00 02 03 28 01 12
+2a 00 10 16 96 24 47 C6 23 61 BA D9 4B 4D 1E 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+#Client Characteristic Configuration
+2b 00 02 02 29 02 00 00
+
+#Characteristic rx--write
+2c 00 02 03 28 01 08
+2d 00 10 b3 9b 72 34 be ec d4 a8 f4 43 41 88 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+#Characteristic rx-- write without Response
+2e 00 02 03 28 01 04
+2f 00 10 fe 69 ca 9a 56 19 f6 ab 02 4d aa 6d 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+#Characteristic rx tx --read write notify
+30 00 02 03 28 01 2a
+31 0010 18 03 A6 28 5E D8 EC 91 1C 48 A3 AC 43 53 53 49 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+#Client Characteristic Configuration
+32 00 02 02 29 02 00 00
+
+
+#End of Attribute list
+00 00
+
+#mem_le_wechat_air_sync_ptr:mem_module_wechat_indication_handle
+#mem_module_wechat_indication_handle:35 38 
+
+#mem_module_wechat_tx_buffer_ptr:mem_wechat_tx_buffer
+#mem_module_wechat_rx_buffer_ptr:mem_wechat_rx_buffer
+
+#mem_le_adv_data_len:03
+#mem_le_adv_data:
+#02 
+#01 #GAP_ADTYPE_FLAGS
+#06 #GAP_ADTYPE_FLAGS_GENERAL |GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED
+
+#05 
+#02 #GAP_ADTYPE_16BIT_MORE
+#E7 FE 00 18
+
+#09 
+#FF #GAP_ADTYPE_MANUFACTURER_SPECIFIC
+#0e 05 #Yichip Microelectronics (Hangzhou) Co.,Ltd.
+#81 E8 2F 96 FD 64
+
+#mem_le_scan_data_len:0e
+
+#mem_le_scan_data:# 1 byte length + 1 byte type + N bytes data
+#'\09Yichip 1305 le
+
+
+
+#eeprom gpio config
+
+
+

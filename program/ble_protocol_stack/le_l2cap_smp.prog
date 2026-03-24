@@ -1,0 +1,612 @@
+
+le_pairing_mode_init:
+	fetch  1,mem_le_pairing_mode
+	beq LE_PAIRING_MODE_NONE, le_set_no_pairing
+	beq LE_PAIRING_MODE_LAGACY_JUSTWORK,le_set_pairing_mode_lagacy_just_work
+	beq LE_PAIRING_MODE_LAGACY_PASSKEY,le_set_pairing_mode_lagacy_passkey
+ifdef SECURE_CONNECTION				
+	beq LE_PAIRING_MODE_SECURE_CONNECT_JUSTWORK,le_set_pairing_mode_secure_justwork
+	beq LE_PAIRING_MODE_SECURE_CONNECT_NUMERIC,le_set_pairing_mode_secure_numeric
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY,le_set_pairing_mode_secure_passkey
+endif
+	rtn
+	
+ifdef SECURE_CONNECTION				
+le_set_pairing_mode_secure_justwork:
+	jam FLAG_LE_BONDING_MITM_SECURE,mem_le_pres_auth
+	branch le_set_noinputnooutput
+le_set_pairing_mode_secure_numeric:
+	jam FLAG_LE_BONDING_MITM_SECURE,mem_le_pres_auth
+	jam FLAG_IOCAP_DISPLAYYESNO,mem_le_pres_iocap
+	rtn
+le_set_pairing_mode_secure_passkey:	
+	jam FLAG_LE_BONDING_MITM_SECURE,mem_le_pres_auth
+	branch le_set_displayonly
+endif
+
+le_set_no_pairing:
+	jam FLAG_LE_NO_BONDING_NO_MITM,mem_le_pres_auth
+le_set_noinputnooutput:	
+	jam FLAG_IOCAP_NOINPUTNOOUTPUT,mem_le_pres_iocap
+	rtn
+le_set_pairing_mode_lagacy_just_work:
+	jam FLAG_LE_BONDING_MITM,mem_le_pres_auth
+	branch le_set_noinputnooutput
+le_set_pairing_mode_lagacy_passkey:
+	jam FLAG_LE_BONDING_MITM,mem_le_pres_auth
+le_set_displayonly:	
+	jam FLAG_IOCAP_DISPLAYONLY,mem_le_pres_iocap
+	rtn
+
+ifdef SECURE_CONNECTION			
+le_secure_connection_enable:
+	fetch 1,mem_secure_connections_enable
+	set1 SECURE_CONNECTIONS_LE_BIT,pdata
+	store 1,mem_secure_connections_enable
+	rtn
+	
+le_secure_connection_disable:
+	fetch 1,mem_secure_connections_enable
+	set0 SECURE_CONNECTIONS_LE_BIT,pdata
+	store 1,mem_secure_connections_enable
+	rtn
+endif
+
+le_parse_smp:
+	ifetch 1,contr
+	beq SMP_PAIRING_REQUEST,le_parse_smp_pairing_request
+//	beq SMP_PAIRING_RESPONSE,le_parse_smp_pairing_response
+	beq SMP_PAIRING_CONFIRM,le_parse_smp_pairing_confirm
+	beq SMP_PAIRING_RANDOM,le_parse_smp_pairing_random
+	beq SMP_PAIRING_FAILED,le_parse_smp_pairing_failed
+//	beq SMP_ENCRYPTION_INFORMATION,le_parse_smp_encryption_information
+	beq SMP_MASTER_IDENTIFICATION,le_parse_smp_master_identification
+	beq SMP_IDENTITY_INFORMATION,le_parse_smp_identity_information
+	beq SMP_IDENTITY_ADDRESS_INFORMATION,le_parse_smp_identity_address_information
+	beq SMP_SIGNING_INFORMATION,le_parse_smp_signing_information
+	beq SMP_SECURITY_REQUEST,le_parse_smp_security_request
+ifdef SECURE_CONNECTION			
+	beq SMP_PAIRING_PUBLIC_KEY,le_parse_smp_public_key
+	beq SMP_PAIRING_DHKEY_CHECK,le_parse_smp_dhkey_check
+endif 	
+	rtn
+
+
+
+le_send_smp_security_request:
+	force 2,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_SECURITY_REQUEST
+	istore 1,contw
+	fetch 1,mem_le_pres_auth
+	istore 1,contw
+	rtn
+		
+le_parse_smp_pairing_request:
+	store 1,mem_le_preq
+	ifetch 6,contr
+	istore 6,contw
+	fetch 1,mem_le_pairing_mode
+	beq  LE_PAIRING_MODE_NONE,le_smp_pairing_fail_reason_not_support_pairing
+	call le_send_smp_pairing_response
+ifdef 	SECURE_CONNECTION
+	fetch 1,mem_sc_only_mode
+	branch le_parse_smp_pairing_request2, blank
+	fetch 1,mem_le_preq_auth
+	bbit0  LE_AUTH_SECURE_CONNECTION_PAIRING_BIT,app_ble_disconnect
+	fetch 1,mem_le_pairing_mode
+	bbit0 LE_PAIRING_MODE_SECURE_CONNECT_BIT,app_ble_disconnect
+endif	
+le_parse_smp_pairing_request2:	
+	jam FLAG_LE_PAIRING_RCV_PAIRING_REQ,mem_le_pairing_state
+	fetch 1,mem_le_preq_iocap
+	beq  FLAG_IOCAP_DISPlAYONLY,le_set_tk_0
+	beq  FLAG_IOCAP_DISPLAYYESNO,le_set_tk_0
+	beq  FLAG_IOCAP_NOINPUTNOOUTPUT,le_set_tk_0
+	fetch 1,mem_le_pairing_mode	
+	beq LE_PAIRING_MODE_LAGACY_PASSKEY,le_parse_smp_pairing_req_passkey
+	rtneq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY
+le_set_tk_0:
+	arg 0,pdata
+	store 4,mem_le_tk
+	rtn
+
+le_parse_smp_pairing_req_passkey:
+	fetch 1,mem_le_configuration
+	bbit1 BIT_BLE_PASSKEY_FIXED_KEY,le_parse_smp_pairing_req_fixed_passkey
+le_genernate_tk:
+	arg mem_le_tk,rega
+	copy rega,contw
+	arg 3,loopcnt
+	call generate_random_loop
+	fetch 2,mem_le_tk + 2
+	and_into 0x7,pdata
+	store 2,mem_le_tk + 2
+le_parse_smp_pairing_req_fixed_passkey:
+	jam BT_EVT_LE_TK_GENERATE,mem_fifo_temp
+	branch ui_ipc_send_event
+
+
+
+le_send_smp_pairing_response:
+	force 7,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	fetch 7,mem_le_pres
+	istore 7,contw
+	rtn
+		
+
+le_parse_smp_pairing_confirm:
+	jam FLAG_LE_PAIRING_RECEIVE_PAIRING_CONFIRM,mem_le_pairing_state
+	arg mem_le_rconfirm,contw
+	call memcpy16
+	fetch 1,mem_le_pairing_mode
+	beq LE_PAIRING_MODE_LAGACY_PASSKEY_RES_INPUT,le_parse_smp_pairing_confirm_passkey_res_input
+ifdef SECURE_CONNECTION				
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY,le_parse_smp_pairing_confirm_secure_passkey
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY_RES_INPUT,le_parse_smp_pairing_confirm_sc_passkey_res_input
+endif
+	branch le_send_smp_pairing_confirm
+
+	
+le_parse_smp_pairing_confirm_passkey_res_input:
+	jam BT_EVT_LE_GET_PASSKEY,mem_fifo_temp
+	branch ui_ipc_send_event
+	
+ifdef SECURE_CONNECTION				
+le_parse_smp_pairing_confirm_secure_passkey:
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	jam LE_SC_STAT_PASSKEY_WAIT_CONFIRM,mem_le_secure_connect_state	
+	rtn
+
+le_parse_smp_pairing_confirm_sc_passkey_res_input:
+	fetch 4,mem_le_tk
+	branch le_parse_smp_pairing_confirm_passkey_res_input,blank
+	branch le_parse_smp_pairing_confirm_secure_passkey
+endif
+
+le_send_smp_pairing_confirm:
+	jam FLAG_LE_PAIRING_SEND_PAIRING_CONFIRM,mem_le_pairing_state
+ifdef SECURE_CONNECTION				
+	fetch 1,mem_le_pairing_mode
+	bbit1 LE_PAIRING_MODE_SECURE_CONNECT_BIT,le_send_smp_pairing_confirm_sc
+endif 
+	call generate_confirm
+	force 17,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_PAIRING_CONFIRM
+	istore 1,contw
+	branch  store_aes_result
+
+ifdef SECURE_CONNECTION					
+le_send_smp_pairing_confirm_sc:
+	arg mem_le_srand,contw	
+	call generate_random
+	call function_f4_cb
+	force 17,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_PAIRING_CONFIRM
+	istore 1,contw
+	branch  load_inverse_result
+endif
+	
+le_parse_smp_pairing_random:	
+	copy contr,rega
+ifdef SECURE_CONNECTION				
+	fetch 1,mem_le_pairing_mode
+	bbit1 LE_PAIRING_MODE_SECURE_CONNECT_BIT,le_parse_smp_pairing_random_sc
+endif
+	copy rega,contr
+	call authenticate_rconfirm
+	branch le_parse_smp_pairing_random_success,zero
+le_send_pairing_confirm_value_failed:
+	jam PAIRING_FAILED_CONFIRM_VALUE_FAILED,mem_le_ll_pairing_fail_reason
+le_send_pairing_failed:
+	force 2,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_PAIRING_FAILED
+	istore 1,contw
+	fetch 1,mem_le_ll_pairing_fail_reason
+	istore 1,contw	
+le_parse_smp_pairing_failed:
+	bpatchx patch2c_5,mem_patch2c
+	force smp_pairing_timer,queue
+	call timer_stop
+	jam FLAG_LE_PAIRING_NULL,mem_le_pairing_state
+	jam BT_EVT_LE_PAIRING_FAIL,mem_fifo_temp
+	branch ui_ipc_send_event
+
+le_smp_pairing_fail_reason_not_support_pairing:
+	jam PAIRING_FAILED_PAIRING_NOT_SUPPORTED,mem_le_ll_pairing_fail_reason
+	branch le_send_pairing_failed
+	
+ifdef SECURE_CONNECTION				
+le_parse_smp_pairing_random_sc:
+	arg mem_le_mrand,contw
+	copy rega,contr
+	call memcpy16	
+	fetch 1,mem_le_pairing_mode
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY,le_parse_smp_pairing_random_sc_passkey
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY_RES_INPUT,le_parse_smp_pairing_random_sc_passkey
+	call function_g2
+	call le_send_smp_pairing_random
+	fetch 1,mem_le_pairing_mode
+	rtnne LE_PAIRING_MODE_SECURE_CONNECT_NUMERIC
+	jam BT_EVT_LE_GKEY_GENERATE,mem_fifo_temp
+	branch ui_ipc_send_event	
+	
+le_parse_smp_pairing_random_sc_passkey:
+	call function_f4_ca
+	arg mem_AES_CMAC_temp,contw
+	call load_inverse_result	
+	arg mem_AES_CMAC_temp,rega
+	arg mem_le_rconfirm ,regb
+	arg 16,loopcnt
+	call string_compare
+	nbranch le_send_pairing_confirm_value_failed,zero
+	branch le_send_smp_pairing_random
+endif 
+
+le_parse_smp_pairing_random_success:
+	call generate_stk
+	jam BT_EVT_LE_PAIRING_SUCCESS,mem_fifo_temp
+	call ui_ipc_send_event
+	jam 1,mem_ltk_exists
+	jam FLAG_LE_PAIRING_AFTER_AUTH,mem_le_pairing_state
+	
+le_send_smp_pairing_random:
+	force 17,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_PAIRING_RANDOM
+	istore 1,contw
+	arg mem_le_srand,contr
+	branch memcpy16
+
+le_send_smp_encryption_information:
+	force 17,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_ENCRYPTION_INFORMATION
+	istore 1,contw
+	fetch 1,mem_le_configuration
+	bbit1 BIT_BLE_PAIRING_FIXED_LTK,le_send_fixed_ltk
+	arg mem_le_ltk,contr
+	branch memcpy16
+
+le_send_fixed_ltk:
+	arg mem_le_fixed_ltk,contr
+	branch memcpy16
+
+
+le_send_smp_master_identification:
+	arg mem_le_ediv,contw
+	force 10,loopcnt
+	call generate_random_loop
+	force 11,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_MASTER_IDENTIFICATION
+	istore 1,contw
+	fetch 2,mem_le_ediv
+	istore 2,contw
+	fetch 8,mem_le_rand
+	istore 8,contw
+	rtn
+
+le_send_smp_identity_information:
+	force 17,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_IDENTITY_INFORMATION
+	istore 1,contw
+	setarg 0
+	istore 8,contw
+	istore 8,contw
+	rtn
+	
+
+le_send_smp_identity_address_information:
+	force 8,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_IDENTITY_ADDRESS_INFORMATION
+	istore 1,contw
+	fetch 1,mem_le_conn_own_addr_type
+	istore 1,contw
+	fetch 6,mem_le_lap	
+	istore 6,contw
+	rtn	
+
+
+le_send_pairing_fail_unspecified_reason:
+	jam PAIRING_FAILED_UNSPECIFIED_REASON,mem_le_ll_pairing_fail_reason
+	branch le_send_pairing_failed
+
+le_check_init_key_distribution:
+	fetch 1,mem_le_pres_init_key_distribution
+	fetcht 1,mem_le_pres_init_key_distribution
+	iand temp,pdata
+	rtn	
+
+le_parse_smp_identity_information:
+	arg mem_le_irk,contw
+	call memcpy16
+	call le_check_init_key_distribution
+	isolate0 LE_INITATOR_IRK_BIT,pdata
+	branch le_send_pairing_fail_unspecified_reason,true
+	fetch 1,mem_device_option
+	rtnne DVC_OP_MODULE
+	call le_check_master_addr_type
+	nrtn user
+	branch app_ble_store_reconn_info
+
+//output:user is enable ,random addr type
+le_check_master_addr_type:
+	call disable_user
+	fetch 1,mem_le_conn_peer_addr_type
+	rtneq MASTER_PUBLIC_ADDR
+	fetch 1,mem_le_preq_init_key_distribution
+	rtnbit0 LE_INITATOR_IRK_BIT
+	branch enable_user
+
+le_parse_smp_identity_address_information:
+	call le_check_init_key_distribution
+	isolate0 LE_INITATOR_IRK_BIT,pdata
+	branch le_send_pairing_fail_unspecified_reason,true
+	rtn
+
+le_parse_smp_master_identification:
+le_parse_smp_signing_information:	
+le_parse_smp_security_request:
+	rtn
+	
+ifdef SECURE_CONNECTION				
+le_parse_smp_public_key:
+	arg mem_le_pubkey_remote_x_256,contw	
+	call memcpy64
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	jam LE_SC_STAT_RECEIVE_PUBLIC_KEY,mem_le_secure_connect_state
+	rtn
+
+le_parse_smp_dhkey_check:
+	arg mem_sp_confirm_remote,contw
+	call memcpy16	
+	jam LE_SC_STAT_RECEIVE_DHKEY,mem_le_secure_connect_state
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	rtn	
+
+le_send_smp_pairing_public_key:
+	force 65,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_PAIRING_PUBLIC_KEY
+	istore 1,contw	
+	arg mem_sc_pubkey_local_x_256,contr
+	branch memcpy64
+	
+le_send_smp_pairing_dhkey_check:
+	call function_f6_eb	
+	force 17,rega
+	call le_fifo_malloc_tx_l2cap_smp
+	setarg SMP_PAIRING_DHKEY_CHECK
+	istore 1,contw
+	branch load_inverse_result
+endif	
+
+le_check_paring_time:
+	fetch 1,mem_le_pairing_state
+	rtneq FLAG_LE_PAIRING_END
+	arg FLAG_LE_PAIRING_RCV_PAIRING_REQ,temp
+	isub temp,null
+	nrtn positive
+	arg smp_pairing_timer,queue
+	call timer_check
+	nrtn blank
+	branch le_send_pairing_fail_unspecified_reason
+
+le_pairing_sm:
+	bpatchx patch2c_6,mem_patch2c
+	call le_fifo_check_nearly_full
+	nrtn blank	
+	fetch 1,mem_le_pairing_state
+	beq FLAG_LE_PAIRING_NULL,le_pairing_sm_null
+	beq FLAG_LE_PAIRING_START,le_pairing_sm_start
+	beq FLAG_LE_PAIRING_SEND_RECURITY_REQ,le_pairing_sm_send_sec_req
+	beq FLAG_LE_PAIRING_RCV_PAIRING_REQ,le_pairing_sm_rcv_pairing_req
+	beq FLAG_LE_PAIRING_AFTER_AUTH,le_pairing_sm_after_auth
+	beq FLAG_LE_PARING_SEND_ENC_INFORMATION,le_pairng_sm_send_enc_information
+	beq FLAG_LE_PARING_SEND_MASTER_IDENTIFICATION,le_pairng_sm_send_master_indentification
+	beq FLAG_LE_PARING_SEND_INDENTITY_INFORMATION,le_pairng_sm_send_indentity_information
+	rtn
+
+le_pairing_sm_null:
+le_pairing_sm_send_sec_req:
+	fetch 1,mem_le_enc_state
+	rtnne FLAG_LE_SEND_START_ENC_RSP
+	jam FLAG_LE_ENC_END,mem_le_enc_state
+	jam FLAG_LE_PAIRING_END,mem_le_pairing_state
+	jam BT_EVT_LE_RECONNECT_COMPLETE ,mem_fifo_temp
+	branch ui_ipc_send_event	
+	
+	
+le_pairing_sm_start:
+	jam FLAG_LE_PAIRING_SEND_RECURITY_REQ,mem_le_pairing_state
+	branch le_send_smp_security_request
+
+le_pairing_sm_rcv_pairing_req:
+	jam FLAG_LE_PAIRING_WAIT_STK_GENERATION,mem_le_pairing_state
+	setarg TIMER_SMP_PAIRING_TIMEOUT
+	arg smp_pairing_timer,queue
+	branch timer_init
+	
+le_pairing_sm_after_auth:
+	fetch 1,mem_le_enc_state
+	beq FLAG_LE_SEND_START_ENC_RSP,le_pairing_sm_after_auth_start_enc
+	rtn
+	
+le_pairing_sm_after_auth_start_enc:
+	fetch 1,mem_le_pairing_mode
+	bbit1 LE_PAIRING_MODE_SECURE_CONNECT_BIT,le_pairing_sm_after_auth_start_enc_sc
+
+	jam FLAG_LE_PARING_SEND_ENC_INFORMATION,mem_le_pairing_state
+	call le_send_smp_encryption_information
+le_pairing_sm_after_auth_start_enc_common:
+	jam BT_EVT_LE_ENC_INFO,mem_fifo_temp
+	call ui_ipc_send_event
+	fetch 1,mem_device_option
+	rtnne DVC_OP_MODULE
+	call le_check_master_addr_type
+	rtn user
+	branch app_ble_store_reconn_info
+
+le_pairing_sm_after_auth_start_enc_sc:
+	jam FLAG_LE_PARING_SEND_MASTER_IDENTIFICATION,mem_le_pairing_state
+	branch le_pairing_sm_after_auth_start_enc_common
+
+le_pairng_sm_send_enc_information:	
+	jam FLAG_LE_PARING_SEND_MASTER_IDENTIFICATION,mem_le_pairing_state
+	branch le_send_smp_master_identification
+
+le_pairng_sm_send_master_indentification:	
+	fetch 1,mem_le_preq_resp_key_distribution
+	fetcht 1,mem_le_pres_resp_key_distribution
+	iand temp,pdata
+	isolate0 LE_INITATOR_IRK_BIT,pdata
+	branch le_parse_start_enc_rsp_after_auth_end,true
+	jam FLAG_LE_PARING_SEND_INDENTITY_INFORMATION,mem_le_pairing_state
+	branch le_send_smp_identity_information
+
+le_pairng_sm_send_indentity_information:		
+	call le_send_smp_identity_address_information
+	branch le_parse_start_enc_rsp_after_auth_end
+
+
+le_parse_start_enc_rsp_after_auth_end:
+	bpatchx patch2c_7,mem_patch2c
+	force smp_pairing_timer,queue
+	call timer_stop
+	jam FLAG_LE_ENC_END,mem_le_enc_state
+	jam FLAG_LE_PAIRING_END,mem_le_pairing_state
+	jam BT_EVT_LE_PAIRING_COMPLETE ,mem_fifo_temp
+	branch ui_ipc_send_event	
+	
+
+ifdef SECURE_CONNECTION
+
+le_secure_connect_sm:
+	bpatchx patch2d_0,mem_patch2d
+	fetch 1,mem_le_pairing_mode
+	rtnbit0 LE_PAIRING_MODE_SECURE_CONNECT_BIT
+	fetch 1,mem_le_secure_connect_flag
+	rtnne LE_SP_FLAG_COMMIT_256
+	jam SP_FLAG_STANDBY,mem_le_secure_connect_flag
+	fetch 1,mem_le_secure_connect_state
+	beq  LE_SC_STAT_RECEIVE_PUBLIC_KEY,le_sc_sm_receive_public_key
+	beq LE_SC_STAT_WAIT_SEND_PUBLIC_KEY,le_sc_sm_wait_send_public_key
+	beq LE_SC_STAT_SEND_PUBLIC_KEY,le_sc_sm_send_public_key
+	beq LE_SC_STAT_RECEIVE_DHKEY,le_sc_sm_receive_dhkey
+	beq LE_SC_STAT_WAIT_CONFIRM_GKEY,le_sc_sm_wait_confirm_gkey
+	beq  LE_SC_STAT_PASSKEY_WAIT_CONFIRM,le_sc_sm_passkey_wait_confirm
+	rtn	
+
+le_sc_state_clear:
+	jam SP_FLAG_STANDBY,mem_le_secure_connect_flag
+	jam LE_SC_STAT_NULL,mem_le_secure_connect_state
+	jam FLAG_LE_SC_CONFRIM_NULL,mem_le_sc_confirm_gkey_flag
+	rtn
+	
+le_sc_sm_passkey_wait_confirm:
+	fetch 1,mem_authentication_passkey_times
+	copy pdata,queue
+	increase 1,pdata
+	store 1,mem_authentication_passkey_times
+	fetch 4,mem_le_tk
+	qisolate1 pdata
+	setarg 0x80
+	setflag true,0,pdata
+	store 1,mem_passkey_1bit
+	branch le_sc_sm_ready_send_pairing_confirm
+	
+le_sc_sm_wait_confirm_gkey:
+	fetch 1,mem_le_sc_confirm_gkey_flag
+	jam FLAG_LE_SC_CONFRIM_NULL,mem_le_sc_confirm_gkey_flag
+	beq FLAG_LE_SC_CONFRIM_GKEY_OK,le_sc_confirm_gkey_ok
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	rtn
+	
+le_sc_confirm_gkey_ok:
+	jam BT_EVT_LE_PAIRING_SUCCESS,mem_fifo_temp
+	call ui_ipc_send_event	
+	jam FLAG_LE_PAIRING_AFTER_AUTH,mem_le_pairing_state
+	branch le_send_smp_pairing_dhkey_check
+
+le_sc_sm_receive_dhkey:
+	fetch 1,mem_sp_dhkey_invalid
+	beq SP_KEY_VALID_256,le_dhkey_ready
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	rtn
+
+le_dhkey_ready:
+	call function_f5
+	fetch 1,mem_le_pairing_mode
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY ,le_dhkey_ready_common
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY_RES_INPUT ,le_dhkey_ready_common
+	call le_set_tk_0 
+le_dhkey_ready_common:
+	call function_f6_ea
+	arg mem_AES_CMAC_temp,rega
+	arg mem_sp_confirm_remote ,regb
+	arg 16,loopcnt
+	call string_compare
+	branch le_dhkey_check_ok,zero
+le_dhkey_check_fail:	
+	jam PAIRING_FAILED_DHKEY_CHECK_FAILED,mem_le_ll_pairing_fail_reason
+	branch le_send_pairing_failed
+
+	
+le_dhkey_check_ok:
+	call sp_calc_check_publickey_256
+	nbranch le_dhkey_check_fail,zero
+	jam 1,mem_ltk_exists
+	fetch 1,mem_le_pairing_mode
+	beq LE_PAIRING_MODE_SECURE_CONNECT_JUSTWORK,le_sc_confirm_gkey_ok
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY ,le_sc_confirm_gkey_ok	
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY_RES_INPUT ,le_sc_confirm_gkey_ok	
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	jam LE_SC_STAT_WAIT_CONFIRM_GKEY,mem_le_secure_connect_state	
+	rtn	
+
+le_sc_sm_send_public_key:
+	fetch 1,mem_le_pairing_mode
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY,le_sc_sm_send_public_key_passkey
+	beq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY_RES_INPUT,le_sc_sm_send_public_key_passkey
+	jam 0,mem_passkey_1bit
+le_sc_sm_ready_send_pairing_confirm:
+	branch le_send_smp_pairing_confirm
+
+le_sc_sm_send_public_key_passkey:
+	jam 0,mem_authentication_passkey_times
+	rtneq LE_PAIRING_MODE_SECURE_CONNECT_PASSKEY_RES_INPUT
+	branch le_parse_smp_pairing_req_passkey
+
+	
+le_sc_sm_receive_public_key:
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	fetch 1,mem_sc_local_key_invalid
+	beq SP_KEY_VALID_256,le_public_key_ready
+	rtn
+	
+le_public_key_ready:
+	jam LE_SC_STAT_WAIT_SEND_PUBLIC_KEY,mem_le_secure_connect_state	
+	jam SP_KEY_INVALID,mem_sp_dhkey_invalid
+	branch sp_dhkey_calc_256	
+
+le_sc_sm_wait_send_public_key:
+	jam LE_SP_FLAG_COMMIT_256,mem_le_secure_connect_flag
+	jam LE_SC_STAT_SEND_PUBLIC_KEY,mem_le_secure_connect_state
+	branch le_send_smp_pairing_public_key
+
+endif
+
+
+le_fifo_malloc_tx_l2cap_smp:
+	bpatchx patch2d_1,mem_patch2d
+	force LE_L2CAP_CID_SMP,regb
+	branch le_fifo_malloc_tx_l2cap
+
+

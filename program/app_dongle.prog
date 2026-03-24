@@ -1,0 +1,553 @@
+ifdef COMPILE_DONGLE
+
+dongle_init:
+	setarg dongle_dispatch
+	store 2,mem_cb_24g_receive_process
+	setarg dongle_g24_mouse
+	store 2,mem_cb_24g_data_device1
+	setarg dongle_g24_kb
+	store 2,mem_cb_24g_data_device2
+	setarg dongle_ackpayload_prep
+	store 2,mem_cb_24g_ackpayload
+	setarg dongle_usb_config
+	store 2,mem_cb_usb_config
+	branch usb_init
+
+
+dongle_default_init:
+	bpatch patch06_7,mem_patch06
+	//sys init
+	call dongle_read_kb_bind_status
+	call dongle_xtal_select
+	fetch 1,mem_dg_sys_config
+	isolate1 DG_ENABLE_EEPROM,pdata
+	branch dongle_default_no_eeprom,true
+	fetch 1,mem_dg_sys_config
+	isolate1 DG_ENABLE_NEW_CHMAP,pdata
+	call g24_chamap_param_update,true
+dongle_default_no_eeprom:	
+	fetch 1,mem_dg_24g_tx_power_default
+	store 1,mem_tx_power
+	//24g init
+	jam 0xff,mem_rssi_buff_index
+	setarg mem_dg_rssi_noise_buffer
+	store 2,mem_rssi_noise_buffer_ptr
+	setarg mem_dg_rssi_noise_dg_buffer
+	store 2,mem_rssi_noise_self_buffer_ptr
+	setarg mem_dg_rssi_noise_ms_buffer
+	store 2,mem_rssi_noise_device1_buffer_ptr
+	setarg mem_dg_rssi_noise_kb_buffer
+	store 2,mem_rssi_noise_device2_buffer_ptr
+	jam TX_POWER_F5DB,mem_24g_pair_tx_power
+	jam 0,mem_dg_kb_bind_success
+	jam 0,mem_24g_bind_device_living
+	call g24_enable_1M
+	fetch 1,mem_dg_sys_config
+	isolate1 DG_ENABLE_24G_2M,pdata
+	call g24_enable_2M,true
+	call g24_receive_init
+	call g24_pair_param_init
+	call g24_chmap_param_init
+	//usb init
+	fetch 1,mem_dg_usb_tx_interval
+	store 1,mem_usb_tx_interval
+	fetch 9,mem_dg_usb_vid_pid
+	store 9,mem_usb_vid_pid
+	rtn
+	
+dongle_xtal_select:
+	jam XTAL_24M,mem_fcomp_div
+	fetch 1,mem_dg_sys_config
+	rtnbit0 DG_ENABLE_XTAL_24M
+	jam XTAL_16M,mem_fcomp_div
+	rtn
+
+dongle_dispatch:
+	fetch 1,mem_24g_pair_mode
+	beq 0x00,dongle_auto_bind
+	beq 0x01,dongle_pc_bind
+	beq 0x0f,dongle_all_powerful
+	rtn
+
+
+dongle_read_kb_bind_status:
+	bpatch patch07_0,mem_patch07
+	arg DONGLE_KB_BIND_EFUSE_OFFECT,regb
+	arg mem_dg_kb_bind_flag,rega
+	arg 1,loopcnt
+	branch otp_read_data
+
+dongle_write_kb_bind_status:
+	bpatch patch07_1,mem_patch07
+	arg 1,loopcnt
+	arg mem_dg_kb_bind_flag,rega
+	arg DONGLE_KB_BIND_EFUSE_OFFECT,regb
+	branch otp_write
+
+dongle_usb_config:
+	fetch 1,mem_dg_sys_config
+	bbit1 DG_ENABLE_KB_ICON,dongle_usb_config_kb
+	fetch 1,mem_dg_kb_bind_flag
+	bne DONGLE_KB_BIND_SUCCESS,dongle_usb_config_param
+dongle_usb_config_kb:
+	jam DONGLE_KB_BIND_SUCCESS,mem_dg_kb_bind_flag
+	fetch 4,USB_DEVICEDATA_ADDR+9
+	set1 29,pdata
+	store 4,mem_devicedesc+9
+dongle_usb_config_param:
+	call dongle_usb_device_name
+	call usb_tx_interval_config
+	call dongle_usb_vid_pid_config
+	branch dongle_usb_hid_icon_config
+
+dongle_usb_vid_pid_config:
+	fetch 1,mem_usb_vid_pid
+	rtn blank
+	fetch 1,mem_dg_kb_bind_flag
+	beq DONGLE_KB_BIND_SUCCESS,dongle_usb_vid_pid_for_suit
+dongle_usb_vid_pid_for_mouse_only_auto_pair:	
+	fetch 4,mem_usb_vid_pid+1
+dongle_usb_vid_pid_store:	
+	store 4,mem_devicedesc+9
+	rtn
+dongle_usb_vid_pid_for_suit:
+	fetch 4,mem_usb_vid_pid+5
+	branch dongle_usb_vid_pid_store
+
+dongle_usb_hid_icon_config:
+	fetch 1,mem_dg_kb_bind_flag
+	beq DONGLE_KB_BIND_SUCCESS,dongle_usb_kb_hidreportdesc
+	setarg USB_KBDATA_VENDOR_DEFINE_ADDR
+	store 2,mem_hidreportdesc_kb
+	jam 0x1a,mem_confdesc+26//hid_descriptor--keyboard length
+	rtn
+dongle_usb_kb_hidreportdesc:
+	setarg USB_KBDATA_ADDR
+	store 2,mem_hidreportdesc_kb
+	jam 0x3f,mem_confdesc+26//hid_descriptor--keyboard length	
+	rtn
+
+dongle_usb_device_name:
+	fetch 1,mem_dg_usb_device_name
+	rtn blank
+	arg mem_dg_usb_device_name,contr
+	arg mem_string2,contw
+	arg 30,loopcnt
+	branch memcpy
+
+
+dongle_all_powerful:
+	call g24_switch_work_mode
+dongle_all_powerful_loop:
+	call dongle_work_mode_auto
+	call dongle_usb_dispatch
+	branch dongle_all_powerful_loop
+
+dongle_pc_bind:
+	call g24_switch_work_mode
+dongle_pc_bind_loop:	
+	call dongle_work_mode_auto
+	call g24_bind_mode_auto
+	call dongle_usb_dispatch
+	branch dongle_pc_bind_loop
+
+dongle_g24_blank_data_process:
+	call dongle_g24_ms_blank_data
+	call dongle_g24_kb_blank_data
+	call dongle_g24_kb_sys_ctrl_blank_data
+	branch dongle_g24_kb_mul_blank_data
+
+dongle_g24_ms_blank_data:
+	bpatch patch07_2,mem_patch07
+	fetch 1,mem_dg_ms_blank_data_enable
+	rtn blank
+	arg G24_TIMER_MS_BLANK,queue
+	call timer_check
+	nrtn blank
+	jam 0,mem_dg_ms_blank_data_enable
+	setarg MS_REPORT_ID
+	store 1,mem_usb_mouse_data
+	setarg 0
+	istore 7,contw
+dongle_usb_tx_ms_data:
+	jam USB_EP2_MS,mem_usb_ep2_data
+dongle_usb_tx_enable_ep2:
+	fetch 1,mem_usb_tx_enable
+	set1 2,pdata
+	store 1,mem_usb_tx_enable
+	rtn
+
+dongle_g24_kb_blank_data:
+	bpatch patch07_3,mem_patch07
+	fetch 1,mem_dg_kb_blank_data_enable
+	rtn blank
+	arg G24_TIMER_KB_BLANK,queue
+	call timer_check
+	nrtn blank
+	jam 0,mem_dg_kb_blank_data_enable
+	arg mem_usb_kb_data,contw
+	call memset0_16
+	fetch 8,mem_usb_kb_data
+	store 8,mem_dg_kb_data_last_data
+dongle_usb_tx_kb_data:	
+	jam KB_NORMAL_REPORT_ID,mem_usb_kb_data
+dongle_usb_tx_enable_ep1:
+	jam USB_EP1_KB,mem_usb_ep1_data
+	fetch 1,mem_usb_tx_enable
+	set1 1,pdata
+	store 1,mem_usb_tx_enable
+	rtn
+
+dongle_g24_kb_sys_ctrl_blank_data:
+	fetch 1,mem_dg_kb_system_crtl_blank_data_enable
+	rtn blank
+	arg G24_TIMER_KB_SYS_CRTL_BLANK,queue
+	call timer_check
+	nrtn blank
+	jam 0,mem_dg_kb_system_crtl_blank_data_enable
+	arg mem_usb_kb_system,contw
+	call memset0_16
+	jam KB_SYSTEM_CONCTRL_REPORT_ID,mem_usb_kb_system
+	fetch 2,mem_usb_kb_system
+	store 2,mem_dg_kb_system_sta_data
+dongle_usb_tx_sys_ctrl_data:
+	jam USB_EP2_SYSTEMKEY,mem_usb_ep2_data
+	branch dongle_usb_tx_enable_ep2
+
+dongle_g24_kb_mul_blank_data:
+	bpatch patch07_4,mem_patch07
+	fetch 1,mem_dg_kb_mul_blank_data_enable
+	rtn blank
+	arg G24_TIMER_KB_MUL_BLANK,queue
+	call timer_check
+	nrtn blank
+	jam 0,mem_dg_kb_mul_blank_data_enable
+	arg mem_usb_kb_multikey,contw
+	call memset0_16
+	jam KB_MULTIKEY_REPORT_ID,mem_usb_kb_multikey
+	fetch 3,mem_usb_kb_multikey
+	store 3,mem_dg_kb_multikey_last_data	
+dongle_usb_tx_multikey_data:
+	jam USB_EP2_MULTIKEY,mem_usb_ep2_data
+	branch dongle_usb_tx_enable_ep2
+
+dongle_usb_dispatch:
+	bpatch patch07_5,mem_patch07
+	fetch 1,mem_usb_remote_wakeup
+	call dongle_clear_pc_sleep_flag,blank
+	call usb_isr
+	fetch 1,mem_usb0_get_set_report
+	rtn blank
+	jam 0,mem_usb0_get_set_report
+	fetch 2,mem_usb_setup_bValue_temp
+	arg PC_SET_REPORT,temp
+	isub temp,null
+	nrtn zero
+	//get usb host command
+	fetch 1,mem_usb0_set_report_data
+	rtnne PC_REPORT_ID
+	fetch 1,mem_usb0_set_report_data+1
+	beq COMMAND_MODE,dongle_dispose_cmd_mode
+	beq COMMAND_BIND,dongle_dispose_cmd_bind
+	beq COMMAND_CURRENT_PROJECT,dongle_dispose_cmd_current_project
+	beq COMMAND_CURRENT_MODE,dongle_dispose_cmd_current_mode
+	beq COMMAND_CURRENT_FW_VERSION,dongle_dispose_cmd_current_fw_version
+//	beq COMMAND_USER_DEFINED,dongle_dispose_cmd_user_defined
+dongle_usb0_data_ready_report_set0:
+	jam 0,mem_usb0_data_ready_report
+	rtn
+
+dongle_dispose_cmd_mode:
+	fetch 1,mem_usb0_set_report_data+2
+	beq COM_MODE_BIND,dongle_enter_bind_mode
+	branch dongle_usb0_data_ready_report_set0
+dongle_enter_bind_mode:
+	call g24_bind_mode_enable
+dongle_usb0_data_ready_report_set1:
+	jam 1,mem_usb0_data_ready_report
+	rtn
+
+dongle_dispose_cmd_bind:
+	fetch 1,mem_usb0_set_report_data+2
+	beq COM_BIND_GET,dongle_dispose_cmd_get_bind
+	beq COM_BIND_EXIT,dongle_dispose_cmd_exit_bind
+	beq COM_READ_MODE,dongle_dispose_cmd_read_mode
+	branch dongle_usb0_data_ready_report_set0
+dongle_dispose_cmd_get_bind:
+	fetch 1,mem_24g_bind_device_status
+	store 1,mem_usb0_get_report_data+1
+	branch dongle_usb0_data_ready_report_set1
+dongle_dispose_cmd_exit_bind:
+	call g24_work_mode_enable
+	branch dongle_dispose_cmd_get_bind
+dongle_dispose_cmd_read_mode:
+dongle_dispose_in_bind_mode:
+	jam COMMAND_BIND,mem_usb0_get_report_data+1
+	branch dongle_usb0_data_ready_report_set1	
+
+dongle_dispose_cmd_current_project:
+	jam PRODUCT_ID,mem_usb0_get_report_data+1
+	branch dongle_usb0_data_ready_report_set1
+
+dongle_dispose_cmd_current_mode:
+	fetch 1,mem_24g_work_mode
+	beq DONGLE_WORK,dongle_dispose_in_work_mode
+	beq DONGLE_BIND,dongle_dispose_in_bind_mode
+	rtn
+dongle_dispose_in_work_mode:
+	jam COMMAND_MODE,mem_usb0_get_report_data+1
+	branch dongle_usb0_data_ready_report_set1
+	
+dongle_dispose_cmd_current_fw_version:
+	jam FW_VERSION0,mem_usb0_get_report_data+1
+	jam FW_VERSION1,mem_usb0_get_report_data+2
+	jam FW_VERSION2,mem_usb0_get_report_data+3
+	jam FW_VERSION3,mem_usb0_get_report_data+4
+	branch dongle_usb0_data_ready_report_set1
+
+//dongle_dispose_cmd_user_defined:
+//	call g24_ackpayload_disable
+//	fetch 1,mem_usb0_set_report_data+2
+//	beq 0xff,soft_reset_chip
+//	rtn
+
+dongle_auto_bind:
+	call g24_mode_switch_init
+dongle_auto_bind_loop:
+	call g24_mode_switch_bind_work
+	call g24_mode_switch_bind_search
+	call dongle_work_mode_auto
+	call g24_bind_mode_auto
+	call g24_search_mode_auto
+	call dongle_usb_dispatch
+	branch dongle_auto_bind_loop
+
+dongle_work_mode_auto:
+	bpatch patch07_6,mem_patch07
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_WORK
+	call g24_work_mode_start
+	call dongle_g24_blank_data_process
+	fetch 1,mem_24g_pair_mode
+	nrtn blank
+	branch g24_nodata_process
+
+dongle_ackpayload_prep:
+	fetch 1,mem_24g_data_type
+	beq DATATYPE_DEVICE1,dongle_ackpayload_prep_mouse
+	beq DATATYPE_DEVICE2,dongle_ackpayload_prep_keyboard
+dongle_ackpayload_prep_mouse:
+	fetch 1,mem_dg_pc_sleep_flag
+	bbit1 0,dongle_pc_sleep_ackpayload_prep_mouse
+	branch dongle_ackpayload_prep_end
+
+dongle_set_pc_sleep_flag:
+	fetch 1,mem_device_option
+	rtnne DVC_OP_DONGLE
+	jam 3,mem_dg_pc_sleep_flag
+	rtn
+dongle_clear_pc_sleep_flag:
+	jam 0,mem_dg_pc_sleep_flag
+	rtn
+
+dongle_ackpayload_prep_keyboard:
+	fetch 1,mem_dg_pc_sleep_flag
+	bbit1 1,dongle_pc_sleep_ackpayload_prep_keyboard
+dongle_ackpayload_prep_end:
+	fetch 1,mem_24g_ackpayload_enable
+	beq BIND_ACKPAYLOAD,dongle_g24_bind_ackpayload_prep
+	beq KB_LED_ACKPAYLOAD,dongle_g24_kb_led_ackpayload_prep
+	rtn
+
+dongle_pc_sleep_ackpayload_prep_mouse:
+	fetch 1,mem_dg_pc_sleep_flag
+	set0 0,pdata
+	store 1,mem_dg_pc_sleep_flag
+	branch dongle_pc_sleep_ackpayload_prep
+
+dongle_pc_sleep_ackpayload_prep_keyboard:
+	fetch 1,mem_dg_pc_sleep_flag
+	set0 1,pdata
+	store 1,mem_dg_pc_sleep_flag
+dongle_pc_sleep_ackpayload_prep:
+	jam 0x01,mem_24g_datalen
+	setarg 0xff
+	store 1,mem_24g_txbuf
+	rtn
+
+
+dongle_g24_bind_ackpayload_prep:
+	jam 1,mem_24g_ackpayload_enable
+	call g24_binding_device_check	//works on auto pair only
+	nrtn user3
+	branch g24_bind_ackpayload_prep
+
+dongle_g24_kb_led_ackpayload_prep:
+	fetch 1,mem_24g_rxbuf+2
+	beq DATATYPE_DEVICE1,dongle_g24_bind_ackpayload_prep
+	beq DATATYPE_ATTEMP,dongle_g24_bind_ackpayload_prep
+	jam 0,mem_usb_tx_win_enable
+	jam 0x01,mem_24g_datalen
+	fetch 1,mem_24g_led_status
+	store 1,mem_24g_txbuf
+	rtn
+
+dongle_g24_mouse:
+	setarg MS_REPORT_ID
+	store 1,mem_usb_mouse_data	//report id
+	fetch 7,mem_24g_rxdata_temp+3	//key
+	istore 7,contw
+	fetch 1,mem_24g_rxdata_temp+3	//key
+	ncall dongle_g24_ms_enable_blank_data_forcibly,blank//get kb data
+	fetch 1,mem_24g_rxdata_temp+3	//key
+	call dongle_g24_ms_disable_blank_data_forcibly,blank
+	branch dongle_usb_tx_ms_data
+
+dongle_g24_ms_enable_blank_data_forcibly:
+	jam 1,mem_dg_ms_blank_data_enable
+	setarg TIMER_MS_BLANK_DELAY
+	arg G24_TIMER_MS_BLANK,queue
+	branch timer_init
+
+dongle_g24_ms_disable_blank_data_forcibly:
+	jam 0,mem_dg_ms_blank_data_enable
+	setarg 0
+	arg G24_TIMER_MS_BLANK,queue
+	branch timer_init
+
+dongle_g24_kb:
+	fetch 1,mem_24g_rxdata_temp+3
+	beq 0,dongle_g24_kb_type0	//normal key
+	beq 2,dongle_g24_kb_type2	//system key
+	beq 3,dongle_g24_kb_type3	//multikey
+	branch g24_rx_interrupt_clear
+
+dongle_g24_kb_type0:
+	fetch 1,mem_24g_rxdata_temp+5
+	store 1,mem_24g_ackpayload_enable
+	jam 0,mem_24g_rxdata_temp+5
+	arg mem_usb_kb_data,contw
+	arg mem_24g_rxdata_temp+4,contr
+	arg 8,loopcnt
+	call memcpy
+	fetch 8,mem_usb_kb_data
+	ncall dongle_g24_kb_enable_blank_data_forcibly,blank//get kb data
+	fetch 8,mem_usb_kb_data	
+	call dongle_g24_kb_disable_blank_data_forcibly,blank
+	fetch 8,mem_usb_kb_data
+	store 8,mem_dg_kb_data_sta_data
+	fetcht 8,mem_dg_kb_data_last_data
+	isub temp,null
+	ncall dongle_usb_tx_enable_ep1,zero
+	fetch 8,mem_dg_kb_data_sta_data
+	store 8,mem_dg_kb_data_last_data
+	branch g24_rx_interrupt_clear
+
+dongle_g24_kb_enable_blank_data_forcibly:
+	jam 1,mem_dg_kb_blank_data_enable
+	setarg TIMER_KB_BLANK_DELAY
+	arg G24_TIMER_KB_BLANK,queue
+	branch timer_init
+
+dongle_g24_kb_disable_blank_data_forcibly:
+	jam 0,mem_dg_kb_blank_data_enable
+	setarg 0
+	arg G24_TIMER_KB_BLANK,queue
+	branch timer_init
+
+dongle_g24_kb_type3:
+	arg mem_usb_kb_multikey,contw
+	arg mem_24g_rxdata_temp+3,contr
+	arg 3,loopcnt
+	call memcpy
+	fetch 2,mem_usb_kb_multikey+1
+	ncall dongle_g24_kb_mul_enable_blank_data_forcibly,blank//get multikey data
+	fetch 2,mem_usb_kb_multikey+1
+	call dongle_g24_kb_mul_disable_blank_data_forcibly,blank
+	fetch 3,mem_usb_kb_multikey
+	store 3,mem_dg_kb_multikey_sta_data
+	fetcht 3,mem_dg_kb_multikey_last_data
+	isub temp,null
+	ncall dongle_usb_tx_multikey_data,zero
+	fetch 3,mem_dg_kb_multikey_sta_data
+	store 3,mem_dg_kb_multikey_last_data
+	branch g24_rx_interrupt_clear
+
+dongle_g24_kb_mul_enable_blank_data_forcibly:
+	jam 1,mem_dg_kb_mul_blank_data_enable
+	setarg TIMER_KB_MUL_BLANK_DELAY
+	arg G24_TIMER_KB_MUL_BLANK,queue
+	branch timer_init
+	
+dongle_g24_kb_mul_disable_blank_data_forcibly:
+	jam 0,mem_dg_kb_mul_blank_data_enable
+	setarg 0
+	arg G24_TIMER_KB_MUL_BLANK,queue
+	branch timer_init
+
+dongle_g24_kb_type2:
+	arg mem_usb_kb_system,contw
+	arg mem_24g_rxdata_temp+3,contr
+	arg 2,loopcnt
+	call memcpy
+	fetch 2,mem_usb_kb_system
+	ncall dongle_g24_kb_sys_enable_blank_data_forcibly,blank
+	fetch 2,mem_usb_kb_system
+	call dongle_g24_kb_sys_disable_blank_data_forcibly,blank
+	fetch 2,mem_usb_kb_system
+	store 2,mem_dg_kb_system_sta_data
+	fetcht 2,mem_dg_kb_system_last_data
+	isub temp,null
+	ncall dongle_usb_tx_sys_data,zero
+	fetch 2,mem_dg_kb_system_sta_data
+	store 2,mem_dg_kb_system_last_data
+	branch g24_rx_interrupt_clear
+
+dongle_g24_kb_sys_enable_blank_data_forcibly:
+	jam 1,mem_dg_kb_system_crtl_blank_data_enable
+	setarg TIMER_KB_SYS_CRTL_BLANK_DELAY
+	arg G24_TIMER_KB_SYS_CRTL_BLANK,queue
+	branch timer_init
+dongle_g24_kb_sys_disable_blank_data_forcibly:
+	jam 0,mem_dg_kb_system_crtl_blank_data_enable
+	setarg 0
+	arg G24_TIMER_KB_SYS_CRTL_BLANK,queue
+	branch timer_init
+
+dongle_usb_tx_sys_data:
+	jam USB_EP2_SYSTEMKEY,mem_usb_ep2_data
+	branch dongle_usb_tx_enable_ep2
+
+
+dongle_g24_store_dvc2_bind_flag:
+	fetch 1,mem_device_option
+	rtnne DVC_OP_DONGLE
+	fetch 1,mem_dg_kb_bind_flag
+	rtneq DONGLE_KB_BIND_SUCCESS
+dongle_prep_soft_reset:
+	jam 1,mem_dg_kb_bind_success
+	rtn
+
+
+dongle_kb_bind_soft_reset:
+	fetch 1,mem_device_option
+	rtnne DVC_OP_DONGLE
+	fetch 1,mem_dg_kb_bind_success
+	rtn blank
+	jam 0,mem_temp
+dongle_wirte_efuse_bind_status:	
+	jam DONGLE_KB_BIND_SUCCESS,mem_dg_kb_bind_flag
+	call dongle_write_kb_bind_status
+	call dongle_read_kb_bind_status
+	fetch 1,mem_temp
+	increase 1,pdata
+	store 1,mem_temp
+	beq 0xff,soft_reset_chip
+	fetch 1,mem_dg_kb_bind_flag
+	bne DONGLE_KB_BIND_SUCCESS,dongle_wirte_efuse_bind_status
+	branch soft_reset_chip
+
+
+endif
+
+

@@ -1,0 +1,182 @@
+
+
+
+//0x01 GAP_ADTYPE_FLAGS
+//input:no default write mem_mesh_adv_data
+ali_mesh_advertising_add_adtype_flags:
+	arg mem_mesh_adv_data,contw
+	setarg 0x02
+	istore 1,contw
+	setarg GAP_ADTYPE_FLAGS
+	istore 1,contw
+	setarg 0x02
+	istore 1,contw
+	rtn
+
+//0x01 GAP_ADTYPE_FLAGS
+//input:no default write mem_mesh_adv_data
+ali_mesh_advertising_add_adtype_16bit_complete:
+	arg MESH_PROVISIONING_UUID,temp
+	setarg 0x03
+	istore 1,contw
+	setarg GAP_ADTYPE_16BIT_COMPLETE
+	istore 1,contw
+	istoret 2,contw
+	rtn
+
+
+mesh_ble_rx_packet_only:
+	call le_enable
+	call le_init_adv
+	call le_receive_adv
+	nrtn match
+//	call ali_mesh_advertising_packet_analysis
+	fetch 1,mem_le_adv_rcv
+	pincrease 1
+	store 1,mem_le_adv_rcv
+	fetch 2,mem_mesh_cb_receive_advertising
+	call callback_func
+	branch le_disable
+
+mesh_ble_rx_packet:
+	call mesh_ble_rx_packet_check_and_init
+	rtn user
+mesh_ble_rx_packet_check_timer:
+	call mesh_ble_rx_packet_only
+	call connection_dispatch
+	fetcht 2,mem_le_scan_interval
+	arg 10,queue
+	call sniff_check_window
+	rtn user
+	arg mesh_ble_rx_timer,queue
+	call timer_check
+	nbranch mesh_ble_rx_packet_check_timer,blank
+	rtn
+
+mesh_ble_rx_packet_check_and_init:
+	fetcht 2,mem_le_scan_interval
+	arg 4,queue
+	call sniff_check_window
+	rtn user
+	call mesh_le_calc_next_scan_channel
+	fetch 2,mem_le_scan_interval
+	arg mesh_ble_rx_timer,queue
+	branch timer_init
+
+
+mesh_le_calc_next_scan_channel:
+	fetch 1,mem_mesh_adv_scan_channel
+	pincrease 1
+	store 1,mem_mesh_adv_scan_channel
+	store 1,mem_le_ch_mapped
+	rtnne 40
+	jam 37,mem_mesh_adv_scan_channel
+	jam 37,mem_le_ch_mapped
+	rtn
+
+/*
+	mesh 解析标准广播数据
+	只分析ADV_IND/ADV_NONCONN_IND两种广播包
+*/
+mesh_check_ble_rx_packet:
+	fetch 1,mem_le_rxbuf
+	and pdata,0x0f,pdata
+	beq ADV_IND,ali_mesh_match_advertising_packet
+	beq ADV_NONCONN_IND,ali_mesh_match_advertising_packet
+	rtn
+
+ali_mesh_match_advertising_packet:
+	ifetcht 1,contr	//length
+	sub temp,ADV_PACKET_MIN_LENGTH,null
+	rtn positive		//过滤短包，包长度太短导致解析错误
+	sub temp,ADV_PACKET_MAX_LENGTH,null
+	nrtn positive		//过滤长包，包长度太长导致内存覆盖
+	add temp,-6,rega	//rega:减去address length
+	add contr,6,regb	//regb:指针偏移到regb
+
+ali_mesh_find_adv_ind_packet:
+	ifetcht 1,regb //length
+	sub temp,AD_TYPE_MIN_LENGTH,null
+	rtn positive	
+	sub temp,AD_TYPE_MAX_LENGTH,null
+	nrtn positive	
+	copy temp,pdata
+	rtn blank
+	bpatchx patch34_2,mem_patch34
+	ifetch 1,contr
+	beq GAP_ADTYPE_MANUFACTURER_SPECIFIC,ali_mesh_receive_adtype_manufacturer_specific_tmall_control
+	beq GAP_ADTYPE_MESH_MESSAGE,ali_mesh_receive_adtype_mesh_message
+//	beq GAP_ADTYPE_128BIT_COMPLETE,ali_mesh_receive_adtype_128bit_uuid_complete
+//按照广播格式查询所有扫描到的广播数据
+	add temp,1,pdata
+	isub rega,null
+	rtn positive
+	iadd regb,regb
+	sub temp,-1,pdata
+	iadd rega,rega
+	copy rega,pdata
+	rtn blank
+	branch ali_mesh_find_adv_ind_packet
+
+ali_mesh_receive_adtype_manufacturer_specific_tmall_control:
+	jam MESH_MESSAGE_TMALL,mem_mesh_fast_pair_packet_type
+	branch ali_mesh_receive_adtype_manufacturer_specific
+
+
+/*
+input:
+mem_le_lap:蓝牙地址
+mem_mesh_adv_data:payload 数据
+mem_mesh_adv_data_len:数据长度
+*/
+mesh_le_send_adv:
+	fetch 1,mem_le_adv_transmit
+	pincrease 1
+	store 1,mem_le_adv_transmit
+//	call ice_break
+	bpatchx patch34_3,mem_patch34
+	call le_enable
+	arg 39,loopcnt
+	arg mem_le_txheader,contr
+	arg mem_le_txheader_mesh_temp,contw
+	call memcpy_fast
+	jam 37,mem_le_ch_mapped
+	arg 1800,stop_watch
+	enable swfine
+	disable match
+
+mesh_le_send_adv_loop:
+	call le_init_adv
+	call mesh_le_send_adv_nonconn_ind
+	random pdata 
+	arg 0x1ff,temp
+	iand temp,pdata
+	add pdata,100,pdata
+	call delay
+	fetch 1,mem_le_ch_mapped
+	pincrease 1
+	store 1,mem_le_ch_mapped
+	bne 40,mesh_le_send_adv_loop
+	
+	arg 39,loopcnt
+	arg mem_le_txheader,contw
+	arg mem_le_txheader_mesh_temp,contr
+	call memcpy_fast
+	branch le_disable
+
+mesh_le_send_adv_nonconn_ind:
+	arg ADV_NONCONN_IND,temp
+	storet 1,mem_le_txheader
+	fetcht 1,mem_mesh_adv_data_len
+	add temp,6,pdata
+	store 1,mem_le_txlen
+	fetch 6,mem_le_lap
+	store 6,mem_le_txpayload
+	copy temp,loopcnt
+	arg mem_mesh_adv_data,contr
+	call memcpy_fast
+
+	branch le_transmit_norx
+
+
+

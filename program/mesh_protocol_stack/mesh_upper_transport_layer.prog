@@ -1,0 +1,449 @@
+
+
+
+ali_mesh_upper_transport_layer_receive_unsegmented_access_message:
+	bbit0 TRANSPORT_HEAD_BIT_AKF,ali_mesh_uuper_transport_layer_decrypt_unsegment_access_by_device_key
+
+ali_mesh_uuper_transport_layer_decrypt_unsegment_access_by_application_key:
+	call ali_mesh_upper_transport_layer_load_application_nonce_and_application_key
+	branch ali_mesh_upper_transport_layer_decrypt_unsegmented_message
+
+ali_mesh_uuper_transport_layer_decrypt_unsegment_access_by_device_key:
+	call ali_mesh_upper_transport_layer_load_device_nonce_and_device_key
+	branch ali_mesh_upper_transport_layer_decrypt_unsegmented_message
+
+
+ali_mesh_upper_transport_layer_decrypt_unsegmented_message:
+//	call ice_break
+	fetch 1,mem_mesh_message_Transport_NetMIC_length
+	pincrease -7	
+	//DST 16bit
+	//Head8bit (SEG 1bit /AKF 1bit/AID 6bit)
+	//Transport MIC 32bit
+	arg mem_mesh_message_Transport_unsegmented_access_messagePDU,alarm
+	call disable_user
+	branch ali_mesh_upper_transport_layer_decrypt_message
+
+
+
+ali_mesh_upper_transport_layer_receive_segmented_access_message:
+	fetch 1,mem_mesh_message_Transport_Head
+	bbit0 TRANSPORT_HEAD_BIT_AKF,ali_mesh_uuper_transport_layer_decrypt_segment_access_by_device_key
+ali_mesh_uuper_transport_layer_decrypt_segment_access_by_application_key:
+	call ali_mesh_upper_transport_layer_load_application_nonce_and_application_key
+	branch ali_mesh_upper_transport_layer_decrypt_segmented_message
+ali_mesh_uuper_transport_layer_decrypt_segment_access_by_device_key:
+	call ali_mesh_upper_transport_layer_load_device_nonce_and_device_key
+	branch ali_mesh_upper_transport_layer_decrypt_segmented_message
+
+
+ali_mesh_upper_transport_layer_decrypt_segmented_message:
+	fetch 1,mem_mesh_ASZMIC
+	ncall enable_user,blank
+	call disable_user,blank
+	fetch 1,mem_mesh_segmented_access_message_current_length
+	pincrease -4	//Transport MIC
+	jam 0,mem_mesh_segmented_access_message_current_length
+	arg mem_mesh_segmented_access_message_Segment,alarm
+
+//input:alarm:decrypt message ptr
+//pdata:decrypt message length
+ali_mesh_upper_transport_layer_decrypt_message:
+	copy alarm,temp
+	call ali_mesh_upper_transport_layer_decrypt_message_decrypt_transMIC
+	nrtn zero
+ifdef mesh_debug_log
+	arg 1,loopcnt
+	arg mem_ccm_data_len,rega
+	arg MESH_UPPER_RECEIVE_PACKET,regb
+	call logging_tx_info
+endif
+	call ali_mesh_upper_transport_layer_check_transport_mic_cache
+	nrtn user
+	fetch 2,mem_ccm_data_ptr
+	copy pdata,alarm
+	branch ali_mesh_access_layer_resolve_message
+
+ali_mesh_upper_transport_layer_decrypt_message_decrypt_transMIC:
+	nbranch ali_CCM_decrypt,user
+	pincrease -4
+	branch ali_CCM_decrypt_64Bit
+
+//user is enable ,mean new packet
+ali_mesh_upper_transport_layer_check_transport_mic_cache:
+	setarg mem_mesh_access_message_mic_cache
+	store 2,mem_mesh_mic_cache_ptr
+	branch ali_mesh_base_adt_cache
+
+
+//********* generate application nonce *********//
+ali_mesh_upper_transport_layer_load_application_nonce_and_application_key:
+	call ali_mesh_upper_transport_layer_load_application_nonce
+ali_mesh_upper_transport_layer_load_application_key:
+	arg mem_mesh_application_key,contr
+	branch load_key
+ali_mesh_upper_transport_layer_load_application_nonce:
+	arg mem_mesh_Application_Nonce,contw
+	setarg APPLICATION_NONCE
+	istore 1,contw
+	fetch 1,mem_mesh_ASZMIC
+	arg 0,temp
+	nsetflag blank,7,temp
+	istoret 1,contw
+	fetch 7,mem_mesh_message_SEQ
+	istore 7,contw
+	branch mesh_generate_nonce
+
+
+//********* generate device nonce *********//
+ali_mesh_upper_transport_layer_load_device_nonce_and_device_key:
+	call ali_mesh_upper_transport_layer_load_device_nonce
+ali_mesh_upper_transport_layer_load_device_key:
+	arg mem_mesh_Device_Key,contr
+	branch load_key
+ali_mesh_upper_transport_layer_load_device_nonce:
+	arg mem_mesh_Device_Nonce,contw
+	setarg DEVICE_NONCE
+	branch ali_mesh_upper_transport_layer_load_application_nonce + 2
+
+
+
+ali_mesh_upper_transport_layer_send_access_message:
+ali_mesh_upper_transport_layer_send_access_message_without_cleat_tx_buffer:
+	bpatchx patch36_4,mem_patch36
+//	call ali_mesh_upper_transport_layer_clear_tx_buffer
+ifdef mesh_debug_log
+	call ali_mesh_loggint_tx_info_upper_send_packet
+endif
+	call ali_mesh_upper_transport_layer_send_access_message_add_NID_SRC_TTL_SEQ_DST
+
+	//queue control
+	call ali_mesh_upper_transport_layer_store_packet_header
+	rtn user
+	call ali_mesh_upper_transport_layer_store_unsegment_msg_original_access_pdu
+
+	call ali_mesh_upper_transport_layer_init_queue_param
+
+	arg mem_mesh_upper_tran_layer_queue_temp,rega
+	branch queue_push
+
+
+//output:user is enable mean send Attr Indication packet,but no in paired status
+ali_mesh_upper_transport_layer_store_packet_header:
+	call disable_user
+	arg UPPER_RETRY_COUNT_STATUS,temp
+
+	fetch 1,mem_mesh_network_packet_type
+	sub pdata,MESH_MESSAGE_PROXY,null
+	setflag zero,BIT_UPPER_FLAG_PROXY_CONTROL,temp
+	storet 1,mem_mesh_upper_tran_layer_temp_packet_flag
+	fetch 9,mem_mesh_send_upper_layer_IVI_and_NID
+	store 9,mem_mesh_upper_tran_layer_temp_packet_header_IVI_NID
+	fetch 1,mem_mesh_access_layer_payload_vendor_command
+	rtnne VENDOR_MESSAGE_ATTR_INDICATION
+	fetch 1,mem_mesh_provisioned_flag
+	bne PAIRED_STATUS,enable_user
+	fetch 1,mem_mesh_access_layer_payload_vendor_tid
+	store 1,mem_mesh_upper_tran_layer_temp_packet_TID
+	fetch 1,mem_mesh_upper_tran_layer_temp_packet_flag
+	pincrease UPPER_RETRY_COUNT_INDICATION
+	set1 BIT_UPPER_FLAG_VENDOR_INDICATION,pdata
+	store 1,mem_mesh_upper_tran_layer_temp_packet_flag
+	rtn
+
+
+ali_mesh_upper_transport_layer_store_unsegment_msg_original_access_pdu:
+	fetch 1,mem_mesh_access_layer_payload_len
+	copy pdata,loopcnt
+	store 1,mem_mesh_upper_tran_layer_temp_packet_length
+	fetch 1,mem_mesh_message_Transport_Head
+	store 1,mem_mesh_upper_tran_layer_temp_pakcet_AKF_AID
+	arg mem_mesh_upper_tran_layer_temp_pakcet_upper_tran_access_pdu,contw
+	arg mem_mesh_access_layer_payload,contr
+	branch memcpy
+
+
+
+ali_mesh_upper_transport_layer_control_packet:
+//	arg ali_mesh_upper_transport_layer_control_packet_deal,regc
+//	branch ali_mesh_check_all_element_info
+
+
+ali_mesh_upper_transport_layer_control_packet_deal:
+	fetch 1,mem_mesh_upper_tran_layer_packet_advertising
+	nrtn blank
+	call ali_mesh_upper_transport_layer_init_queue_param
+	arg mem_mesh_upper_tran_layer_queue_temp,rega
+	call queue_get_new_ele
+	nrtn user	
+
+	fetcht 1,mem_mesh_upper_tran_layer_temp_packet_flag
+	and temp,DATA_UPPER_FLAG_MAX_RETRY_COUNT,pdata
+	branch ali_mesh_upper_transport_layer_queue_pop,blank
+
+	jam PACKET_IN_BEARER,mem_mesh_upper_tran_layer_packet_advertising	
+
+	call ali_mesh_upper_transport_layer_control_packet_load_header	
+
+	fetcht 1,mem_mesh_upper_tran_layer_temp_packet_flag
+	call ali_mesh_upper_transport_layer_control_packet_load_app_control	
+	store 1,mem_mesh_upper_tran_layer_packet_tid
+
+	fetch 1,mem_mesh_upper_tran_layer_packet_type
+	isolate1 BIT_UPPER_FLAG_PROXY_CONTROL,temp
+	setflag true,BIT_UUPER_TRAN_PROXY_MESSAGE,pdata
+	store 1,mem_mesh_upper_tran_layer_packet_type
+//	add rega,ELEMENT_DEVICE_TRAN_PACKAGE_TYPE,contr
+//	ifetch 1,contr
+//	isolate1 BIT_UPPER_FLAG_PROXY_CONTROL,temp
+//	setflag true,BIT_UUPER_TRAN_PROXY_MESSAGE,pdata
+//	add rega,ELEMENT_DEVICE_TRAN_PACKAGE_TYPE,contw
+//	istore 1,contw
+
+	set1 BIT_UPPER_FLAG_RETRANSMIT,temp						
+
+	increase -1,temp		
+	istoret 1,regb			
+	
+	fetcht 1,mem_mesh_upper_tran_layer_temp_packet_flag
+	isolate1 BIT_UPPER_FLAG_RETRANSMIT,temp
+	nbranch ali_mesh_upper_transport_layer_control_packet_encrypt_access,true
+	fetcht 1,mem_mesh_upper_tran_layer_temp_packet_length
+	storet 1,mem_mesh_upper_transport_layer_payload_len
+	copy temp,loopcnt
+	arg mem_mesh_access_layer_payload,contw
+	arg mem_mesh_upper_tran_layer_temp_pakcet_upper_tran_access_pdu,contr
+	call memcpy
+//	call ice_break
+	sub temp,UNSEGMENTED_ACCESS_MESSAGE_MAX_UPPER_TRANSPORT_ACCESS_PDU_LEN,null
+	nbranch ali_mesh_upper_transport_layer_control_packet_segment_msg,positive
+ali_mesh_upper_transport_layer_control_packet_unsegment_msg:
+	branch ali_mesh_lower_transport_layer_send_unsegmented_access_message
+
+
+ali_mesh_upper_transport_layer_control_packet_segment_msg:
+	fetch 4,mem_mesh_upper_tran_layer_temp_segmented_pakcet_SeqZero
+	store 4,mem_mesh_segmented_lower_transport_layer_SegZero
+	branch ali_mesh_upper_transport_layer_split_segmented_msg_to_lower_tran_layer
+
+
+ali_mesh_upper_transport_layer_control_packet_load_header:
+	fetch 1,mem_mesh_upper_tran_layer_temp_pakcet_AKF_AID
+	store 1,mem_mesh_message_Transport_Head
+
+	fetch 9,mem_mesh_upper_tran_layer_temp_packet_header_IVI_NID
+	store 9,mem_mesh_send_upper_layer_IVI_and_NID
+	store 9,mem_mesh_message_NID
+	rtn
+
+
+ali_mesh_upper_transport_layer_control_packet_load_app_control:
+	jam UPPER_TRAN_TMALL_MESSAGE,mem_mesh_upper_tran_layer_packet_type
+	fetch 1,mem_mesh_upper_tran_layer_temp_packet_TID
+	isolate1 BIT_UPPER_FLAG_VENDOR_INDICATION,temp
+	rtn true		//indication packet send app & tmall
+	setarg 0
+	rtn
+
+ali_mesh_store_tran_package_type:
+	add rega,ELEMENT_DEVICE_TRAN_PACKAGE_TYPE,contw
+	istore 1,contw
+	rtn
+
+
+ali_mesh_upper_transport_layer_queue_pop:
+	jam 0,mem_mesh_upper_tran_layer_packet_tid
+	call ali_mesh_upper_transport_layer_init_queue_param
+	arg mem_mesh_upper_tran_layer_queue_temp,rega
+	branch queue_pop
+
+ali_mesh_upper_transport_layer_control_packet_encrypt_access:
+	call ali_mesh_upper_transport_layer_send_access_message_calc_SEQ
+	call ali_mesh_upper_transport_layer_send_access_message_add_SEQ
+	fetch 9,mem_mesh_send_upper_layer_IVI_and_NID
+	store 9,mem_mesh_upper_tran_layer_temp_packet_header_IVI_NID
+	call ali_mesh_upper_transport_layer_control_packet_encrypt_access_load_payload
+	setarg 0
+	store 1,mem_mesh_ASZMIC
+	call ali_mesh_upper_transport_layer_calc_transport_mic
+
+	fetcht 1,mem_mesh_upper_transport_layer_payload_len
+	storet 1,mem_mesh_upper_tran_layer_temp_packet_length
+	copy temp,loopcnt
+	arg mem_mesh_access_layer_payload,contr
+	arg mem_mesh_upper_tran_layer_temp_pakcet_upper_tran_access_pdu,contw
+	call memcpy
+	
+	sub temp,UNSEGMENTED_ACCESS_MESSAGE_MAX_UPPER_TRANSPORT_ACCESS_PDU_LEN,null
+	nbranch ali_mesh_upper_transport_layer_control_packet_encrypt_access_segment_msg,positive
+ali_mesh_upper_transport_layer_control_packet_encrypt_access_unsegment_msg:
+	arg mem_mesh_upper_tran_layer_temp_packet_transmit_delay,rega
+	call queue_store_new_ele
+	branch ali_mesh_lower_transport_layer_send_unsegmented_access_message
+
+ali_mesh_upper_transport_layer_control_packet_encrypt_access_segment_msg:
+	call ali_mesh_upper_transport_layer_send_segmented_access_message_get_SeqZero_SegON
+	fetch 4,mem_mesh_segmented_lower_transport_layer_SegZero
+	store 4,mem_mesh_upper_tran_layer_temp_segmented_pakcet_SeqZero
+	arg mem_mesh_upper_tran_layer_temp_packet_transmit_delay,rega
+	call queue_store_new_ele
+	branch ali_mesh_upper_transport_layer_split_segmented_msg_to_lower_tran_layer
+
+ali_mesh_upper_transport_layer_control_packet_encrypt_access_load_payload:
+	fetch 1,mem_mesh_upper_tran_layer_temp_packet_length
+	copy pdata,loopcnt
+	store 1,mem_mesh_access_layer_payload_len
+	fetch 1,mem_mesh_upper_tran_layer_temp_pakcet_AKF_AID
+	store 1,mem_mesh_message_Transport_Head
+	arg mem_mesh_upper_tran_layer_temp_pakcet_upper_tran_access_pdu,contr
+	arg mem_mesh_access_layer_payload,contw
+	branch memcpy
+
+ali_mesh_upper_transport_layer_split_segmented_msg_to_lower_tran_layer:
+	call ali_mesh_upper_transport_layer_send_segmented_access_message_calc_header
+	setarg mem_mesh_access_payload
+	store 2,mem_mesh_upper_transport_layer_payload_ptr
+ali_mesh_upper_transport_layer_send_segmented_access_message_loop:
+	call ali_mesh_upper_transport_layer_control_packet_load_header
+	call ali_mesh_upper_transport_layer_send_access_message_calc_SEQ
+	call ali_mesh_upper_transport_layer_send_access_message_add_SEQ
+
+	fetcht 1,mem_mesh_access_layer_payload_len
+	setarg SEGMENTED_ACCESS_MESSAGE_UNINT_PDU_LEN
+	call not_greater_than
+	copy pdata,rega
+	copy temp,pdata
+	isub rega,pdata
+	store 1,mem_mesh_access_layer_payload_len
+	fetch 2,mem_mesh_upper_transport_layer_payload_ptr
+	copy pdata,contr
+	iadd rega,temp
+	storet 2,mem_mesh_upper_transport_layer_payload_ptr
+	call ali_mesh_lower_transport_layer_send_segmented_access_message
+	fetch 1,mem_mesh_access_layer_payload_len
+	rtn blank
+	fetch 1,mem_mesh_segmented_lower_transport_layer_SegO
+	pincrease 1
+	store 1,mem_mesh_segmented_lower_transport_layer_SegO
+	call ali_mesh_upper_transport_layer_send_segmented_access_message_calc_header
+	branch ali_mesh_upper_transport_layer_send_segmented_access_message_loop
+
+
+
+//upper层计算transport mic值
+ali_mesh_upper_transport_layer_calc_transport_mic:
+	fetch 1,mem_mesh_message_Transport_Head
+	bbit0 TRANSPORT_HEAD_BIT_AKF,ali_mesh_upper_transport_layer_calc_transport_mic_by_DeviceKey
+ali_mesh_upper_transport_layer_calc_transport_mic_by_AppKey:
+	call ali_mesh_upper_transport_layer_load_application_nonce_and_application_key
+	branch ali_mesh_upper_transport_layer_calc_transport_mic_encrypt_AESCCM
+ali_mesh_upper_transport_layer_calc_transport_mic_by_DeviceKey:
+	call ali_mesh_upper_transport_layer_load_device_nonce_and_device_key
+ali_mesh_upper_transport_layer_calc_transport_mic_encrypt_AESCCM:
+	fetch 1,mem_mesh_access_layer_payload_len
+	add pdata,4,temp
+	storet 1,mem_mesh_upper_transport_layer_payload_len
+	arg mem_mesh_access_layer_payload,temp
+	branch ali_CCM_encrypt
+
+
+
+//累加SEQ的值
+ali_mesh_upper_transport_layer_send_access_message_calc_SEQ:
+	fetch 3,mem_mesh_send_message_SEQ
+	pincrease 1
+	store 3,mem_mesh_send_message_SEQ
+	fetch 1,mem_mesh_gatt_package_send_msg_id
+	pincrease 1
+	store 1,mem_mesh_gatt_package_send_msg_id
+	fetch 2,mem_mesh_cb_seq_changed
+	branch callback_func
+
+
+
+ali_mesh_upper_transport_layer_send_access_message_add_NID_SRC_TTL_SEQ_DST:
+	fetch 1,mem_mesh_IV_Index+3
+	lshift4 pdata,pdata
+	lshift3 pdata,pdata
+	fetcht 1,mem_k2_NID
+	ior temp,pdata
+	store 1,mem_mesh_send_upper_layer_IVI_and_NID
+	fetch 1,mem_mesh_send_message_TTL
+	store 1,mem_mesh_send_upper_layer_CTL_and_TTL
+	fetch 2,mem_mesh_send_message_SRC
+	store 2,mem_mesh_send_upper_layer_SRC
+	fetch 2,mem_mesh_send_message_DST
+	store 2,mem_mesh_send_upper_layer_DST
+
+ali_mesh_upper_transport_layer_send_access_message_add_SEQ:
+	fetch 3,mem_mesh_send_message_SEQ
+	store 3,mem_mesh_send_upper_layer_SEQ
+	arg mem_mesh_send_upper_layer_SEQ,rega
+	arg 3,loopcnt
+	call inverse_data
+	fetch 8,mem_mesh_send_upper_layer_CTL_and_TTL
+	store 8,mem_mesh_message_TTL
+	rtn
+
+ali_mesh_upper_transport_layer_send_segmented_access_message_get_SeqZero_SegON:
+	fetch 1,mem_mesh_upper_transport_layer_payload_len
+	div pdata,SEGMENTED_ACCESS_MESSAGE_UNINT_PDU_LEN
+	call wait_div_end
+	quotient temp
+	remainder pdata
+	call ali_mesh_upper_transport_layer_send_segmented_access_message_sub_SegN_one,blank
+	storet 1,mem_mesh_segmented_lower_transport_layer_SegN
+	jam 0,mem_mesh_segmented_lower_transport_layer_SegO
+	fetch 3,mem_mesh_send_message_SEQ
+	arg 0x1fff,temp
+	iand temp,pdata
+	store 2,mem_mesh_segmented_lower_transport_layer_SegZero
+	rtn
+
+ali_mesh_upper_transport_layer_send_segmented_access_message_calc_header:
+	fetch 2,mem_mesh_segmented_lower_transport_layer_SegZero
+	lshift4 pdata,pdata
+	lshift pdata,pdata
+	fetcht 1,mem_mesh_segmented_lower_transport_layer_SegO
+	ior temp,pdata
+	lshift4 pdata,pdata
+	lshift pdata,pdata
+	fetcht 1,mem_mesh_segmented_lower_transport_layer_SegN
+	ior temp,pdata
+	store 3,mem_mesh_segmented_access_lower_transport_layer_SZMIC_SeqZero_SegO_SegN
+	arg 3,loopcnt
+	arg mem_mesh_segmented_access_lower_transport_layer_SZMIC_SeqZero_SegO_SegN,rega
+	branch inverse_data
+
+ali_mesh_upper_transport_layer_receive_new_msg_timer:
+	arg mem_mesh_upper_receive_new_message_timer,regc
+	arg ali_mesh_upper_transport_layer_receive_new_msg_timeout, regb
+	branch timer_single_step
+
+ali_mesh_upper_transport_layer_receive_new_msg_timeout:
+	arg 40,loopcnt
+	arg mem_mesh_access_message_mic_cache,contw
+	branch clear_mem
+
+
+ali_mesh_upper_transport_layer_send_segmented_access_message_sub_SegN_one:
+	increase -1,temp
+	rtn
+
+ali_mesh_upper_transport_layer_clear_tx_buffer:
+	branch ali_mesh_stop_send_indication_packet
+
+ifdef mesh_debug_log
+ali_mesh_loggint_tx_info_upper_send_packet:
+	arg mem_mesh_access_layer_payload,rega
+	fetchr loopcnt,1,mem_mesh_access_layer_payload_len
+	arg MESH_UPPER_SEND_PACKET,regb
+	branch logging_tx_info
+endif
+
+ali_mesh_upper_transport_layer_init_queue_param:
+	setarg mem_mesh_upper_tran_layer_queue_each_size
+	store 2,mem_queue_ptr
+	rtn
+
+

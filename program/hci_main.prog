@@ -1,0 +1,302 @@
+/*********************************/
+/**********   HCI  *****************/
+/*********************************/
+
+hci_init:
+	clear_stack		//清空堆栈
+	call wdt_set_disable
+	call hci_init_clksel_xtal
+	call hci_init_uart_default_config
+	call hci_init_uart_config
+	call hci_init_pwm_default_config
+	call hci_init_pwm
+
+	jam 1,mem_hci_command_complete_num_hci_command_packet
+	jam HCI_H4_TYPE_EVENT,mem_hci_event_head_type
+
+hci_process_loop:
+	call hci_process_check_uart_rx
+	branch hci_process_loop
+	
+hci_init_clksel_xtal:
+	jam clksel_xtal,core_clksel
+	rtn
+
+hci_init_uart_default_config:
+	call hci_init_uart_default_config_tx
+	call hci_init_uart_default_config_rx
+	call hci_init_uart_default_config_rts
+	branch hci_init_uart_default_config_cts
+
+hci_init_uart_default_config_tx:
+	fetch 1,mem_hci_uart_tx_gpio
+	nrtn blank
+	jam HCI_UART_TX_GPIO_NUM,mem_hci_uart_tx_gpio
+	rtn	
+
+hci_init_uart_default_config_rx:
+	fetch 1,mem_hci_uart_rx_gpio
+	nrtn blank
+	jam HCI_UART_RX_GPIO_NUM,mem_hci_uart_rx_gpio
+	rtn	
+hci_init_uart_default_config_rts:
+	fetch 1,mem_hci_uart_rts_gpio
+	nrtn blank
+	jam HCI_UART_RTS_GPIO_NUM,mem_hci_uart_rts_gpio
+	rtn	
+hci_init_uart_default_config_cts:
+	fetch 1,mem_hci_uart_cts_gpio
+	nrtn blank
+	jam HCI_UART_CTS_GPIO_NUM,mem_hci_uart_cts_gpio
+	rtn	
+
+
+hci_init_uart_config:
+	setarg mem_h5rx_buf
+	store 2,mem_pdatatemp
+	setarg mem_h5rx_buf_end
+	istore 2,contw
+	setarg mem_h5tx_buf
+	istore 2,contw
+	setarg mem_h5tx_buf_end
+	istore 2,contw	
+	fetch 8,mem_pdatatemp
+	call uarta_init_dma_mem
+	call uart_clock_select_main_freq_crystal
+	arg 115200,temp
+	call uarta_calc_baud_rate_config
+	fetch 1,mem_hci_uart_tx_gpio
+	arg gpcfg_uart_txd,temp
+	call gpio_config_function_int
+	fetch 1,mem_hci_uart_rx_gpio
+	arg gpcfg_uart_rxd|gpcfg_pullup,temp
+	call gpio_config_function_int
+	fetch 1,mem_hci_uart_rts_gpio
+	arg gpcfg_uart_rts,temp
+	call gpio_config_function_int
+	fetch 1,mem_hci_uart_cts_gpio
+	arg gpcfg_uart_cts,temp
+	call gpio_config_function_int
+
+	arg FUN_UART_CONTROL_ENABLE|FUN_UART_CONTROL_SETTING_RATE_BAUD,temp
+	storet 1,core_uart_ctrl
+	branch clean_xmem
+
+hci_init_pwm_default_config:
+	fetch 1,mem_hci_pwm_12mhz_gpio
+	nrtn blank
+	jam HCI_PMW_12MHZ_GPIO_NUM,mem_hci_pwm_12mhz_gpio
+	rtn	
+
+hci_init_pwm:
+	fetch 1,mem_hci_pwm_12mhz_gpio
+	arg gpcfg_pwm_out0,temp
+	call gpio_config_function_int
+	arg 0x40,rega
+	call pwm_init
+	arg 0,rega
+	arg 0,regb
+	setarg 0
+	call pwm_duty_cycle_set
+	arg 0,queue
+	branch pwm_set_select
+
+
+hci_process_check_uart_rx:
+	fetch 2,core_uart_rxitems
+	add pdata,-4,rega
+	nrtn positive
+	call uarta_prepare_rx
+	ifetch 1,contru
+	beq HCI_H4_TYPE_CMD,hci_parse_packet_cmd
+//	beq HCI_H4_TYPE_ACL,hci_parse_packet_acl
+	call delay_10ms
+	branch uarta_clear_current_rx
+
+//hci_parse_packet_acl:
+//	rtn
+hci_parse_packet_cmd:
+	ifetch 2,contru	// Opcode
+	store 2,mem_hci_opcode
+	arg 0x3ff,temp
+	iand temp,temp	//low 10bit
+	storet 2,mem_hci_opcode_ocf
+	rshift2 pdata,pdata
+	rshift8 pdata,pdata	//high 6bit
+	store 1,mem_hci_opcode_ogf
+	ifetch 1,contru	// parameter total length
+	pincrease -1		//大于等于
+	isub rega,null
+	rtn positive
+	call hci_parse_complete_packet
+	branch hci_drop_current_packet
+
+hci_parse_complete_packet:
+	fetch 1,mem_hci_opcode_ogf
+//	beq HCI_OGF_LINK_CONTROL,hci_parse_packet_cmd_ogf_link_control
+//	beq HCI_OGF_LINK_POLICY,hci_parse_packet_cmd_ogf_link_policy
+//	beq HCI_OGF_CONTROLLER_AND_BASEBAND,hci_parse_packet_cmd_ogf_controller_and_baseband
+//	beq HCI_OGF_INFOMATIONAL_PARAM,hci_parse_packet_cmd_ogf_infomational_parameters
+//	beq HCI_OGF_STATUS_PARAM,hci_parse_packet_cmd_ogf_status_parameters
+//	beq HCI_OGF_TEST,hci_parse_packet_cmd_ogf_testing
+//	beq HCI_OGF_LE_CONTROLLER,hci_parse_packet_cmd_ogf_le_controller
+	beq HCI_OGF_VENDOR_SPECIFIC_DEBUG,hci_parse_packet_cmd_ogf_vendorspecific_debug
+	branch hci_send_event_command_complete_error_command_nuknown
+
+//hci_parse_packet_cmd_ogf_link_control:
+//hci_parse_packet_cmd_ogf_link_policy:
+//hci_parse_packet_cmd_ogf_controller_and_baseband:
+//hci_parse_packet_cmd_ogf_infomational_parameters:
+//hci_parse_packet_cmd_ogf_status_parameters:
+//hci_parse_packet_cmd_ogf_testing:
+//hci_parse_packet_cmd_ogf_le_controller:
+
+hci_parse_packet_cmd_ogf_vendorspecific_debug:
+	bpatch patch16_4,mem_patch16
+	fetch 1,mem_hci_opcode_ocf
+	beq HCI_VENDOR_CMD_RESET,hci_normal_reply
+	beq HCI_VENDOR_CMD_CHIPID,phci_grp_vendor_chipid
+	beq HCI_VENDOR_CMD_BAUD,phci_grp_vendor_baud
+	beq HCI_VENDOR_CMD_PATCH,phci_grp_vendor_patch
+	beq HCI_VENDOR_CMD_PATCH_DONE,phci_grp_vendor_done
+	beq HCI_VENDOR_CMD_ECHO,hci_normal_reply
+	beq HCI_VENDOR_CMD_MEM,phci_grp_vendor_mem
+	beq HCI_VENDOR_CMD_SET_FLOW_CONTROL,phci_grp_vendor_flow_control
+	branch hci_normal_reply
+
+	
+phci_grp_vendor_chipid:
+	jam COMMAND_SUCCEEDED,mem_hci_command_complete_return_parameter
+	fetch 2,core_chipid
+	store 2,mem_hci_command_complete_return_parameter_chip_id
+	arg 3,loopcnt
+	branch hci_send_event_command_complete
+	
+phci_grp_vendor_baud:
+	ifetch 2,contu
+	store 2,core_uart_baud
+	rtn
+
+
+phci_grp_vendor_patch_common:
+	ifetch 1,contu
+	copy pdata,temp //check sum via temp
+	store 1,core_ucode_low
+	ifetch 1,contu
+	iadd temp,temp
+	set1 7,pdata
+	store 1,core_ucode_ctrl
+	ifetch 1,contu
+	iadd temp,temp
+	copy pdata,loopcnt
+	rtn
+	
+phci_grp_vendor_patch:
+	call phci_grp_vendor_patch_common
+phci_grp_vendor_patch_loop:
+	ifetch 1,contu
+	store 1,core_ucode_data
+	iadd temp,temp
+	loop phci_grp_vendor_patch_loop
+phci_grp_vendor_patch_check_sum:	
+	and temp,0xff,temp
+	ifetch 1,contu
+	isub temp,null
+	nbranch phci_grp_vendor_patch_bad,zero
+	branch hci_normal_reply
+
+phci_grp_vendor_done:
+	arg 0x20,loopcnt    //patch switch length
+	arg mem_patch00,contw
+	arg 0,temp //checksum
+phci_grp_vendor_done_loop:
+	ifetch 1,contu
+	istore 1,contw
+	iadd temp,temp
+	loop phci_grp_vendor_done_loop
+	and temp,0xff,temp
+	ifetch 1,contu
+	isub temp,null
+	nbranch phci_grp_vendor_patch_bad,zero
+	jam 0,core_ucode_ctrl
+	call hci_normal_reply
+	call wait_uarttx
+	branch soft_reset
+
+phci_grp_vendor_patch_bad:
+	jam 0,core_ucode_ctrl
+	branch hci_send_event_command_complete_error_command_nuknown
+	
+
+phci_grp_vendor_mem:
+	ifetch 1,contu
+	copy pdata,loopcnt
+	ifetch 2,contu
+	copy pdata,contw
+	call uart_copy_rx_bytes
+	branch hci_normal_reply
+
+phci_grp_vendor_flow_control:
+	fetch 1,core_uart_ctrl
+	set1 BIT_UART_CONTROL_FLOW_CONTROL,pdata
+	store 1,core_uart_ctrl
+	branch hci_normal_reply
+
+	
+hci_normal_reply:
+	branch hci_send_event_command_complete_without_payload
+
+hci_send_event_command_complete_error_command_nuknown:
+	jam COMMAND_UNKNOWN,mem_hci_command_complete_return_parameter
+	branch hci_send_event_command_complete_without_payload+1
+hci_send_event_command_complete_error_command_disallowed:
+	jam COMMAND_DISALLOWED,mem_hci_command_complete_return_parameter
+	branch hci_send_event_command_complete_without_payload+1
+hci_send_event_command_complete_without_payload:
+	jam COMMAND_SUCCEEDED,mem_hci_command_complete_return_parameter
+	arg 1,loopcnt
+	branch hci_send_event_command_complete
+
+/***************
+function:send command complete event to host
+input:
+mem_mesh_command_complete_num_hci_command_packet:
+Num Hci Command Packet Commonly used 1
+mem_mesh_hci_opcode:command opcode ,OCF & OGF
+loopcnt:return parameters data length
+mem_mesh_command_complete_return_parameter
+:return parameters data point
+***************/
+hci_send_event_command_complete:
+	jam HCI_EVENT_COMMAND_COMPLETE,mem_hci_event_head_event_code
+	add loopcnt,3,pdata
+	store 1,mem_hci_event_para_total_length
+	call hci_prepare_send_event
+	fetch 3,mem_hci_command_complete_num_hci_command_packet
+	istore 3,contwu
+//	copy rega,contr
+	arg mem_hci_command_complete_return_parameter,contr
+	call uart_copy_tx_bytes
+	branch uarta_send_register_pop
+
+//mem_mesh_event_head_event_code:event code
+//mem_mesh_event_para_total_length:parameter total length
+hci_prepare_send_event:
+	call uarta_prepare_tx_register_push
+	fetch 3,mem_hci_event_head_type
+	istore 3,contwu
+	rtn
+
+hci_drop_current_packet:
+	call uarta_prepare_rx
+	increase 3,contru
+	ifetch 1,contru
+	iadd contru,contru
+	branch uarta_rxdone
+
+cmd_exit:
+	jam 0,mem_hci_cmd
+	rtn
+
+
+

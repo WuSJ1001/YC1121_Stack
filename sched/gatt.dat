@@ -1,0 +1,85 @@
+
+#attribute list: handle 2bytes, uuid 2bytes, length 1bytes, attribute Nbytes
+mem_le_att_list:
+
+#Primary service GAP ------
+01 00 00 28 02 00 18
+
+#Device name
+02 00 03 28 01 0a
+03 00 00 2a 0c 41 73 74 20 4c 45 20 4d 6f 75 73 65
+
+#Appearance
+04 00 03 28 01 02
+05 00 01 2a 02 c2 03 #3c2=hid mouse
+
+#Peripheral Preferred Connection Parameters
+06 00 03 28 01 02
+07 00 04 2a 08 06 00 06 00 64 00 2c 01 # interval 6ms, latency 100, timeout 300
+
+#Primary service GATT ------
+08 00 00 28 02 01 18
+
+#Service changed
+09 00 03 28 01 20
+0a 00 05 2a 00
+
+#Client Characteristic Configuration
+0b 00 02 29 02 00 00
+
+#Primary service TX power ------
+0c 00 00 28 02 04 18
+#Characteristic Tx power level
+0d 00 03 28 01 06
+0e 00 07 2a 01 00
+
+
+#Primary service Battery ------
+0f 00 00 28 02 0f 18
+#Characteristic Battery level
+10 00 03 28 01 12
+11 00 19 2a 01 38
+
+#Primary service yichip transmit ------
+12 00 00 28 02 f0 18
+#Characteristic tx--notify
+13 00 03 28 01 12
+14 00 f1 2a 14	# for Android device, ATT MTU is just 23 bytes, so payload is 20 bytes max
+'Test read initial va
+#Client Characteristic Configuration
+15 00 02 29 02 00 00
+#Characteristic rx--write
+16 00 03 28 01 0c
+17 00 f0 2a 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+#End of Attribute list
+00 00
+
+mem_le_adv_enable:01
+mem_le_adv_data_len:03
+
+mem_le_adv_data:02 01 05
+#flags NOTE: should be included here, or Android will not do connectgatt()
+
+
+mem_le_scan_data_len:17
+
+mem_le_scan_data:	# 1 byte length + 1 byte type + N bytes data
+
+#complete local name
+0e 09 
+#'Ast LE2Serial
+'YiChip BLE2IR
+
+#16bit uuid
+03 03 00 f0
+
+#Apperance
+03 19 40 02
+
+
+mem_le_adv_interval:00 08 
+mem_le_adv_channel_map:07 
+
+mem_24g_lap:77 11 00 33 00 00
+

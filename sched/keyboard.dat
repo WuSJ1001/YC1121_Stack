@@ -1,0 +1,378 @@
+mem_mouse_flag:
+#mouse flag byte1
+#bit0 MOUSE_SELECT_DEVICE_FLAG
+#bit1 MOUSE_24G_PAIRING_FLAG
+#bit2 MOUSE_STORE_EEPROM_FLAG
+#bit3 MOUSE_BT_CANNEL_RECONN_FLAG
+#bit4 MOUSE_LOW_VOLTAGE_FLAG
+#bit5 MOUSE_BT_DISCOVERY_BUTTON_DOWN_FLAG
+#bit6 MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG
+04
+
+#mouse flag byte2
+#bit0 MOUSE_ENABLE_BLE_RANDOM_ADDRE
+#bit1 MOUSE_ENABLE_2K_EEPROM
+#bit2 MOUSE_ENABLE_INIT_DELAY
+#bit3 MOUSE_ENABLE_WAKEUP_FROM_POWER
+#bit4 MOUSE_ENABLE_16M
+#bit5 MOUSE_ENABLE_USB
+#bit6 MOUSE_ENABLE_24G_SEARCH_DONGLE
+#bit7 MOUSE_ENABLE_LOAD_AND_STORE_DPI
+09
+
+#mouse flag byte3
+#bit0 MOUSE_ENABLE_SPI2
+#bit1 MOUSE_ENABLE_24G
+#bit2 MOUSE_ENABLE_FLASH
+#bit3 MOUSE_ENABLE_EEPROM
+#bit4 MOUSE_ENABLE_OTP
+#bit5 MOUSE_ENABLE_ADC
+#bit6 MOUSE_ENABLE_KEYBOARD
+#bit7 MOUSE_ENABLE_DOUBLE_DPI_KEY
+50
+
+#mouse flag byte4
+#bit0 MOUSE_ENABLE_24G_250Hz
+#bit1 MOUSE_ENABLE_24G_500Hz
+#bit2 MOUSE_ENABLE_24G_1000
+#bit3 MOUSE_ENABLE_BT_125Hz
+#bit4 MOUSE_ENABLE_DPI_LEVEL_4
+#bit5 MOUSE_ENABLE_USB_250
+#bit6 MOUSE_ENABLE_USB_500
+#bit7 MOUSE_ENABLE_USB_1000
+00
+
+
+#mouse flag byte5
+#bit0 MOUSE_ENABLE_1IO2LED
+#bit1 MOUSE_ENABLE_BT_RECONN_LED_EFFECT
+#bit2 MOUSE_ENABLE_LOW_LED_BLINK_LIMIT
+#bit3 MOUSE_ENABLE_LOW_LED
+#bit4 MOUSE_ENABLE_LOW_FOR_LED
+#bit5 MOUSE_ENABLE_DPI_FOR_LED
+#bit6 MOUSE_ENABLE_DPI_LOW_FOR_LED
+00
+
+#mouse flag byte6 
+#bit0 MOUSE_ENABLE_SELECT_DEVICE_BY_DPI_BUTTON
+#bit1 MOUSE_ENABLE_SELECT_DEVICE_BY_PB_BUTTON
+#bit2 MOUSE_ENABLE_SELECT_DEVICE_BY_SWITCH_GPIO
+#bit3 MOUSE_ENABLE_CUSTOMER_KEY_CONNECT_VIN_OR_MATRIX
+#bit4 MOUSE_ENABLE_DPI_KEY_CONNECT_GND
+#bit5 MOUSE_ENABLE_PB_BUTTON_CONNECT_GND
+#bit6 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING 
+00
+#mouse flag byte7
+#bit0 MOUSE_ENABLE_AUTO_24G_PARING
+#bit1 MOUSE_ENABLE_24G_POWER_ON_PAIRING
+#bit2 MOUSE_ENABLE_COMMBINATION_KEY_BY_24G_PAIRING
+#bit3 MOUSE_ENABLE_BT_RECONNECT_TIMEOUT_ENTER_DISCOVERY
+#bit4 MOUSE_ENABLE_PB_BUTTON_SHORT_PRESS_ENTER_DISCOVERY
+#bit5 MOUSE_ENABLE_COMMBINATION_KEY_BY_BT_DISCOVERY
+#bit6 MOUSE_ENABLE_DPI_KEY_LONG_PRESS_DISCONVERY
+#bit7 MOUSE_ENABLE_PB_BUTTON_LONG_PRESS_DISCONVERY
+00
+
+#mouse flag byte8
+#bit0 MOUSE_ENABLE_SMOOTHER
+#bit1 MOUSE_ENABLE_XY_OFFSET
+#bit2 MOUSE_ENABLE_24G_AUTO_PAIR_NERVER_BEEN_PAIRED
+#bit3 MOUSE_ENABLE_LE_BATTERY_SERVICE_CANCEL
+#bit4 MOUSE_ENABLE_WHEEL_WAKE_UP_CANCEL
+#bit5 MOUSE_ENABLE_24G_2M_PHY
+#bit6 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING
+1c
+
+
+mem_device_option:0f
+mem_device_number:01
+mem_power_on_flag:01
+
+#ui
+
+mem_ui_button_gpio:ff
+mem_ui_button_timeout:1e
+mem_ui_led_struct_num:00
+
+
+
+#rf
+mem_tx_power:01	#00--0db 01--3db  02--5db  03--f3db  04--f5db
+mem_rssi_buff_index:07
+mem_rssi_signal_buf_ptr:mem_mouse_rssi_signal_buf
+mem_rssi_dis_min_24g_init:85
+mem_rssi_dis_max_24g_init:90
+mem_rssi_dis_min_ble_init:75
+mem_rssi_dis_max_ble_init:80
+mem_rssi_hex_received_max_value_init:63
+mem_power_ctrl_pac_succ_cnt_init:7d
+
+#usb
+mem_usb_offline_check_gpio:ff
+
+
+
+
+#2.4g
+mem_24g_data_type:02	#01--mouse  02--keyboard
+mem_24g_fast_conn_enable:01
+mem_24g_fast_conn_addr:0f 0f 0f 0f
+mem_24g_ch_map_update:00   #00--disable   01--enable
+mem_24g_long_sleep_set_level:02    #00--30ms   01--50ms  02--80ms  03--100ms
+mem_24g_disable_fec1:00	 #00--default mode  01--new process
+mem_24g_rx_window:c0 12     #400us  ## e0 2e#1ms #transmitter long range min:520us
+mem_mouse_24g_pair_tx_power:94 #-20dBm
+
+mem_24g_enter_hibernate:00 48 60
+mem_24g_long_sleep_param_update_timer_init:0a 00	#1s
+mem_24g_transmit_by_interrupt_exit_count_init:50 00
+mem_mouse_24g_power_on_fast_conn_timer:02 00	#1s
+mem_mouse_24g_search_dongle_time_init:32 00	#3mins
+mem_store_information_delay_timer_init:02
+mem_local_rx_max_octets:fb 00 48 08 fb 00 48 08  # 1b
+
+#bt
+mem_lpm_mode:00
+mem_lpm_mult:20
+mem_lpm_mult_init:20
+
+#rf_debug
+mem_rf_debug_rx_gpio:97
+mem_rf_debug_tx_gpio:97
+
+
+
+
+
+#ble
+mem_le_lap:73 83 92 a1 b1 c1
+mem_le_adv_channel_map:07
+
+mem_le_battery_level_updata_timer_init:96 00
+mem_le_keyboard_handle:15 00
+mem_le_notify_handle:19 00
+mem_le_multimedia_handle:1d 00
+mem_le_systemctrl_handle:21 00
+mem_le_pairing_handle:28 00
+mem_le_battery_level_handle:30 00
+
+mem_le_adv_data_len:1f
+mem_le_adv_data:
+#flag
+02 01 05 
+#uuid
+03 03 12 18 
+#appearance
+03 19 c1 03
+
+mem_le_adv_swift_pair:
+#microsoft swift pair
+#06 ff 06 00 03 00 80	
+#name
+'\09BT5.2 Keyboard
+
+mem_le_scan_data_len:1f
+mem_le_scan_data:
+#name
+'\09BT5.2 Keyboard
+
+#max 20bytes, att list data rom limits
+mem_le_name_len:
+'BT5.2 Keyboard
+
+mem_le_interval_min:
+07 00 #min interval
+07 00 #max interval
+20 00 #latency
+2c 01 #timeout
+
+mem_le_adv_ind:03 12 18
+mem_le_adv_direct_ind:ff 00 00
+
+
+
+
+
+#adc
+#adc
+mem_mouse_vdd_full_vol:dc 05		#1.5V
+84 03#mem_mouse_vdd_empty_vol  :0.9V
+e8 03#mem_mouse_vdd_low_vol   :1.0V
+#mem_mouse_vdd_full_vol:e4 0c		#3.3V
+#b8 0b#mem_mouse_vdd_empty_vol  :3.0V
+#80 0c#mem_mouse_vdd_low_vol   :3.2V
+
+mem_adc_channel_gpio:04
+#04
+#02
+#01
+#03
+#00
+#05
+#06
+#07
+
+#led
+
+
+#system
+mem_mouse_24g_pair_timeout_init:58 02  #1min
+mem_mouse_discovery_timeout:58 02  #1min
+mem_mouse_no_data_timeout:70 17   #10mins
+mem_mouse_24g_reconn_timeout_init:64 #10s
+mem_mouse_direct_timeout:64  #10s
+mem_mouse_fast_direct_timeout:64 #10s
+mem_mouse_page_to:00 40		# 16384*0.625ms=10s
+mem_mouse_fast_page_to:00 40		# 16384*0.625ms=10s
+
+mem_same_keyvalue_timer_init:B8 0B		#5min
+mem_keyboard_caps_led_on_timer:58 02	#1min
+
+
+mem_device_flag:00	#00--24g 01--bt/ble
+mem_device1_type:34
+mem_device1_addr:00 00 00 00 00 00
+
+
+
+mem_le_search_mac_manu_name:
+41 70 70 6c 65 20 49 6e 63
+mem_le_search_mac_uuid:
+0a 18
+mem_le_search_service_uuid:
+D0 00 2D 12 1E 4B 0F A4 99 4E CE B5 31 F4 05 79
+
+##												bt button connct gnd          bt button in matrix        two button commbination
+mem_keyboard_pairing_type:00					#                 00                                    00                                 01
+mem_config_select_device_button_gpio:05#              00~16			               ff					ff
+mem_keyboard_commbination_key_bt:7f 06			#		 not care				   not care			     Fn+C
+mem_keyboard_commbination_key_24g:29 14		#		 not care				   not care			     Esc+Q
+mem_keyboard_bt_button_flag:01
+
+
+mem_keyboard_caps_led_gpio:ff
+mem_keyboard_num_led_gpio:ff
+mem_keyboard_power_led_gpio:ff
+
+mem_keyboard_led_r_gpio:ff
+mem_keyboard_led_g_gpio:ff
+mem_keyboard_led_b_gpio:ff
+
+mem_keybord_appearance:c1 03
+
+
+mem_mcu_stb_gpio:15
+mem_mcu_clk_gpio:14
+mem_mcu_rstb_gpio:12
+
+mem_mouse_param_config:
+ff #mem_lbutton_gpio
+ff #mem_mbutton_gpio
+ff #mem_rbutton_gpio
+ff #mem_bk_button_gpio
+ff #mem_fw_button_gpio
+ff #mem_dpi_button_gpio
+ff #mem_whee_a_data_gpio
+ff #mem_whee_b_data_gpio
+ff #mem_mouse_sensor_sclk_gpio
+ff #mem_mouse_sensor_sdio_gpio
+ff #mem_select_sensor_angle_gpio
+ff #mem_sensor_angle_default
+ff #mem_sensor_angle_switch
+ff #mem_config_sensor_dpi	#power on default dpi 00--1200  01--1600
+ff #mem_whee_ta_data_gpio
+ff #mem_whee_tb_data_gpio
+ff #mem_matrix_public_gpio
+ff #mem_config_select_device_button_gpio
+ff #mem_customer_key_gpio
+ff #mem_firebutton_gpio
+ff #mem_dpi_another_button_gpio
+ff #mem_sensor_motion_gpio
+ff #mem_device_switch_gpio
+ff #mem_mouse_reuse_2ice_gpio
+ff #mem_mouse_logo_led_gpio
+ff #mem_mouse_1io2led_multi_24gled
+ff #mem_mouse_1io2led_multi_bt1led
+ff #mem_mouse_1io2led_multi_bt2led
+ff #mem_mouse_low_voltage_alarm_gpio
+ff #mem_mouse_dpi_gpio
+mem_key_excol_gpio:c2 c1 85 84 83 82 81 80 c7 c6 c4
+
+#gpio00~16
+mem_key_row_gpio:
+09 		#r0
+0a 		#r1
+0b 		#r2
+0c 		#r3
+0d 		#r4
+0e 		#r5
+03 		#r6
+07		#r7
+
+#gpio00~16   portA:8x,portB:cx
+mem_key_col_gpio:
+0f		#c0
+10		#c1
+11		#c2
+08		#c14
+16		#c15
+c2		#c3
+c1		#c4
+c4		#c5
+c6		#c6
+c7		#c7
+85		#c8
+84		#c9
+83		#c10
+82		#c11
+80		#c12
+81		#c13
+ff		#c16
+ff		#c17
+ff		#c18
+ff		#c19
+
+mem_keyboard_keyvalue_map:
+#r0 ~ r7
+4c 00 00 00 44 00 2c 51 			#c0
+00 00 00 00 00 00 00 4f 				#c1
+00 e1 00 00 00 e5 00 00 			#c2
+42 2a 43 00 28 31 00 00 			#c3
+00 00 00 00 00 00 52 50 			#c4
+00 00 45 00 00 e0 e3 E7 			#c5
+00 e2 00 00 00 00 00 00 			#c6
+2e 30 25 0c 36 0e 3f 00 				#c7
+2d 2f 27 13 00 33 34 38 				#c8
+41 40 26 12 37 0f 00 00 				#c9
+23 1c 24 18 10 0d 0b 11 			#c10
+7f 00 3e 00 E6 00 00 00 			#c11
+22 17 21 15 19 09 0a 05 			#c12
+3a 39 1f 1a 1b 16 00 00 				#c13
+3b 3c 20 08 06 07 3d 00 			#c14
+35 2b 1e 14 1d 04 29 00 			#c15
+
+mem_keyboard_fn_first:	00			#fn first  00:press f1~f12=f1~f12      01:press fn+f1~f12=f1~f12
+mem_keyboard_fn_esc:	fb			#esc
+mem_keyboard_fn_f1:	f7			#f1
+mem_keyboard_fn_f2:	fa			#f2
+mem_keyboard_fn_f3:	a5			#f3
+mem_keyboard_fn_f4:	a6			#f4
+mem_keyboard_fn_f5:	a7			#f5
+mem_keyboard_fn_f6:	a8			#f6
+mem_keyboard_fn_f7:	eb			#f7
+mem_keyboard_fn_f8:	e9			#f8
+mem_keyboard_fn_f9:	ec			#f9
+mem_keyboard_fn_f10:	ed			#f10
+mem_keyboard_fn_f11:	ee			#f11
+mem_keyboard_fn_f12:	a9			#f12
+mem_keyboard_fn_del:	4c			#delete
+
+# 00: disable           01: enable
+mem_keyboard_fn_arrow_enable_flag:01
+mem_keyboard_fn_left_ctrl_enable_flag:01
+mem_keyboard_fn_space_enable_flag:01
+mem_keyboard_fn_system_switch_enable_flag:00
+
+
+mem_keyboard_commbination_fast_conn_bt:2a 10	# bs+M
+

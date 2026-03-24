@@ -1,0 +1,1770 @@
+
+//define YC1121SB
+
+//define RAM_VERSION
+//define CLK24M
+define SECURE_CONNECTION
+//define COMPILE_KEYSCAN
+define NEC
+
+define DEBUG_RF_INIT
+
+define COMPILE_SHUTTER
+define COMPILE_MOUSE
+define COMPILE_MODULE
+define COMPILE_USB
+define COMPILE_DONGLE
+define COMPILE_LE
+define COMPILE_24G
+define COMPILE_CAR
+//define COMPILE_PEN
+define COMPILE_REMOTE_CAR
+//define COMPILE_WECHAT
+//define COMPLIE_TEST
+define COMPLIE_ADPCM
+
+INCLUDE "bt_format"
+
+org 0x0000		// start from patch ram address start
+ifdef SIM
+include sim.prog
+else
+include patch.prog
+endif
+
+/******************************************/
+/***********   ROM Start   ***************/
+/******************************************/
+
+org 0x2000		// start from rom address start
+start:
+	call lpmstate
+
+soft_reset:
+	bpatch patch00_0,mem_patch00
+	clear_stack
+
+	call app_param_init
+	call initialize_radio
+	call iic_init_360khz
+	call init_param
+	call l2cap_init
+	bpatch patch00_1,mem_patch00
+	call ui_init
+	call app_init
+ifdef SECURE_CONNECTION
+	call publickey_init
+//	call sp_wait_pubkey_calc_done
+endif
+	call lpm_recover_clk,wake
+main_loop:	
+	bpatch patch00_2,mem_patch00
+ifdef SECURE_CONNECTION
+	call sp_calc_sequence_256
+	call sp_calc_sequence_256_check
+endif
+	call le_advertising_dispatch
+	call idle_dispatch
+	call app_process_idle
+	call connection_dispatch
+	call g24_dispatch
+	call lpm_dispatch
+	call kscan_dispatch
+	branch main_loop
+
+connection_dispatch:
+	call connection_incontext
+	rtnmark0 mark_context
+	set0 mark_context,mark
+	call context_save
+	branch le_disable
+	
+connection_incontext:
+	bpatch patch00_3,mem_patch00
+	call context_search_insniff
+	nbranch connection_nosniff,zero
+	call context_load
+	add rega,coffset_mode,contr
+	ifetch 1,contr
+	bbit1 mode_le,le_conn_dispatch
+//	bbit1 mode_master, master_dispatch
+//	branch slave_dispatch
+	rtn
+	
+connection_nosniff:
+	jam 0,mem_current_context
+	call context_get_next
+	copy loopcnt,null
+	rtn zero
+	branch assert
+
+
+/**************************************/
+/**************idle dispatch*********/
+/**************************************/
+	
+idle_dispatch:
+	fetch 1,mem_hci_cmd
+	rtn blank
+	beq hci_cmd_le_create_conn,idle_le_create_conn
+	call context_search_conn_handle
+	rtn zero
+	call context_search_plap
+	rtn zero
+idle_exit:
+	jam 0,mem_hci_cmd
+	rtn
+
+idle_le_create_conn:
+	jam hci_cmd_le_create_conn,mem_cmd_le_create_conn
+	jam 0,mem_hci_cmd
+	rtn
+
+
+
+context_load:
+	bpatch patch00_4,mem_patch00
+	set1 mark_context,mark
+	deposit rega
+	store 2,mem_context_ptr
+	force context_size,loopcnt
+	arg mem_le_state,contw
+	add rega,coffset_mode,contr
+	ifetch 1,contr
+	copy rega,contr
+	bbit1 mode_le,memcpy
+	rtn
+	
+context_save:
+	bpatch patch00_5,mem_patch00
+	fetch 2,mem_context_ptr
+	iforce contw
+	force context_size,loopcnt
+	arg mem_le_state,contr
+	branch memcpy
+	
+	
+
+context_get_next:
+	arg context_num,loopcnt
+	fetcht 1,mem_current_context
+context_get_next_loop:
+	increase 1,temp
+	compare context_num,temp,0xff
+	nbranch context_get_next_cont,true
+	arg 0,temp
+context_get_next_cont:
+	storet 1,mem_current_context
+	mul32 temp,context_size,pdata
+	arg mem_context,rega
+	iadd rega,rega
+	ifetch 1,rega
+	bbit1 state_insniff,context_get_next_sniff
+	rtnbit1 state_inconn
+context_get_next_sniff:
+	loop context_get_next_loop
+	rtn
+	
+context_new:
+	bpatch patch00_6,mem_patch00
+	arg context_search_empty,regc
+	call context_search
+	nrtn zero					// all occupied
+	deposit rega
+	store 2,mem_context_ptr
+	branch enable_zero
+	
+
+	
+	//rtn nzero if idle(no conn)
+context_check_idle:
+	arg context_check_inconn,regc
+	branch context_search
+	
+
+	
+	/* return zero if conn handle is found */
+context_search_conn_handle:
+	fetcht 1,mem_hci_conn_handle
+context_search_conn_handle2:
+	arg context_search_handle,regc
+	branch context_search
+	
+	/* return zero if plap is found */
+context_search_plap:
+	bpatch patch00_7,mem_patch00
+	fetcht 6,mem_hci_plap
+context_search_plap2:
+	arg context_search_lap,regc
+	branch context_search
+	/* return zero if sniff anchor is meet and rega pointers to context */
+context_search_insniff:
+	arg context_search_sniff,regc
+	branch context_search
+	/* return zero if sniff window is in content with current transaction */
+context_search_sniff_window:
+	arg context_search_window,regc
+context_search:
+	bpatch patch01_0,mem_patch01
+	arg mem_context,rega
+	arg context_num,loopcnt
+context_search_loop:
+	ifetch 1,rega
+	copy regc,pc
+context_search_next:
+	bpatch patch01_1,mem_patch01
+	increase context_size,rega
+	loop context_search_loop
+	force 1,null
+	rtn
+
+context_search_empty:
+	bbit1 state_inconn,context_search_next
+	branch enable_zero
+	
+context_search_lap:
+	bbit0 state_inconn,context_search_next
+context_search_lap_cont:
+	add rega,coffset_plap,contr
+	ifetch 6,contr
+	isub temp,null
+	rtn zero
+	branch context_search_next
+
+context_search_handle:
+	bbit0 state_inconn,context_search_next
+	add rega,coffset_conn_handle,contr
+	ifetch 1,contr
+	isub temp,null
+	rtn zero
+	branch context_search_next
+
+context_search_sniff:
+	bbit0 state_insniff,context_search_next
+context_search_sniff_loop:
+	call context_get_anchor
+	call sign_pdata_temp
+	isub temp,pdata
+	increase 1,pdata
+	branch context_search_sniff_miss,positive
+	copy contr,regb
+	store 9,mem_temp
+	bpatch patch01_2,mem_patch01
+ifdef SECURE_CONNECTION
+	fetch 1,mem_sc_calc
+	nbranch context_search_sniff_sc,blank
+endif	
+	fetch 9,mem_temp
+	copy regb,contr
+	increase 5,pdata  
+	branch context_search_meet1
+	
+ifdef SECURE_CONNECTION
+context_search_sniff_sc:
+	fetch 9,mem_temp
+	copy regb,contr	
+	increase 20,pdata  
+endif	
+context_search_meet1:
+	nbranch context_search_next,positive
+context_search_meet:
+	copy temp,bt_clk
+	call context_next_anchor
+	branch enable_zero
+	
+	
+context_search_sniff_miss:
+	iforce regb
+	add rega,coffset_tsniff,contr
+	ifetch 2,contr
+	branch context_search_meet,blank
+	call context_next_anchor
+	branch context_search_sniff_loop
+
+sign_pdata_temp:
+	rshift16 pdata,timeup    
+	rshift8 timeup,timeup    
+	branch sign_pdata_temp_p0,zero    
+	compare 0xf,timeup,0xf    
+	nrtn true    
+	rshift16 temp,timeup    
+	rshift8 timeup,timeup    
+	nrtn zero    
+	set1 28,temp    
+	rtn
+sign_pdata_temp_p0:    
+	rshift16 temp,timeup    
+	rshift8 timeup,timeup    
+	compare 0xf,timeup,0xf    
+	nrtn true    
+	set1 28,pdata    
+	rtn
+
+context_check_inconn:
+	bbit0 state_inconn,context_search_next
+	branch enable_zero			// found
+
+	
+context_check_a_wack:
+	bbit0 state_inconn,context_search_next
+	add rega,coffset_mode,contr
+	ifetch 1,contr
+	bbit1 mode_le,context_search_next
+	rtn
+
+context_get_anchor:
+	add rega,coffset_mode,contr
+	ifetcht 1,contr
+	deposit clkn_bt
+	isolate1 mode_master,temp
+	add rega,coffset_sniff_anchor,contr
+	ifetcht 4,contr
+	rtn true
+	add rega,coffset_clk_offset,contr
+	ifetch 6,contr
+	call calc_clke2
+	deposit clke_bt
+	rtn
+
+context_next_anchor:
+	add rega,coffset_tsniff,contr
+	add rega,coffset_sniff_anchor,contw
+	ifetch 2,contr
+	iadd temp,timeup			/* wrap to 28 bits */
+	deposit timeup
+	istore 4,contw
+	branch le_context_nextevent
+	
+
+context_search_window:
+	bbit0 state_insniff,context_search_next
+	call context_get_anchor
+	iadd stop_watch,pdata
+	iadd stop_watch,pdata
+	iadd queue,pdata
+	isub temp,null
+	nbranch context_search_next,positive
+	branch enable_zero
+
+
+
+end_of_packet:
+	bpatch patch01_3,mem_patch01
+	disable lr_s2en
+	disable encode_fec0
+	disable encode_fec2
+	disable decode_fec0
+	disable decode_fec2
+	disable enable_crc
+	disable encrypt
+	disable enable_white
+	branch shutdown_radio,is_rx
+	until null,tx_clear
+	nop 100          /* flush out the last bit */
+	branch shutdown_radio
+
+
+
+	/* enable user if sniff window vialation, queue is extra overhead */
+sniff_check_window:
+	bpatch patch01_4,mem_patch01
+	disable swfine
+	copy temp,stop_watch
+	call context_search_sniff_window
+	disable user
+	nrtn zero
+	force 0,stop_watch
+	branch enable_user
+
+
+calc_slot_offset:
+	bpatch patch01_5,mem_patch01
+	until null,halfslot
+	deposit clke
+	iforce contr
+	rshift16,pdata,pdata
+	isub clkn_bt,loopcnt
+	and_into 3,loopcnt			/* bt portion */
+	nbranch calc_bt_portion,zero
+	force 0,pdata
+	branch calc_skip_bt
+calc_bt_portion:
+	fetcht 2,mem_param_rt_rthalfslot
+	force 0,pdata
+calc_slot_offset_loop:
+	iadd temp,pdata
+	loop calc_slot_offset_loop
+calc_skip_bt:
+	iadd contr,pdata			/* add rt portion */
+	div pdata,12
+	call get_div_result
+	store 2,mem_slot_offset
+	rtn
+
+calc_clke_offset:
+	bpatch patch01_6,mem_patch01
+	deposit clke
+	copy clkn,temp
+	isub temp,null
+	nsetflag positive,44,pdata
+	isub temp,temp
+	fetch 2,mem_param_rt_rthalfslot
+	isolate0 15,temp
+	branch calc_clke_pos,true
+	copy temp,alarm
+	arg 0x10000,temp
+	fetch 2,mem_param_rt_rthalfslot
+	isub temp,pdata
+	iadd alarm,temp
+	
+calc_clke_pos:
+	storet 6,mem_le_clk_offset
+	rtn
+
+calc_clke:
+	disable clknt
+	fetch 6,mem_le_clk_offset
+calc_clke2:
+	iadd clkn,alarm
+	increase 10,alarm
+	fetch 2,mem_param_rt_rthalfslot
+	isub alarm,pdata
+	isolate0 15,pdata
+	branch calc_clke_pos_adj,true
+	setarg 0x10000
+	fetchr regd,2,mem_param_rt_rthalfslot
+	isub regd,pdata
+	iadd alarm,alarm
+calc_clke_pos2:
+	copy alarm,clke
+	rtn
+calc_clke_pos_adj:		/* add 2 clock */
+	force 0,null
+	branch calc_clke_pos2
+	
+/******************************************/
+/********* RF related functions ***********/
+/******************************************/
+
+
+qsetxor:
+	rshift3 pdata,pdata
+	ifetchr rega,1,contw
+	ixor rega,pdata
+	isolate0 6,pdata
+	branch qset_p
+
+qset1_p:
+	isolate0 0,null
+qset_start:
+	arg 0x8ac2,contw
+qset_p:
+	ifetch 1,contw
+	qsetflag true,pdata
+	istore 1,contw
+	rtn
+	
+rx_dcoc_avg:
+	nop 60
+btdma:
+//	call btdma
+	jam 8,0x8983
+	jam 9,0x8985
+	jam 0x9,0x8981
+	jam 0x3,0x8981
+	jam 0x6,0x8980	
+	nop 60
+	arg 0,rega
+	arg 0,regb
+	arg 16,loopcnt
+	arg 0x800,contr
+rx_dcoc_loop:
+	ifetch 2,contr
+	iadd rega,rega
+	ifetch 2,contr
+	iadd regb,regb
+	loop rx_dcoc_loop
+	rtn
+
+rx_dcoc:
+	bpatch patch01_7,mem_patch01
+	call set_sync_on
+	arg 39,temp
+	call set_freq_rx	
+	call rf_rx_enable
+	jam 0x7f,0x8a25
+	jam 0x1a,0x8a30
+	jam 0x78,0x8a31
+	jam 0xb2,0x8a8f
+	jam 0,0x8ac2
+	jam 0,0x8ac3
+	arg 6,queue
+	call rx_dcoc_avg
+	isolate1 13,rega
+	call qset_start
+	isolate1 13,regb
+	call qset_p
+	arg 5,queue
+rx_dcoc_loop2:
+	call qset1_p
+	call qset_p
+	call rx_dcoc_avg
+	arg 0x8ac2,contw
+	rshift4 rega,pdata
+	call qsetxor
+	rshift4 regb,pdata
+	call qsetxor
+	increase -1,queue
+	branch rx_dcoc_loop2,positive
+	jam 0x52,0x8a8f
+	jam 2,0x8a30
+	jam 0,0x8981
+	
+shutdown_radio:
+	bpatch patch02_0,mem_patch02
+	call rf_debug_shutdown_radio_line	//L-H-L
+	disable is_tx
+	disable is_rx
+	setarg 0x0200
+	store 4,0x8a23
+	jam 0xfa,0x8a01
+	nop 12
+	jam 0,0x8a0f
+	jam 0x1a,0x8a12
+	jam 0x2b,0x8a14
+	force 8,radio_ctrl
+	force 0,radio_ctrl
+//	rtn
+	branch gain_control
+
+set_sync_on:
+	bpatch patch02_1,mem_patch02
+	jam 0x60,0x8a0f 
+	jam 0xaa,0x8a10 
+	jam 0x7a,0x8a12 
+	jam 0x00,0x8a25 
+	jam 0x00,0x8a26 
+	nop 60
+	jam 0x20,0x8a20 
+	jam 0xfd,0x8a23 
+	jam 0x12,0x8a24 
+	jam 0x10,0x8a24 
+	nop 60
+	jam 0x60,0x8a12 
+	jam 0xdd,0x8a23 
+	rtn
+
+set_freq_rx:
+	bpatch patch02_2,mem_patch02
+	jam 0x01,0x8900 
+	jam 0x9d,0x8a23 
+	jam 0x02,0x8a24 
+	nop 20 
+	jam 0x65,0x8a70
+	jam 0x9f,0x8a23
+	call set_lemode
+	storet 1,mem_last_freq
+	increase 1,temp
+//	branch aac_res_lookup
+	
+/* temp is frequency, 00=2400Mhz */
+aac_res_lookup:
+	bpatch patch02_3,mem_patch02
+	rshift4 temp,pdata
+	arg mem_aac_res_table,contr
+	iadd contr,contr
+	ifetch 1,contr
+	fetchr rega,1,0x8a71
+	and_into 0xf,rega
+	ior rega,pdata
+	store 1,0x8a71
+	call calc_freq
+	nop 144
+	fetch 1,mem_fcomp_div
+	beq XTAL_24M,aac_res_lookup_end
+	nop 36
+aac_res_lookup_end:
+	jam 0x80,0x8a20
+	rtn
+
+
+set_lemode_2m_16m:
+	setarg 0x8312
+	store 2,0x8907
+	branch set_lemode_2m
+
+set_lemode_1m_16m:
+	setarg 0x4189
+	store 2,0x8907
+	branch set_lemode_1m
+
+
+set_lemode:
+	bpatch patch02_4,mem_patch02
+	jam 0x11,0x8a82
+	jam 0x12,0x8a8d
+	jam 0x0a,0x8a8e
+	fetch 1,mem_fcomp_div
+	beq XTAL_16M,set_lemode_2m_16m
+	setarg 0x5762
+	store 2,0x8907
+set_lemode_2m:
+	jam 3,0x8901
+	jam 0x84,0x8920	
+	rtnmark1 mark_ble_2M
+	jam 1,0x8901
+	jam 0x80,0x8920
+	jam 0x07,0x8a82
+	jam 0x44,0x8a8d
+	jam 0x0a,0x8a8e
+	fetch 1,mem_fcomp_div
+	beq XTAL_16M,set_lemode_1m_16m
+	setarg 0x2bb1
+	store 2,0x8907
+set_lemode_1m:
+	rtnmark0 mark_ble_lr
+	jam 5,0x8901
+	rtn
+
+rf_rx_enable:
+	bpatch patch02_5,mem_patch02
+	call rf_debug_rx_gpio_high
+	call rf_rx_agc_set
+	force 8,radio_ctrl
+	force 0,radio_ctrl
+
+	setarg 0x0aaada
+	store 3,0x8a0f
+	jam 0x40,0x8a25
+	jam 0x10,0x8a26
+	nop 60
+	jam 0xfb,0x8a01
+	jam 0xff,0x8a25
+	jam 0x30,0x8a26
+	jam 0x5e,0x8a16
+	nop 20
+	jam 0x00,0x8a10
+	jam 0x08,0x8a11
+	nop 120
+	jam 0xd,0x8900
+	rtn
+
+	
+rf_rx_agc_set:
+	fetch 1,mem_gain_fix
+	beq 0xff,rf_rx_enable_no_soft_agc 
+	arg mem_gain_table,contr
+	iadd contr,contr
+	ifetch 1,contr
+	store 1,core_rf_rx_gain_fix
+	jam 0x27,core_rf_rx_agc_ctrl
+	
+rf_rx_enable_no_soft_agc:
+	fetcht 1,mem_gain_second_agc_en	//0x00 or 0x08
+	fetch 1,core_rf_rx_agc_ctrl
+	ior temp,pdata
+	store 1,core_rf_rx_agc_ctrl
+	rtn
+	
+
+set_freq_tx_int:
+	jam 0x03,0x8900 
+	jam 0x02,0x8a24 
+	nop 20 
+	jam 0x65,0x8a70
+	jam 0xdf,0x8a23
+	call set_lemode
+	call ghp_lookup
+	storet 1,mem_last_freq
+	increase 2,temp
+	branch aac_res_lookup
+
+
+/* temp is frequency, 00=2400Mhz */
+calc_freq:
+	bpatch patch02_6,mem_patch02
+	setarg 2400
+	iadd temp,pdata
+	copy pdata, rega
+	fetcht 1,mem_fcomp_div
+	rshift temp,temp
+	idiv temp
+//	mul32 pdata,12,rega
+	call wait_div_end
+	quotient pdata
+	store 2,0x8909
+	remainder pdata
+	lshift16 pdata,pdata
+	lshift8 pdata,pdata
+	idiv temp
+	call wait_div_end
+	quotient pdata
+	store 3,0x890b
+//	deposit rega
+//	idiv temp
+//	call wait_div_end
+//	quotient pdata
+	storer rega, 1,0x8a22
+	rshift8 rega,rega
+	storer rega, 1,0x8a21
+	jam 0xa0,0x8a20 
+	jam 0xe0,0x8a20 
+	jam 0xa0,0x8a20
+	rtn
+
+ghp_lookup:
+	add temp,2,pdata
+	rshift3 pdata,pdata
+	and_into -2,pdata
+	arg mem_ghpc_table,contr
+	bmark0 mark_ble_2M,ghp_1m
+	increase 12,contr
+ghp_1m:
+	iadd contr,contr
+	ifetchr rega,2,contr
+	ifetch 2,contr
+	isub rega,pdata
+	add temp,2,contr
+	and_into 0xf,contr
+	imul32 contr,pdata
+	rshift4 pdata,pdata
+	iadd rega,pdata
+	store 2,0x8905
+	rtn
+
+
+
+set_freq_tx:
+	bpatch patch02_7,mem_patch02
+	call set_freq_tx_int
+	nop 600 //50us
+
+txon:
+	bpatch patch03_0,mem_patch03
+	setarg 0x0aaa7e
+	store 3,0x8a0f
+	nop 60
+	jam 0x00,0x8a25 
+	jam 0x0d,0x8a26 
+	jam 0x56,0x8a16 
+	nop 30
+	jam 0x1b,0x8a15 
+	call set_tx_power
+	nop 20
+	jam 0x0f,0x8a26 
+	nop 20
+	jam 0xa8,0x8a10 
+	jam 0x00,0x8a11 
+	rtn
+	
+set_tx_power:	
+	bpatch patch03_1,mem_patch03
+	fetch 1,mem_tx_power
+	beq TX_POWER_0DB,set_tx_power_0db
+	beq TX_POWER_3DB,set_tx_power_3db
+	beq TX_POWER_5DB,set_tx_power_5db
+	beq TX_POWER_7DB,set_tx_power_7db
+	beq TX_POWER_10DB,set_tx_power_10db
+	beq TX_POWER_F3DB,set_tx_power_f3db
+	beq TX_POWER_F5DB,set_tx_power_f5db
+	beq TX_POWER_F10DB,set_tx_power_f10db
+	beq TX_POWER_F20DB,set_tx_power_f20db
+set_tx_power_0db:
+	jam 0x17,0x8a14 
+	setarg 0x251a3f
+	store 3,0x8a60
+set_tx_power_8a63_28:	
+	jam 0x28,0x8a63 
+	rtn
+
+set_tx_power_3db:
+	jam 0x25,0x8a14 
+	setarg 0xa91c2d
+	store 3,0x8a60
+set_tx_power_8a63_2f:	
+	jam 0x2f,0x8a63 
+	rtn
+
+set_tx_power_5db:
+	jam 0x25,0x8a14 
+	setarg 0xa91c3f
+	store 3,0x8a60
+	branch set_tx_power_8a63_2f
+
+set_tx_power_7db:
+	jam 0x25,0x8a14 
+	setarg 0xa9383f
+	store 3,0x8a60
+	branch set_tx_power_8a63_2f
+
+set_tx_power_10db:
+	jam 0x25,0x8a14 
+	setarg 0xa93f3f
+	store 3,0x8a60
+	branch set_tx_power_8a63_2f
+
+
+set_tx_power_f3db:
+	jam 0x17,0x8a14 
+	setarg 0x251827
+	store 3,0x8a60
+	branch set_tx_power_8a63_28
+	
+set_tx_power_f5db:
+	jam 0x17,0x8a14 
+	setarg 0x25181c
+	store 3,0x8a60
+	branch set_tx_power_8a63_28
+
+set_tx_power_f10db:
+	jam 0x17,0x8a14 
+	setarg 0x25180b
+	store 3,0x8a60
+	branch set_tx_power_8a63_28
+
+set_tx_power_f20db:
+	jam 0x17,0x8a14 
+	setarg 0x251000
+	store 3,0x8a60
+	branch set_tx_power_8a63_28
+
+
+
+initialize_radio:
+	jam clksel_rc,core_clksel
+initialize_radio_wait:
+	fetch 2,mem_rf_init_ptr
+	bbit0 14,initialize_radio_wait
+	iforce contr
+	arg 0x8a00,temp		//read 8a00 data->null :no run
+initialize_radio_loop:
+	ifetch 1,contr
+	beq 0xff,initialize_radio_cont
+	ior temp,contw
+	ifetch 1,contr
+	istore 1,contw
+	branch initialize_radio_loop
+	
+initialize_radio_cont:
+	bpatch patch03_2,mem_patch03
+	fetch 1,mem_wdt_always_work
+	call wdt_set_disable,blank
+
+	until null,lpo_edge
+	jam 0x5f,0x813b 
+	fetch 1,mem_fcomp_div
+	beq XTAL_16M,initialize_radio_16m
+	fetch 1,mem_ring_ibias_trim
+	or_into 0x04,pdata
+	store 1,0x8a02
+	jam 0x01,0x890f
+	jam 0x24,0x8a80
+	jam 0x62,0x8a81
+	setarg 0xe61212
+	store 3,0x8a73	
+initialize_radio2:
+//	call gpio_set_before_lpm
+	jam 0x60,0x8a86
+	jam 0x3b,0x8a8b 
+
+	call dpll_on
+	jam 0,core_config
+	jam CLKSEL_DPLL,core_clksel
+	setarg 0x557474
+	store 3,0x8968
+	jam 0x6e,0x8960
+	call rx_dcoc
+	call rfpll_aac_ghpc
+	fetch 1,mem_xtal_c_sel
+	store 1,core_xtal_cap
+//	jam 0x3e,core_xtal_cap
+	jam SYSTEM_CLK_12M,mem_system_clk
+	call sadc_calibration
+	branch dpll_ring_ibias_calc
+	
+initialize_radio_16m:
+	fetch 1,mem_ring_ibias_trim
+	or_into 0x06,pdata
+	store 1,0x8a02
+	jam 0x00,0x890f
+	jam 0x23,0x8a80
+	jam 0xb0,0x8a81
+	setarg 0xe40909
+	store 3,0x8a73
+	jam 0x2a,0x8a76
+	jam 0x04,0x8902	
+	branch initialize_radio2
+
+rfpll_aac_ghpc:
+	bpatch patch03_3,mem_patch03
+	call set_sync_on
+	jam 3,0x8900
+	jam 0x1,0x8a70
+	arg mem_ghpc_table,regb
+	arg mem_aac_res_table,regd
+	call rfpll_aac_ghpc_once
+	set1 mark_ble_2M,mark
+	call rfpll_aac_ghpc_once
+	jam 0x61,0x8a70
+	branch shutdown_radio
+
+rfpll_aac_ghpc_once:
+	call set_lemode
+	arg 6,loopcnt
+	arg 0,regc
+rfpll_cal_loop:
+	copy regc,temp
+	call aac_ghpc
+	increase 2,regb
+	increase 1,regd
+	increase 16,regc
+	loop rfpll_cal_loop
+	rtn
+
+dpll_on:
+	fetch 1,mem_fcomp_div
+	beq XTAL_24M,dpll_on_24m
+	fetch 1,mem_ring_ibias_trim
+	or_into 0x06,pdata
+	store 1,0x8a02
+	jam 0xe0,0x8a05
+dpll_on_24m:	
+	jam 0xc8,0x8a00
+	nop 60
+	jam 0xa0,0x8a01
+	jam 0xcf,0x8a00
+	jam 0xfa,0x8a01
+	nop 20
+	jam 0x8f,0x8a00
+	rtn
+
+aac_ghpc:
+	bpatch patch03_4,mem_patch03
+	jam 0x30,0x8a20
+	jam 0xdd,0x8a23 
+	call calc_freq
+wait_cal_done:
+	fetch 1,0x8a7c
+	bbit0 0,wait_cal_done
+	jam 0x30,0x8a7b
+	call read_cal_result
+	iforce rega
+	jam 0x40,0x8a7b
+	call read_cal_result
+	isub rega,pdata
+	mul32 pdata,125,temp
+	setarg 0xb00000
+	idiv temp
+	call wait_div_end
+	quotient pdata
+	bmark0 mark_ble_2M,aac_ghpc_1m
+	lshift pdata,pdata
+aac_ghpc_1m:
+	istore 2,regb
+	jam 0x20,0x8a7b
+	fetch 1,0x8a7e
+	lshift4 pdata,pdata
+	istore 1,regd
+	jam 0,0x8a7b
+	rtn
+
+read_cal_result:
+	fetch 2,0x8a7d
+	byteswap pdata,pdata
+	fetcht 1,0x8a7c
+	lshift16 temp,temp
+	ior temp,pdata
+	rtn
+
+//after dpll en and adc calibration
+dpll_ring_ibias_calc:
+	bpatch patch03_5,mem_patch03
+	fetch 1,core_vtest_ctrl0
+	set1 0,pdata
+	store 1,core_vtest_ctrl0
+	jam 0xf0,core_vtest_ctrl1
+	fetch 1,core_bbpll_cfg3
+	or_into 0x16,pdata
+	store 1,core_bbpll_cfg3
+
+	fetch 1,mem_adc_dma_enable
+	store 1,mem_temp
+	fetch 1,mem_adc_channel
+	store 1,mem_temp+1
+	jam 0,mem_adc_dma_enable
+	fetch 1,mem_ring_ibias_calc_adc_channel
+	store 1,mem_adc_channel
+	fetcht 1,mem_ring_ibias_calc_adc_gpio
+	call gpio_set_high_impedance
+
+	arg 0,rega
+	arg 8,loopcnt
+dpll_ring_ibias_read_adc:
+	call enable_adc
+	fetch 2,mem_adc_current_value
+	iadd rega,rega
+	loop dpll_ring_ibias_read_adc
+	rshift3 rega,rega
+	store 2,mem_adc_current_value
+
+	fetch 1,mem_temp
+	store 1,mem_adc_dma_enable
+	fetch 1,mem_temp+1
+	store 1,mem_adc_channel
+
+	fetch 1,core_bbpll_cfg3
+	and_into 0xe0,pdata
+	store 1,core_bbpll_cfg3
+	jam 0x00,core_vtest_ctrl1
+	fetch 1,core_vtest_ctrl0
+	set0 0,pdata
+	store 1,core_vtest_ctrl0
+
+	call vdd_calculate_by_mode
+	fetcht 2,mem_ring_ibias_vtune_high
+	isub temp,null
+	branch ring_ibias_trim_incrs,positive
+	fetcht 2,mem_ring_ibias_vtune_low
+	isub temp,null	
+	rtn positive
+ring_ibias_trim_decrs:
+	fetch 1,mem_ring_ibias_trim
+	rtneq 0x00
+	increase -32,pdata
+	store 1,mem_ring_ibias_trim
+	rtn
+
+ring_ibias_trim_incrs:
+	fetch 1,mem_ring_ibias_trim
+	rtneq 0xe0
+	increase 32,pdata
+	store 1,mem_ring_ibias_trim
+	rtn
+
+	
+save_rssi:
+	bpatch patch03_6,mem_patch03
+	 // bit6 is signed bit.
+	fetch 1,modem_nb_pow
+	isolate1 6,pdata
+	setflag true,7,pdata
+	store 1,mem_modem_rssi
+
+	fetch 1,modem_gain
+	and pdata,0x0f,temp
+	lshift temp,temp
+	rshift4 pdata,pdata
+	iadd temp,temp
+	mul32 temp,3,rega // (abb_gain + lna_gain*2)*3
+
+	fetch 1,mem_modem_rssi
+	call byte_sign_extern
+	sub pdata,0,pdata //-modem_nb_pow
+	iadd rega,pdata // (abb_gain + lna_gain*2)*3 + (-modem_nb_pow)
+	increase -9,pdata // (abb_gain + lna_gain*2)*3 + (-modem_nb_pow) - 9
+	and pdata,0x1ff,pdata
+	isolate1 8,pdata
+	nbranch save_rssi_store,true
+	setarg 0	 
+save_rssi_store:
+	store 1,mem_rssi_hex
+	branch rssi_hex2dec
+ 
+byte_sign_extern:
+	isolate1 7,pdata
+	nrtn true
+	arg 0xff00,temp
+	ior temp,pdata
+	rtn
+ 
+rssi_hex2dec:
+	fetch 1,mem_rssi_hex
+	call bcd
+	store 1,mem_rssi			 
+	rtn
+
+bcd:
+	and_into 0xff,pdata
+	div pdata,10
+	call get_div_result
+	lshift4 pdata,pdata
+	remainder temp
+	ior temp,pdata
+	rtn
+
+gain_control:
+	bpatch patch03_7,mem_patch03
+	fetch 1,mem_gain_fix
+	rtneq 0xff
+	nbranch  gain_increase,sync
+	fetch 1,mem_modem_rssi
+	sub pdata,0xf0,null
+	nbranch gain_descend,positive
+	sub pdata,0x7f,null
+	branch gain_descend,positive
+	
+	fetchr rega, 1,core_rf_rx_gain_fix
+	fetch 1,mem_gain_fix
+	rtneq 0	
+	arg mem_gain_table,contr
+	iadd contr,contr
+	ifetch 1,contr
+	isub rega,null
+	nrtn zero
+	increase -2,contr
+	ifetcht  1,contr
+	rshift4 temp,pdata
+	rshift4 rega,regb
+	isub regb,regb
+	and temp,0xf,pdata
+	and rega,0xf,rega
+	isub rega,rega
+	lshift rega,pdata
+	iadd regb,regb
+	mul32 regb,3,regb
+	fetcht 1,mem_modem_rssi
+	and temp,0x80,pdata
+	rtn blank
+add_negative:
+	setarg 0x100
+	isub temp,temp
+	copy regb,pdata
+	isub temp,pdata
+	rtn positive
+	and pdata,0xff,pdata
+	rtneq 0xff
+	rtneq 0xfe
+	
+gain_increase:	
+	fetch 1,mem_gain_fix
+	beq 1,set_rx_gain0
+	beq 2,set_rx_gain1
+//	beq 0,set_rx_gain0
+	branch set_rx_gain0
+	
+gain_descend:
+	fetch 1,mem_gain_fix
+	beq 0,set_rx_gain1
+	beq 1,set_rx_gain2
+//	beq 2,set_rx_gain2
+set_rx_gain2:
+	jam 2,mem_gain_fix
+	rtn
+
+set_rx_gain0:
+	jam 0,mem_gain_fix
+	rtn
+	
+set_rx_gain1:
+	jam 1,mem_gain_fix
+	rtn
+
+	
+
+
+
+	/* pdata = clks ahead of bt_clk */
+ahead_window:
+	copy pdata,temp
+	bpatch patch04_0,mem_patch04
+	copy temp,pdata
+	call clk2bt
+	lshift16 bt_clk,pdata
+	set1 44,pdata
+	call clk_diff
+	set0 44,pdata
+	call get_clk
+	call clk_diff
+	rtn user
+	call clk2rt
+	iforce stop_watch
+	until null,timeout
+	rtn
+
+
+get_clk:
+	copy clkn,temp
+	rtn master
+	copy clke,temp
+	rtn
+
+get_clkbt:
+	deposit clkn_bt
+	rtn master
+	deposit clke_bt
+	rtn
+
+
+assert:
+	bpatch patch04_1,mem_patch04
+	branch assert
+	
+
+sleep:	
+	rtn blank
+	/* sleep pdata clocks, only even clocks are accurate */
+	rshift pdata,pdata
+	increase -3,pdata
+sleep_loop:	
+	increase -1,pdata
+	nbranch sleep_loop,zero
+	force 0,pdata
+	rtn
+
+
+
+init_param:
+
+	setarg param_tx_setup
+	store 2,mem_param_tx_setup
+	setarg param_rf_setup
+	store 2,mem_param_rf_setup
+	setarg param_conn_access
+	store 2,mem_param_conn_access
+	setarg param_rx_setup
+	store 2,mem_param_rx_setup
+	setarg param_clke_cal
+	store 2,mem_param_clke_cal
+	setarg param_pll_setup
+	store 2,mem_param_pll_setup
+	setarg param_dpll_start_delay
+	store 2,mem_param_dpll_start_delay
+	setarg param_rt_rthalfslot
+	store 2,mem_param_rt_rthalfslot
+	setarg param_clke_cal_le_1m
+	store 2,mem_param_clke_cal_le_1m
+	setarg param_clke_cal_le_2m
+	store 2,mem_param_clke_cal_le_2m
+	setarg param_clke_cal_le_coded
+	store 2,mem_param_clke_cal_le_coded
+	
+	bpatch patch04_2,mem_patch04
+	rtn wake
+	setarg ATT_DEFAULT_MTU
+	store 2,mem_le_remote_mtu
+	jam PARAM_T_IFS_150US+PARAM_SYNC_TIME_DIFFERENCE,mem_le_tx_ifs_defference
+	setarg mem_ble_tx_buff0
+	store 2,mem_ble_l2cap_tx_buff0_ptr
+	setarg mem_ble_l2cap_tx_buff_size
+	store 2,mem_ble_l2cap_tx_buff_size_ptr	
+	rshift clkn_bt,pdata
+	store 4,mem_last_clkn
+	rtn
+
+
+
+
+/*****************************************LPM************************************************/
+
+lpmstate:
+	setarg 0xee21
+	store 2,core_clkoff			// disable unused peripherals
+	fetchr alarm,4,core_gpio_in
+	fetch 1,core_lpm_isogate
+	bbit0 gpio_latch,power_up
+	enable wake
+	bbit1 cold_wake,lpmwake		// wakeup from lpm	
+	disable wake
+	deposit auxcnt
+	nbranch lpmwake,blank		// sleep interrupted, wakeup
+	fetch 1,core_lpm_sysctl
+	bbit1 reload_code,lpmwake
+	arg param_hibernate_clks,temp
+	branch lpm_enter_sleep
+lpmwake:
+	call lpm_poweron_retmem
+	call lpm_load_context,wake
+	fetch 1,core_lpm_isogate
+	set0 gpio_latch,pdata			// enable gpio normal function after load gpio configuration
+	store 1,core_lpm_isogate		
+	nbranch boot_load,wake		// wakeup from hibernate
+ifdef YC1121SB
+	nop 1
+else
+	call clean_smem
+endif	
+	storer alarm,4,mem_saved_gpio_in
+	rtn
+
+power_up:
+	call lpm_poweron_retmem
+boot_load:
+	call loadcode	
+	storer alarm,4,mem_saved_gpio_in
+	rtn
+
+lpm_poweron_retmem:
+	until null,lpo_edge
+	fetch 1,core_lpm_ldosel
+	and_into 0x88,pdata			// clear ldo to default all zero 
+	store 1,core_lpm_ldosel
+	until null,lpo_edge
+	fetch 1,core_lpm_isogate
+	or_into 0xf,pdata				// turn on all retmem switch
+	store 1,core_lpm_isogate		
+	until null,lpo_edge
+	set1 isogate,pdata				// turn on isolation gate
+	store 1,core_lpm_isogate		
+	until null,lpo_edge
+	set1 retmem_cs,pdata			// assert CSN
+	store 1,core_lpm_isogate		
+	until null,lpo_edge
+	rtn
+
+lpm_xtal_default:
+	until null,lpo_edge
+	jam 0x76,core_xtal_ib
+	until null,lpo_edge
+	jam 0x37,core_xtal_cap
+	rtn
+
+xtal_fast_wake:
+	until null,lpo_edge
+	jam 0x76,core_xtal_ib
+	until null,lpo_edge
+	jam 0x37,core_xtal_cap
+	rtn
+
+lpm_write_lock:
+//	fetch 1,mem_ucode_flag
+//	and pdata,0xf,temp
+	fetch 1,mem_device_option
+	lshift4 pdata,pdata
+//	ior temp,pdata
+	store 1,core_ucode_flag
+	until null,lpo_edge
+	fetch 1,mem_peripheral_lock_flag
+	set1 rom_lock_bit,pdata
+	set1 option_lock,pdata
+	store 1,core_peripheral_lock
+	branch lpm_write_wait
+	
+lpm_write_ice_disable:
+	fetch 1,core_lpm_sysctl
+	set0 ice_mode,pdata
+	store 1,core_lpm_sysctl
+	rtn
+
+lpm_write_ice_enable:
+	fetch 1,core_lpm_sysctl
+	set1 ice_mode,pdata
+	store 1,core_lpm_sysctl
+	rtn
+
+lpm_preon_counter:
+	fetch 3,mem_lpm_xtalcnt
+	arg core_lpm_xtalcnt,contw
+lpm_write_3bytes:
+	arg 3,loopcnt
+	branch lpm_write_loop
+	
+lpm_write_mpu_s0:
+	arg core_mpu_s0_saddr,contw
+lpm_write_dword:
+	arg 4,loopcnt
+lpm_write_loop:
+	until null,lpo_edge
+	istore 1,contw
+	rshift8 pdata,pdata
+	loop lpm_write_loop
+	branch lpm_write_wait
+
+lpm_write_mpu_s1:
+	arg core_mpu_s1_saddr,contw
+	branch lpm_write_dword
+
+
+lpm_disable_exen_output:
+	fetch 1,core_lpm_ldosel
+	set0 3,pdata
+	store 1,core_lpm_ldosel
+	rtn
+
+lpm_disable_io_dozed:
+	fetch 1,mem_lpm_hv_sel
+	rtn blank
+	set0 LPM_DOZE_EN_BIT,pdata
+	branch lpm_write_sel_hv
+
+lpm_save_sel_hv:
+	store 1,mem_lpm_hv_sel
+lpm_write_sel_hv:
+	store 1,core_io_doze_en
+lpm_write_wait:	
+	until null,lpo_edge
+	rtn
+
+
+lpm_write_io_vsel:
+	store 1,core_io_vsel
+	branch lpm_write_wait
+
+
+lpm_load_context:
+	call lpm_disable_io_dozed
+	fetch 1,mem_saved_spidctrl
+	store 1,core_spid_ctrl
+	arg mem_saved_gpio,contr
+	arg core_gpio_conf,contw
+	call memcpy16
+	arg core_gpio_conf_hi,contw
+	call memcpy8
+	fetchr mark,8,mem_saved_mark
+	arg core_gpio_wakeup_cfg,contr
+	arg mem_gpio_wakeup_cfg,contw
+	arg 12,loopcnt
+	call memcpy
+	branch load_ucode
+
+lpm_save_context:
+	storer mark,8,mem_saved_mark
+	arg core_gpio_conf,contr
+	arg mem_saved_gpio,contw
+	call memcpy16
+	arg core_gpio_conf_hi,contr
+	call memcpy8
+	fetch 1,core_spid_ctrl
+	store 1,mem_saved_spidctrl
+	branch lpm_write_gpio_wakeup
+	
+lpm_write_gpio_wakeup:
+	arg 12,loopcnt
+	arg mem_gpio_wakeup_cfg,contr
+	arg core_gpio_wakeup_cfg,rega
+lpm_write_gpio_loop:
+	ifetch 1,contr
+	ncall lpm_write_gpio,blank
+	increase 1,rega
+	loop lpm_write_gpio_loop
+	rtn
+lpm_write_gpio:
+	istore 1,rega
+	until null,lpo_edge
+	rtn
+
+lpo_calibration:
+	bpatch patch04_3,mem_patch04
+	fetch 1,core_ccnt_bit
+	nbranch lpo_cal_inited,blank
+	fetch 3,mem_clks_per_lpo
+	nrtn blank
+	jam 0xc,core_ccnt_bit
+	jam ccnt_start,core_misc_ctrl
+lpo_cal_inited:
+	fetch 1,core_perf_status
+	rtnbit0 1
+	fetch 3,core_clk_counter
+	store 3,mem_clks_per_lpo
+	rtn
+
+
+	/* temp is lpo counter for doze */
+lpm_doze:
+	fetch 1,mem_lpm_sysctl
+	set1 reload_code,pdata
+	store 1,mem_lpm_sysctl
+
+	/* no retention memory at all */
+lpm_hibernate:
+	bpatch patch04_4,mem_patch04
+	arg param_hibernate_clks,temp
+	fetch 1,mem_lpm_hibernate_switch
+	store 1,mem_lpm_isogate_final	
+	fetch 1,mem_lpm_sysctl
+	store 1,core_lpm_sysctl
+	until null,lpo_edge
+	/* temp is lpo clocks to sleep */
+lpm_sleep:
+	bpatch patch04_5,mem_patch04
+	//call xtal_fast_wake
+	fetch 2,mem_cb_before_lpm_sleep
+	call callback_func
+lpm_sleep_skip_cb_function:
+	fetch 4,mem_sleep_counter_all	// sleep total time, 32k unit
+	iadd temp,pdata
+	store 4,mem_sleep_counter_all
+	call lpm_save_context
+	fetch 1,mem_lpm_hv_sel
+	set1 LPM_DOZE_EN_BIT, pdata
+	call lpm_write_sel_hv
+	ncall lpm_preon_counter,wake
+	until null,lpo_edge
+	storer clkn,6,mem_sleep_clkn
+	fetch 3,mem_lpm_isogate
+	fetchr rega,1,mem_lpm_ldo_sel
+	arg 3,loopcnt
+lpm_sleep_loop:
+	until null,lpo_edge
+	store 1,core_lpm_isogate
+	rshift8 pdata,pdata
+	loop lpm_sleep_loop
+	until null,lpo_edge
+	storer rega,1,core_lpm_ldosel
+lpm_enter_sleep:
+	until null,lpo_edge
+	storet 4,core_lpm_reg
+	jam lpmreg_sel_counter,core_lpm_wr
+	until null,never
+
+lpm_cal_xtal_startup:
+	fetch 1,mem_lpm_xtalcnt
+	nrtn blank
+	jam clksel_rc,core_clksel
+	jam 0xf8,core_lpm_ctrl			// turn off xtal
+	setarg 200000
+	call sleep
+	call xtal_fast_wake
+	until null,lpo_edge
+	jam 0xff,core_lpm_ctrl				// turn on xtal
+	copy lpo_time,alarm
+	jam clksel_xtal,core_clksel
+	nop 10
+	until null,lpo_edge
+	deposit lpo_time
+	isub alarm,pdata
+	increase 0x30,pdata
+	arg 0xff,temp
+	call ceiling
+	store 1,mem_lpm_xtalcnt
+	nop 30000
+	nop 30000
+	nop 30000	
+	rtn
+
+
+lpm_recover_clk:
+	bpatch patch04_6,mem_patch04
+	setarg 0
+	copy auxcnt,null
+	branch lpm_recover_timeout,zero
+	fetch 1,core_lpm_xtalcnt
+	fetcht 1,core_lpm_buckcnt
+	isub temp,null
+	branch lpm_recover_xtal,positive
+	deposit temp
+lpm_recover_xtal:
+	isub auxcnt,pdata
+	increase 1,pdata
+lpm_recover_timeout:
+	increase 8,pdata
+	until null,lpo_edge
+	iadd lpo_time,pdata
+	fetcht 4,mem_sleep_counter
+	iadd temp,pdata
+	fetcht 3,mem_clks_per_lpo
+	imul32 temp,pdata
+	rshift8 pdata,pdata
+	rshift4 pdata,pdata
+	increase param_lpm_fix,pdata
+	fetcht 2,mem_param_rt_rthalfslot
+	idiv temp
+	call get_div_result
+	lshift16 pdata,pdata
+	remainder temp
+	ior temp,pdata
+	fetcht 6,mem_sleep_clkn
+	call clk_add
+	copy temp,clkn
+	fetch 6,mem_context + coffset_clk_offset
+	call calc_clke2
+	deposit clke
+	store 6,mem_pdatatemp
+	deposit auxcnt
+	istore 1,contw
+	fetch 1,core_gpio_in1
+	or_into 0xf0,pdata
+	istore 1,contw
+	rtn
+
+	/* temp is synced clke */
+lpm_adjust_clk:
+	bpatch patch04_7,mem_patch04
+	deposit clke
+	call clk_diff_rt
+	fetcht 4,mem_sleep_counter_all
+	sub temp,0xff,null
+	rtn positive				// interval too small
+	lshift8 pdata,pdata
+	lshift4 pdata,pdata
+	idiv temp
+	call get_div_result
+	arg param_lpm_adjmax,temp
+	call ceiling
+	store 1,mem_lpm_adjust
+	nbranch lpm_adjust_positive,user
+	sub pdata,0,pdata
+lpm_adjust_positive:
+	fetcht 3,mem_clks_per_lpo
+	iadd temp,pdata
+	store 3,mem_clks_per_lpo
+lpm_clear_counter:
+	setarg 0
+	store 4,mem_sleep_counter_all
+	rtn
+
+	
+lpm_dispatch:
+	bpatch patch05_0,mem_patch05
+	call lpo_calibration
+	fetch 3,mem_clks_per_lpo
+	rtn blank
+	fetch 1,mem_lpm_mode
+	rtn blank
+ifdef 	SECURE_CONNECTION
+	fetch 1,mem_secure_connections_enable
+	branch lpm_dispatch_next,blank
+	fetch 1,mem_sc_local_key_invalid 	// simple pairing is not ready
+	rtn blank
+lpm_dispatch_next:
+	fetch 1,mem_sc_calc
+	nrtn blank	
+endif
+	arg context_check_a_wack,regc
+	call context_search
+	rtn zero
+	call lpm_check_wake_lock
+	nrtn blank
+	call context_check_idle						
+	nbranch lpm_dispatch_unconn,zero
+	rtn wake
+	bpatch patch05_1,mem_patch05
+	fetcht 1,mem_lpm_current_mult
+	fetch 2,mem_context + coffset_tsniff
+	imul32 temp,pdata
+	rshift4 temp,temp
+	rshift2 temp,temp
+	isub temp,pdata
+	fetcht 4,mem_context + coffset_sniff_anchor
+	iadd temp,pdata
+	fetcht 1,mem_lpm_overhead
+	isub temp,pdata
+	lshift16 pdata,alarm
+	fetch 2,mem_context + coffset_rx_window
+	rshift pdata,pdata
+	call clk2bt
+	deposit alarm
+	call clk_diff
+	copy clke,temp
+	call clk_diff_rt
+	rtn user
+lpm_dispatch_sleep:
+	call clk2lpo
+lpm_dispatch_lpo:
+	bpatch patch05_2,mem_patch05
+	fetch 1,mem_lpm_xtalcnt
+	isub temp,null
+	branch lpm_clear_counter,positive
+	storet 4,mem_sleep_counter
+	call app_will_enter_lpm
+//	call l2cap_lpm_save_txbuf
+	fetcht 4,mem_sleep_counter
+	branch lpm_sleep
+	
+lpm_dispatch_unconn:
+	bpatch patch05_3,mem_patch05
+	fetch 1,mem_le_adv_enable
+	nbranch lpm_unconn_cont,blank
+	rtn
+	
+lpm_unconn_cont:
+	fetch 2,mem_lpm_interval
+	rtn blank
+lpm_sleep_btclk:
+	fetcht 1,mem_lpm_overhead
+	isub temp,pdata
+	arg 7500,temp				
+	imul32 temp,pdata
+	branch lpm_dispatch_sleep
+
+	
+lpm_mult_wait_timeout:
+	fetch 2,mem_cb_bt_set_mult
+	call callback_func
+	nbranch lpm_mult_short,blank
+	jam 0,mem_lpm_current_mult
+	bmark0 mark_lpm_mult_enable,lpm_mult_short
+	fetch 1,mem_lpm_mult_cnt
+	branch lpm_mult_long,blank
+	increase -1,pdata
+	store 1,mem_lpm_mult_cnt
+	rtn
+
+
+
+
+lpm_match:
+	jam 0,mem_sniff_unint_lost
+	fetch 3,mem_sniff_rcv
+	increase 1,pdata
+	store 3,mem_sniff_rcv
+	rtn
+
+
+lpm_lost:
+	bpatch patch05_4,mem_patch05
+	jam 0,mem_lpm_current_mult
+	fetch 3,mem_sniff_lost
+	increase 1,pdata
+	store 3,mem_sniff_lost
+	fetch 1,mem_sniff_unint_lost
+	increase 1,pdata
+	store 1,mem_sniff_unint_lost
+	rtn
+
+lpm_mult_short:
+	jam 0,mem_lpm_current_mult
+	fetch 1,mem_lpm_mult_timeout
+	store 1,mem_lpm_mult_cnt
+	rtn
+
+lpm_mult_long:
+	fetcht 1,mem_lpm_mult
+	storet 1,mem_lpm_current_mult
+	rtn
+
+
+
+lpm_get_wake_lock:
+	fetch 2,mem_lpm_wake_lock
+	qset1 pdata
+	store 2,mem_lpm_wake_lock
+	rtn
+
+lpm_put_wake_lock:
+	fetch 2,mem_lpm_wake_lock
+	qset0 pdata
+	store 2,mem_lpm_wake_lock
+	rtn
+
+
+
+lpm_check_wake_lock:
+	bpatch patch05_5,mem_patch05
+	call app_check_wake_lock
+	fetch 2,mem_lpm_wake_lock
+	copy pdata,rega
+	fetch 3,mem_tx_fifo3
+	nsetflag blank,wake_lock_ble_tx,rega
+	fetch UTIL_FIFO_LEN,mem_ipc_fifo_bt2c51
+	nsetflag blank,wake_lock_ipc_bt2c51,rega
+	fetch UTIL_FIFO_LEN,mem_ipc_fifo_c512bt
+	nsetflag blank,wake_lock_ipc_c512bt,rega
+	fetch 1,mem_hci_cmd
+	nsetflag blank,wake_lock_cmd,rega
+	fetch 1,mem_device_option
+	compare DVC_OP_MODULE,pdata,0xff
+	call lpm_uart_wake_lock,true
+	copy rega,pdata
+	store 2,mem_lpm_wake_lock
+	rtn
+
+lpm_uart_wake_lock:
+	fetch 2,core_uart_rxitems
+	nsetflag blank,wake_lock_uart_rx ,rega
+	fetch 2,core_uart_txitems
+	nsetflag blank,wake_lock_uart_tx ,rega
+	rtn
+
+	
+
+

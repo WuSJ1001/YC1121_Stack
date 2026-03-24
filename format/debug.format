@@ -1,0 +1,6 @@
+xmemalloc(
+
+1 mem_rf_debug_rx_gpio
+1 mem_rf_debug_tx_gpio
+)
+

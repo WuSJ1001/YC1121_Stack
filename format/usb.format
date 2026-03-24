@@ -1,0 +1,255 @@
+memalloc usb(
+2 mem_usb_status
+1 mem_usb_fifo_empty
+2 mem_usb_read_len
+65 mem_usb_txbuf
+10 mem_usb_txbuf1
+10 mem_usb_txbuf2
+64 mem_usb_rxbuf
+1 mem_usb_rxbuf_end
+2 mem_bufptr
+1 mem_remain
+2 mem_hidreportdesc_kb
+2 mem_hidreportdesc_m
+19 mem_devicedesc
+60 mem_confdesc
+5 mem_string0
+30 mem_string1
+30 mem_string2
+30 mem_string3
+2 mem_cb_usb_config
+
+1 mem_usb_tx_interval
+9 mem_usb_vid_pid
+2 mem_usb_zero_packet
+2 mem_usb_ones_packet
+2 mem_usb_two_packet
+1 mem_usb0_state
+1 mem_usb_offline_check_gpio
+
+0 mem_usb_clear_mem_start
+0 mem_usb_setup
+1 mem_usb_setup_bmRequestType
+1 mem_usb_setup_bRequest
+1 mem_usb_setup_bValue
+1 mem_usb_setup_bValueH
+2 mem_usb_setup_wIndex
+1 mem_usb_setup_bLength
+1 mem_usb_setup_bLengthH
+64 mem_usb0_set_report_data
+64 mem_usb0_get_report_data
+2 mem_usb_setup_bValue_temp
+1 mem_usb0_get_set_report
+1 mem_usb0_data_ready_report
+1 mem_usb_tx_win_enable
+1 mem_usb_tx_mac_enable
+1 mem_usb_idle_flag
+1 mem_usb_idle_rate
+1 mem_usb_get_protocol_flag
+1 mem_usb_set_protocol_status
+1 mem_usb_set_protocol_value
+1 mem_usb_state
+1 mem_usb_remote_wakeup
+1 mem_usb_clear_remote_wakeup
+1 mem_sdsystem_wakeup_flag
+1 mem_usb_ep0_stall_status
+1 mem_usb_ep1_stall_status
+1 mem_usb_ep2_stall_status
+1 mem_usb_ep3_stall_status
+2 mem_dsc_info_data_pointer
+1 mem_dsc_info_len
+1 mem_usb_ep1_data
+1 mem_usb_ep2_data
+1 mem_usb_tx_enable
+1 mem_usb_device_enumeration_endflag
+1 mem_usb_wakestate_onetime_flag
+1 mem_usb_mac_wakeup_trig
+1 mem_usb_set_high_addr_flag
+1 mem_usb_clear_halt
+16 mem_usb_mouse_data
+16 mem_usb_kb_data
+16 mem_usb_kb_multikey
+16 mem_usb_kb_system
+2 mem_usb_test_cnt
+10 mem_usb_test_kb
+0 mem_usb_clear_mem_end
+64 mem_usb_ccid_buf
+)
+
+//class type
+(
+0x00 STANDARD_REQ
+0x01 CLASS_REQ
+0x02 MANUFACTURER_REQ
+)
+//Standard Request Codes
+(
+0x00 GET_STATUS                // Code for Get Status
+0x01 CLEAR_FEATURE             // Code for Clear Feature
+0x03 SET_FEATURE              // Code for Set Feature
+0x05 SET_ADDRESS              // Code for Set Address
+0x06 GET_DESCRIPTOR           // Code for Get Descriptor
+0x07 SET_DESCRIPTOR           // Code for Set Descriptor(not used)
+0x08 GET_CONFIGURATION        // Code for Get Configuration
+0x09 SET_CONFIGURATION        // Code for Set Configuration
+0x0A GET_INTERFACE            // Code for Get Interface
+0x0B SET_INTERFACE            // Code for Set Interface
+0x0C SYNCH_FRAME              // Code for Synch Frame(not used)
+)
+//Standard Descriptor Types
+(
+0x01 DSC_DEVICE               // Device Descriptor
+0x02 DSC_CONFIG               // Configuration Descriptor
+0x03 DSC_STRING               // String Descriptor
+0x04 DSC_INTERFACE            // Interface Descriptor
+0x05 DSC_ENDPOINT             // Endpoint Descriptor
+)
+//HID Descriptor Types
+(
+0x21 DSC_HID			      // HID Class Descriptor
+0x22 DSC_HID_REPORT			  // HID Report Descriptor
+)
+//Define bmRequestType bitmaps
+(
+0x80 IN_DEVICE                // Request made to device,
+                              // direction is IN
+0x00 OUT_DEVICE               // Request made to device,
+                              // direction is OUT
+0x81 IN_INTERFACE             // Request made to interface,
+                              // direction is IN
+0x01 OUT_INTERFACE            // Request made to interface,
+                              // direction is OUT
+0x82 IN_ENDPOINT              // Request made to endpoint,
+                              // direction is IN
+0x02 OUT_ENDPOINT             // Request made to endpoint,
+)
+//HID Request Codes
+(
+0x01 GET_REPORT 		       // Code for Get Report
+0x02 GET_IDLE				   // Code for Get Idle
+0x03 GET_PROTOCOL			   // Code for Get Protocol
+0x09 SET_REPORT				   // Code for Set Report
+0x0A SET_IDLE				   // Code for Set Idle
+0x0B SET_PROTOCOL			   // Code for Set Protocol
+0xF2 HID_REPORT_ID           
+64 EP0_PACKET_SIZE         
+6 EP1_PACKET_SIZE         
+16 HID_REPORT_SIZE         
+0x001B HID_REPORT_DESCRIPTOR_SIZE    
+)
+//math cordic
+(
+0 TYPE_SIN		
+1 TYPE_ATAN	
+2 TYPE_MULT	
+3 TYPE_DIV		
+4 TYPE_ASIN	
+5 TYPE_SQRT	
+6 TYPE_COS		
+7 TYPE_TAN		 
+)
+   
+(
+0 DFIFO0_IN_EMPTY
+1 DFIFO1_IN_EMPTY
+2 DFIFO2_IN_EMPTY
+3 DFIFO3_IN_EMPTY
+4 DFIFO0_OUT_EMPTY
+5 DFIFO1_OUT_EMPTY
+6 DFIFO2_OUT_EMPTY
+7 DFIFO3_OUT_EMPTY
+)
+
+(
+)
+
+(
+0 USB_STATUS_SETUP
+1 USB_STATUS_SUSPEND
+2 USB_STATUS_NAK
+3 USB_STATUS_RESET
+4 USB_STATUS_ACK
+5 USB_STATUS_RXREADY
+6 USB_STATUS_RXFULL
+7 USB_STATUS_TXDONE0
+8 USB_STATUS_TXDONE1
+9 USB_STATUS_TXDONE2
+10 USB_STATUS_TXDONE3
+)
+
+(
+1 USB_GOT_REPORT_REQ
+2 USB_CONNECTED
+3 USB_SLEEP
+4 USB_RESUME
+5 USB_SETIDLE_1
+)
+
+(
+0x10 USB_EP1_KB
+0x20 USB_EP2_MS
+0x21 USB_EP2_MULTIKEY
+0x22 USB_EP2_SYSTEMKEY
+0x01 MAC_BOOT_MODE
+0x02 R_KEY
+0x03 LR_KEY
+)
+
+
+(
+0x01ba PC_GET_REPORT
+0x02ba PC_SET_REPORT
+0x0200 PC_SET_REPORT_bValue
+0x0000 PC_SET_REPORT_wIndex
+0x0001 PC_SET_REPORT_bLength
+0xba PC_REPORT_ID
+
+0x01 PC_GET_DATA
+0x00 PC_GET_NONDATA
+)
+
+(
+//--------------------------------------------------
+// Define device states
+0x00 DEV_ATTACHED	// Device is in Attached State
+0x01 DEV_POWERED	// Device is in Powered State
+0x02 DEV_DEFAULT		// Device is in Default State
+0x03 DEV_ADDRESS	// Device is in Addressed State
+0x04 DEV_CONFIGURED	// Device is in Configured State
+0x05 DEV_SUSPENDED	// Device is in Suspended State
+)
+
+(
+// Define wIndex bitmaps
+0x81 IN_EP1                    // Index values used by Set and Clear
+0x01 OUT_EP1                   // commands for Endpoint_Halt
+0x82 IN_EP2              
+0x02 OUT_EP2             
+0x83 IN_EP3              
+0x03 OUT_EP3             
+)
+
+(
+0 EP0_STALL
+1 EP1_IN_STALL
+2 EP1_OUT_STALL
+3 EP2_IN_STALL
+4 EP2_OUT_STALL
+5 EP3_IN_STALL
+6 EP3_OUT_STALL
+)
+
+(
+// Define wValue bitmaps for Standard Feature Selectors
+0x00 ENDPOINT_HALT             // Endpoint_Halt feature selector
+0x01 DEVICE_REMOTE_WAKEUP      // Remote wakeup feature(not used)
+0x00 BOOT_PROTOCOL
+0x01 REPORT_PROTOCOL
+0x01 USB_MAX_NUM_CFG
+)
+
+(
+640 TIMER_NAK_DELAY
+5000 TIMER_WAKEUP_DELAY
+)
+

@@ -1,0 +1,85 @@
+ifdef COMPILE_WECHAT
+
+amemalloc mem_temp_block2(
+	0 mem_wechat_initreq_base_request
+	2 mem_wechat_authreq_base_request
+	4 mem_wechat_authreq_protocol_version
+	2 mem_wechat_authreq_auth_protocol
+	2 mem_wechat_authreq_eam_mac_no_encrypt
+	2 mem_wechat_authreq_mac_address
+	6 mem_wechat_authreq_device_address
+
+	1 mem_wechat_indication_handle
+	1 mem_wechat_write_handle
+	2 mem_wechat_tx_buffer_ptr
+	2 mem_wechat_rx_buffer_ptr
+	2 mem_wechat_rx_push_data_cb
+	2 mem_wechat_tx_nSeq
+	2 mem_wechat_tx_len
+	2 mem_wechat_tx_address
+	2 mem_wechat_rx_len
+	2 mem_wechat_rx_address
+	1 mem_wechat_receive_push_data
+
+)
+
+xmemalloc(
+
+/*
+wechat Air sync protocol parse
+uint8_t indication handle
+uint8_t write handle
+
+*/
+2 mem_le_wechat_air_sync_ptr
+
+)
+
+(
+17 WECHAT_AIR_SYNC_STRUCT_SIZE
+)
+
+(
+0x0000 ECI_NONE
+0x1127 ECI_REQ_AUTH
+0x1227 ECI_REQ_SEND_DATA
+0x1327 ECI_REQ_INIT
+0x214E ECI_RESPONSE_AUTH
+0x224E ECI_RESPONSE_SEND_DATA
+0x234E ECI_RESPONSE_INIT
+0x3175 ECI_PUSH_RECEIVE_DATA
+0x3275 ECI_PUSH_SWITCH_VIEW
+0x3375 ECI_PUSH_SWITCH_BACKGROUD
+0x2F75 ECI_ERR_DECODE
+)
+
+(
+2 ECI_REQ_INIT_MESSAGE_LENGTH
+18 ECI_REQ_AUTH_MESSAGE_LENGTH
+)
+
+(
+0xFE WECHAT_HEAD_MAGIC_NUMBER
+0x01 WECAHT_HEAD_VERSION
+0x01FE WECHAT_RX_HEAD
+)
+
+(
+//push data
+0x0a 	TAG_RecvDataPush_BasePush
+0x12	TAG_RecvDataPush_Data
+0x18	TAG_RecvDataPush_Type
+)
+
+
+(
+0 WECHAT_PROTOCOL_MESSAGE_B_MAGIC_NUMBER
+1 WECHAT_PROTOCOL_MESSAGE_B_VER
+2 WECHAT_PROTOCOL_MESSAGE_N_LENGTH
+4 WECHAT_PROTOCOL_MESSAGE_N_CMD_ID
+6 WECHAT_PROTOCOL_MESSAGE_N_SEQ
+8 WECHAT_PROTOCOL_MESSAGE_PAYLOAD
+)
+
+endif
+

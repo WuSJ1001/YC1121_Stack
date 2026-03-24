@@ -1,0 +1,2593 @@
+define G24
+define BLE
+define COMPILE_MOUSE
+
+keyboard_softreset_process:
+	fetch 1,mem_device_option
+	rtnne DVC_OP_KEYBOARD
+	call mouse_wakeup_from_power_check
+	nbranch soft_reset+1,user
+	fetch 1,mem_power_on_flag
+	branch soft_reset+1,blank
+	fetch 1,mem_config_select_device_button_gpio
+	rtneq UI_BUTTON_GPIO_DISABLE
+	copy pdata,queue
+	fetch 4,mem_saved_gpio_in
+	qisolate0 pdata					// bt button gpio num
+	call keyboard_pb_set,true
+	branch soft_reset+2	
+
+ifdef COMPILE_MOUSE
+keyboard_init:
+	call enable_authrom
+	call keyboard_setting_config
+	
+	call keyboard_gpio_init
+	call keyboard_low_vol_mult_set	
+	rtn wake
+	call keyboard_usb_check_enable
+	call keyboard_cb_fuction
+	fetch 1,mem_usb_addr
+	rtnbit1 7	
+keyboard_init_wireless:	
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BTN_DOWN,keyboard_start_discovery
+	call mouse_check_select_device_by_switch
+	branch keyboard_start_work
+
+
+keyboard_usb_check_enable:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_USB
+	setarg keyboard_usb_config_param
+	store 2,mem_cb_usb_config
+	jam MOUSE_USB_INTERFACE_REMOVE,mem_mouse_usb_vdd_status
+	branch keyboard_usb_interface_check
+
+keyboard_usb_config_param:
+	call keyboard_usb_config_kb_check
+	call keyboard_usb_config_param_init
+	branch keyboard_usb_config_param_setup
+
+keyboard_usb_config_kb_check:
+	jam DONGLE_KB_BIND_EEPROM_OFFECT,mem_mouse_usb_keyboard_flag
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_KEYBOARD
+	jam DONGLE_KB_BIND_SUCCESS,mem_mouse_usb_keyboard_flag
+	rtn
+
+keyboard_usb_config_param_init:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_USB_250,keyboard_usb_report_rate_set_250hz
+	bbit1 MOUSE_ENABLE_USB_500,keyboard_usb_report_rate_set_500hz
+	bbit1 MOUSE_ENABLE_USB_1000,keyboard_usb_report_rate_set_1000hz
+	jam 0x19,mem_wire_usb_interval
+	jam 0x08,mem_usb_tx_interval
+	rtn
+keyboard_usb_report_rate_set_250hz:
+	jam 0x0c,mem_wire_usb_interval
+	jam 0x04,mem_usb_tx_interval
+	rtn
+keyboard_usb_report_rate_set_500hz:
+	jam 0x06,mem_wire_usb_interval
+	jam 0x02,mem_usb_tx_interval
+	rtn
+keyboard_usb_report_rate_set_1000hz:
+	jam 0x03,mem_wire_usb_interval
+	jam 0x01,mem_usb_tx_interval
+	rtn
+
+keyboard_usb_config_param_setup:
+	call usb_tx_interval_config
+	call keyboard_usb_vid_pid_config
+	branch keyboard_usb_hid_icon_config
+
+keyboard_usb_vid_pid_config:
+	fetch 1,mem_usb_vid_pid
+	rtn blank
+	fetch 1,mem_mouse_usb_keyboard_flag
+	beq DONGLE_KB_BIND_SUCCESS,dongle_usb_vid_pid_for_suit
+	branch dongle_usb_vid_pid_for_mouse_only_auto_pair
+
+keyboard_usb_hid_icon_config:
+	fetch 1,mem_mouse_usb_keyboard_flag
+	branch dongle_usb_hid_icon_config+1
+
+
+
+keyboard_usb_interface_check:
+	bpatch patch08_1,mem_patch08
+	fetcht 1,mem_usb_offline_check_gpio
+	call gpio_get_bit
+	branch keyboard_usb_gpio_low,true
+	branch keyboard_usb_gpio_high
+
+
+keyboard_usb_gpio_low:
+	fetch 1,mem_mouse_usb_vdd_status
+	rtneq MOUSE_USB_INTERFACE_REMOVE
+	jam MOUSE_USB_INTERFACE_REMOVE,mem_mouse_usb_vdd_status
+	jam 0,mem_usb_device_enumeration_endflag
+	jam 0,mem_usb_status
+	jam 0,mem_usb_state
+	branch keyboard_init_wireless
+	
+	
+keyboard_usb_gpio_high:
+	fetch 1,mem_mouse_usb_vdd_status
+	rtneq MOUSE_USB_INTERFACE_INSERT
+	jam MOUSE_USB_INTERFACE_INSERT,mem_mouse_usb_vdd_status
+	call mouse_24g_stop
+	call mouse_stop_bluetooth_mode
+	call keyboard_device_led_all_off
+	branch usb_init
+	
+
+
+keyboard_setting_config:
+	rtn wake
+
+	call g24_transmit_init
+	call g24_chmap_param_init
+	
+	call keyboard_param_init
+	fetcht 1,mem_mcu_rstb_gpio
+	call gpio_out_inactive
+
+	call keyboard_device_led_off
+	call mouse_device_multi_led_parm_init
+	call le_set_fixed_ltk_justwork
+
+ifdef debug_eeprom
+	call iicd_read_init_pin
+endif	
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_OTP,keyboard_load_otp_info_check	
+	bbit1 MOUSE_ENABLE_EEPROM,mouse_load_eeprom_info_check
+	bbit1 MOUSE_ENABLE_FLASH,mouse_load_flash_info_check
+	rtn
+
+
+	
+	
+keyboard_param_init:
+
+	call mouse_param_common_init
+
+	jam 0,mem_same_keyvalue_timerout_flag	
+	setarg 0x230170		// 0x0170--3.7V  0x0123--3.0V  0x0146--3.2V  0x0153--3.3V
+	store 3,mem_mouse_vdd_full_vol
+	setarg 0x015301
+	istore 3,contw
+	arg mem_le_adv_swift_pair,contw
+	arg 20,loopcnt
+	call clear_mem
+
+	fetch 1,mem_le_name_len
+	sub pdata,12,null
+	nbranch ble_name_set_no_swift_pair,positive
+	setarg 0x06ff06
+	store 3,mem_le_adv_swift_pair
+	setarg 0x000300
+	istore 3,contw
+	setarg 0x80
+	istore 1,contw
+ble_store_le_name:
+	fetch 1,mem_le_name_len
+	increase 1,pdata
+	copy pdata,loopcnt
+	arg mem_le_scan_data,contr			// 7byte + mem_le_scan_data
+	branch memcpy
+	
+ble_name_set_no_swift_pair:
+	arg mem_le_adv_swift_pair,contw
+	branch ble_store_le_name
+
+/////////////////////////////////////////////////////////------gpio------///////////////////////////////////////////////////////////
+keyboard_gpio_init:
+//	call p_lpm_otp_option_disable_ice_mode
+
+	fetcht 1,mem_mcu_clk_gpio
+	call gpio_set_high_impedance
+	fetcht 1,mem_mcu_stb_gpio
+	call gpio_set_high_impedance
+	fetcht 1,mem_mcu_rstb_gpio
+	call gpio_set_high_impedance
+	//row init
+	setarg mem_key_row_gpio
+	store 2,mem_kb_row_ptr
+	//col init
+	setarg mem_key_col_gpio
+	store 2,mem_kb_col_ptr
+	//portA and B init
+	setarg mem_key_excol_gpio
+	store 2,mem_kb_excol_ptr
+
+	fetch 2,mem_kb_row_ptr
+	copy pdata,regb
+	arg 8,loopcnt
+
+keyboard_key_row_init:
+	ifetcht 1,regb
+	sub temp,UI_BUTTON_GPIO_DISABLE,null
+	ncall keboard_gpio_set_high_impedance,zero
+	increase 1,regb
+	loop keyboard_key_row_init
+	call lpm_write_gpio_wakeup
+	fetch 2,mem_kb_col_ptr
+	copy pdata,regb
+	copy pdata,regc
+	arg 11,loopcnt
+	
+keyboard_key_cow_init:
+	ifetcht 1,regb
+	isolate1 7,temp						// exmcu gpio
+	ncall gpio_set_high_impedance,true
+	increase 1,regb
+	loop keyboard_key_cow_init
+	rtn
+keboard_gpio_set_high_impedance:
+
+	call gpio_set_high_impedance
+	ifetcht 1,regb
+	branch gpio_set_low_pullup
+
+
+	
+keyboard_low_vol_mult_set:
+	fetch 1,mem_device_flag
+	beq MODE_BT_DEVICE1,keyboard_low_vol_mult_ble_set
+	setarg 0x5d4800
+	store 4,mem_24g_long_sleep_set1
+	fetch 1,mem_adc_power_flag
+	rtnbit0 0	
+	branch mouse_24g_long_sleep_set
+keyboard_low_vol_mult_ble_set:
+	jam 0x0c,mem_lpm_mult_init
+	fetch 1,mem_adc_power_flag
+	rtnbit0 0
+	jam 0x10,mem_lpm_mult_init
+	fetch 1,mem_mouse_current_mult_timer
+	branch mouse_current_mult_reinit,blank
+	rtn
+///////////////////////////////////////otp/////////////////////////////////////////////////////////////
+
+keyboard_pairing_check_otp_offset:
+	fetch 2,mem_otp_read_retention_offset
+	arg 0x528,temp   //24*55
+	isub temp,null
+	nrtn positive
+	branch assert
+//  otp process	
+keyboard_load_otp_info_check:
+	bpatch patch08_2,mem_patch08
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_load_otp_device_info_g24_init
+	beq MODE_BT_DEVICE1,keyboard_load_otp_device_info_ble_init
+	rtn	
+	
+keyboard_load_otp_device_info_g24_init:
+	arg 80,regd
+	setarg 0x400
+	idiv regd
+	call wait_div_end
+	quotient pdata
+	store 2,mem_pdatatemp
+	arg 0x1fcc,pdata
+	arg 4,temp
+	arg 4,rege
+	branch keyboard_load_otp_device_info
+keyboard_load_otp_device_info_ble_init:
+	arg 280,regd
+	setarg 0x400
+	idiv regd
+	call wait_div_end
+	quotient pdata
+	store 2,mem_pdatatemp
+	arg 0x1fc2,pdata
+	arg 14,temp		
+	arg 14,rege
+	branch keyboard_load_otp_device_info
+keyboard_load_otp_device_info:
+	storet 1,mem_temp
+	arg mem_otp_read_retention_memory,rega
+	arg 0,regc
+keyboard_load_otp_info_check_page_loop:
+	copy pdata,regb
+	fetchr loopcnt, 1,mem_temp
+	call otp_read_data
+	fetch 8,mem_otp_read_retention_memory
+	fetcht 8,mem_otp_read_retention_memory+8
+	ior temp,pdata
+	fetcht 8,mem_otp_read_retention_memory+16
+	ior temp,pdata	
+	branch keyboard_load_otp_info_check_first_time,blank
+	increase 1,regc
+	fetch 2,mem_pdatatemp
+	isub regc,null
+//	nbranch p_keyboard_load_otp_info_check_overwise,positive
+	copy regb,pdata
+	isub regd,pdata
+	branch keyboard_load_otp_info_check_page_loop
+keyboard_load_otp_info_check_first_time:
+	
+	sub regc,0,null
+	branch keyboard_load_otp_info_check_first_time_process,zero
+keyboard_load_otp_info_check_first_time_loop_init:
+	copy regb,pdata
+	iadd regd,pdata
+keyboard_load_otp_info_check_first_time_loop:	
+	isub rege,pdata
+	copy pdata,regb
+	fetchr loopcnt, 1,mem_temp
+	call otp_read_data
+	fetch 8,mem_otp_read_retention_memory
+	fetcht 8,mem_otp_read_retention_memory+8
+	ior temp,pdata
+	fetcht 8,mem_otp_read_retention_memory+16
+	ior temp,pdata	
+	branch keyboard_load_otp_info_check_offset_process,blank
+	copy regb,pdata
+	branch keyboard_load_otp_info_check_first_time_loop
+keyboard_load_otp_info_check_first_time_process:
+	storer rege,1,mem_otp_read_retention_offset
+	rtn
+keyboard_load_otp_info_check_offset_process:
+	bpatch patch08_3,mem_patch08
+	setarg 0x1fd0
+	isub regb,pdata
+	store 2,mem_otp_read_retention_offset		//store the next field offset ,convenient for next storage
+	copy regb,pdata
+	iadd rege,regb
+	fetchr loopcnt, 1,mem_temp
+	arg mem_otp_read_retention_memory,rega
+	call otp_read_data
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_load_otp_info_check_offset_process_g24
+	beq MODE_BT_DEVICE1,keyboard_load_otp_info_check_offset_process_ble
+	rtn
+
+keyboard_load_otp_info_check_offset_process_g24:	
+	fetch 6,mem_otp_read_retention_memory
+	store 4,mem_mouse_24g_addr
+	branch keybaord_load_device_info
+
+keyboard_load_otp_info_check_offset_process_ble:
+	fetch 1,mem_otp_read_retention_memory
+	sub pdata,SYSTEM_OS_MAC,null
+	ncall set_pdata_0,positive
+	store 1,mem_kb_computer_system
+	fetch 1,mem_otp_read_retention_memory+1
+	store 1,mem_device1_type
+	fetch 6,mem_otp_read_retention_memory+2
+	store 6,mem_device1_addr
+	fetch 6,mem_otp_read_retention_memory+8
+	store 6,mem_device1_locall_addr
+	branch mouse_select_reconn_device
+
+
+keyboard_load_otp_info_check_overwise:
+	branch assert
+
+	
+keyboard_store_device_info:
+	bpatch patch08_4,mem_patch08
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_ENABLE_OTP,keyboard_store_otp_device_info
+	bbit1 MOUSE_ENABLE_EEPROM,mouse_store_eeprom_device_info
+	bbit1 MOUSE_ENABLE_FLASH,mouse_store_flash_device_info
+	rtn
+	
+keyboard_store_otp_device_info:
+	rtn
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_store_otp_device_info_g24
+	beq MODE_BT_DEVICE1,keyboard_store_otp_device_info_ble
+	rtn
+
+keyboard_store_otp_device_info_g24:
+	fetcht 2,mem_otp_read_retention_offset
+	setarg 0x1fd0
+	isub temp,regb
+	arg mem_mouse_24g_addr,rega
+	arg 4,loopcnt
+	call otp_write   
+	fetcht 2,mem_otp_read_retention_offset
+	increase 4,temp
+	storet 2,mem_otp_read_retention_offset
+	rtn
+
+keyboard_store_otp_device_info_ble:
+	fetcht 2,mem_otp_read_retention_offset
+	setarg 0x1fd0
+	isub temp,regb
+	
+
+	add regb,1,regb	
+	arg mem_device1_addr,rega
+	arg 6,loopcnt
+	call otp_write
+
+	add regb,7,regb	
+	arg mem_device1_locall_addr,rega
+	arg 6,loopcnt
+	branch otp_write 
+
+keybaord_load_device_info:
+	fetch 4,mem_mouse_24g_addr
+	store 4,mem_24g_receiver_addr
+	store 4,mem_24g_addr
+	rtn
+
+/////////////////////////////////////cb_function//////////////////////////////////////////////////////
+keyboard_cb_fuction:
+	bpatch patch08_5,mem_patch08
+	setarg mouse_24g_before_lpm_sleep
+	store 2,mem_cb_before_lpm_sleep
+	setarg keyboard_24g_package_data
+	store 2,mem_cb_24g_transmit_data
+	setarg keyboard_24g_search_dongle
+	store 2,mem_cb_24g_search_receiver
+	setarg keyboard_lpm_before_common
+	store 2,mem_cb_24g_lpm_before
+	setarg keyboard_le
+	store 2,mem_cb_le_process
+	
+	setarg keyboard_process_lpm_before
+	store 2,mem_cb_before_lpm
+	
+	setarg keyboard_priority_bb_event
+	store 2,mem_cb_bb_event_process
+	setarg keyboard_idle
+	store 2,mem_cb_idle_process
+	setarg keyboard_before_hibernate
+	store 2,mem_cb_before_hibernate
+	setarg mouse_le_bb_event_connect_complete
+	store 2,mem_cb_att_write	
+	setarg keyboard_bb_event_timer
+	store 2,mem_cb_event_timer
+	setarg mouse_spi_write_flash_cb
+	store 2,mem_cb_spi_flash_write_complate
+	setarg mouse_lpm_check_wake_lock
+	store 2,mem_cb_check_wakelock
+	setarg mouse_le_transmit
+	store 2,mem_cb_ble_transmit
+	setarg mouse_set_lpm_mult
+	store 2,mem_cb_bt_set_mult
+	rtn
+
+/////////////////////////////////////keyboard event/////////////////////////////////////////////////////////////////////
+
+keyboard_priority_bb_event:	
+	bpatch patch08_6,mem_patch08
+	copy regc,pdata	
+
+	beq BT_EVT_LE_START_ENC,keyboard_le_ll_start_encryt
+	beq BT_EVT_LE_PARSE_CONN_PARAM_ACCEPTED,keyboard_le_parse_conn_param_accepted
+	beq BT_EVT_LE_PARSE_CONN_PAPA_UPDATE_RSP,keyboard_le_conn_param_update_rsp_recieved
+	beq BT_EVT_LE_DISCONNECTED,keyboard_le_bb_disconnected
+
+	beq BT_EVT_LE_CONNECTED,keyboard_le_bb_event_connected
+	beq BT_EVT_BUTTON_LONG_PRESSED,keyboard_bb_event_discovery_btn
+	beq BT_EVT_LE_PAIRING_SUCCESS,mouse_le_pairing_success
+	beq BT_EVT_LE_ENC_INFO,mouse_le_enc_info
+
+	beq BT_EVT_LE_PAIRING_COMPLETE,app_ble_store_reconn_info	
+	beq BT_EVT_LE_PARSE_CONN_PARAM_ACCEPTED,mouse_le_parse_conn_param_accepted
+
+	beq BT_EVT_24G_PAIRING_COMPLETE,keyboard_24g_pairing_complete
+	beq BT_EVT_24G_ATTEMPT_SUCCESS,keyboard_24g_attempt_success
+	beq BT_EVT_24G_ATTEMPT_FAIL,keyboard_24g_attempt_fail
+
+
+	rtn
+
+/***************************le*************************/
+
+
+
+keyboard_le_bb_event_connected:
+	jam 0,mem_mouse_long_mult_flag
+
+	jam 1,mem_mouse_le_bb_connected_flag
+	call mouse_24g_first_store_reconn_info
+	fetch 1,mem_mouse_le_reconnect_flag
+	nbranch keyboard_le_bb_event_connected_next,blank
+	jam 0x14,mem_mouse_send_secutiry_request_timer
+keyboard_le_bb_event_connected_next:
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	set0 APP_DISC_BY_BUTTON ,pdata
+	store APP_DISC_RSN_SIZE,mem_app_disconn_reason_flag
+	jam 0,mem_mouse_direct_timer
+	fetch 2,mem_le_battery_level_updata_timer_init
+	store 2,mem_le_battery_level_updata_timer
+	call mouse_no_data_timer_init
+	branch keyboard_stop_discovery
+
+
+keyboard_le_bb_disconnected:
+	setarg 0
+	store 2,mem_le_battery_level_updata_timer
+	store 1,mem_keyboard_le_send_conn_param_update
+	store 1,mem_keyboard_le_send_conn_param_update_timer
+	store 1,mem_mouse_le_bb_connected_flag	
+keyboard_le_bb_disconnected_next:	
+	jam LE_LPM_ENABLE,mem_mouse_le_conn_param_reject
+	jam 0,mem_mouse_clear_sensor_data_flag
+	call le_clr_config_more_data
+	branch keyboard_bb_disconnected
+keyboard_bb_disconnected:
+	call mouse_bb_discon_clear_stack
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason
+	bbit1 APP_DISC_BLE,keyboard4_0_event_bb_disconn
+	bbit1 APP_DISC_BY_BUTTON,app_disconn_reason_clear
+	branch keyboard_start_discovery
+keyboard4_0_event_bb_disconn:
+	call mouse_le_clean_connect_flag
+	fetch APP_DISC_RSN_SIZE,mem_app_disconn_reason
+	bbit1 APP_DISC_BY_BUTTON,app_disconn_reason_clear
+	call ice_break
+	branch keyboard_app_enter_hibernate	
+
+	
+keyboard_le_ll_start_encryt:
+	fetch 1,mem_mouse_le_reconnect_flag
+	beq 1,keyboard_le_ll_reconn_start_encryt
+	jam 20,mem_le_start_encrypt_timer
+	jam 5,mem_le_start_auto_reco_timer
+	branch mouse_le_ll_enable_start_enc_flag
+keyboard_le_ll_reconn_start_encryt:
+	call mouse_updata_le_param
+	jam 5,mem_le_start_encrypt_timer
+	branch mouse_le_ll_enable_start_enc_flag
+
+keyboard_le_parse_conn_param_accepted:
+	fetch 1,mem_le_new_conninterval
+	sub pdata,LE_INTERVAL_15MS,null
+	nbranch mouse_le_conn_param_lpm_disable,positive
+	fetch 1,mem_le_new_connslavelatency
+	fetcht 1,mem_lpm_mult_init
+	isub temp,null
+	branch mouse_le_lpm_mult_reinit,positive
+	fetch 1,mem_le_new_connslavelatency
+	store 1,mem_lpm_mult
+	branch mouse_le_conn_param_lpm_enable
+
+keyboard_le_conn_param_update_rsp_recieved:
+	fetch 1,mem_keyboard_le_send_conn_param_update
+	nrtn blank
+	jam 1,mem_keyboard_le_send_conn_param_update
+	jam 30,mem_keyboard_le_send_conn_param_update_timer
+	rtn	
+
+keyboard_24g_pairing_complete:
+	call keyboard_get_24g_led_enable
+	call mouse_no_data_timer_init
+	branch mouse_24g_pairing_complete_common
+
+keyboard_24g_attempt_success:
+	call keyboard_get_24g_led_enable
+	fetch 4,mem_24g_addr
+	store 4,mem_24g_receiver_addr
+	store 4,mem_mouse_24g_addr		// if need store 24g address to eeprom/flash,need get mem_24g_addr
+	call g24_ch_syncword_crc8_init
+	call mouse_device_poweron_led_config
+	call mouse_no_data_timer_init
+	branch mouse_24g_attempt_success
+
+keyboard_24g_get_led:
+	jam DEVICE_DATA_TPYE_STANDARD_KEYBOARD,mem_keyboard_data_send_flag
+	call keyboard_clear_key_data
+	jam 0x03,mem_customer_key_press+2
+	rtn
+
+keyboard_24g_led_get_status_check:
+	arg 6,loopcnt
+	arg mem_keyboard_tx_data+3,contr
+keyboard_24g_led_data_check:
+	ifetch 1,contr
+	beq HID_KEY_NUM_LOCK,keyboard_get_24g_led_enable
+	beq HID_KEY_CAPS_LOCK,keyboard_get_24g_led_enable
+	beq HID_KEY_SCROLL_LOCK,keyboard_get_24g_led_enable
+	loop keyboard_24g_led_data_check
+	rtn
+
+keyboard_get_24g_led_enable:
+	jam 0x03,mem_keyboard_led_status_get
+	jam 1,mem_keyboard_data_change_flag
+	rtn
+
+keyboard_set_repeat_send_flag:
+	jam 1,mem_24g_repeat_send_flag
+	rtn
+
+
+keyboard_24g_attempt_fail:
+	fetch 1,mem_24g_attempt_fail_flag
+	nbranch keyboard_24g_hibernate_set,blank
+	fetch 1,mem_24g_reconn_type
+	beq FAST_CONN_AND_3_0_ADDR,keyboard_24g_fast_conn_attempt_fail
+	beq RECEIVER_AND_3_0_ADDR,keyboard_24g_attempt_fail_enter_hibernate
+	branch keyboard_24g_attempt_fail_enter_hibernate
+
+keyboard_24g_attempt_fail_enter_hibernate:
+	call mouse_24g_stop
+	fetch 1,mem_reconn_times
+	nbranch mouse_polling_device,blank
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_app_enter_hibernate
+	rtn	
+
+keyboard_24g_fast_conn_attempt_fail:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag 
+	bbit1 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING,mouse_24g_start_auto_pair
+	bbit1 MOUSE_ENABLE_AUTO_24G_PARING,mouse_24g_start_auto_pair
+	bbit0 MOUSE_ENABLE_24G_AUTO_PAIR_NERVER_BEEN_PAIRED,mouse_24g_reconn_dongle_start
+	fetch 4,mem_mouse_24g_addr		// auto pair first time
+	branch keyboard_24g_start_pair_mode,blank
+	branch mouse_24g_reconn_dongle_start
+
+keyboard_24g_hibernate_set:
+	jam 0,mem_24g_attempt_fail_flag
+	call g24_transmit_next_packet
+	setarg -1
+	store 8,mem_24g_enter_hibernate
+	setarg 0
+	store 7,mem_mouse_key
+	jam 1,mem_sensor_shutdown_flag
+	branch keyboard_g24_long_sleep
+
+
+/////////////////////////////////////keyboard timer/////////////////////////////////////////////////////////////////////
+
+keyboard_bb_event_timer:
+	bpatch patch08_7,mem_patch08
+	call mouse_adc_read
+	call keyboard_low_voltage_param_set
+	call mouse_low_voltage_led_timer
+
+	call g24_pair_timeout_timer
+	call g24_reconn_timeout_timer
+	call mouse_24g_long_sleep_param_update_timer
+	call keyboard_24g_repeat_send_data
+	call keyboard_24g_led_status_get_timer
+	
+	//led
+	
+	call keyboard_check_discovery_timeout_timer
+
+	call keyboard_check_direct_timeout_timer
+	call mouse_le_enable_att_list_timer
+	call keyboard_le_battery_updata_timer
+	call mouse_le_send_smp_security_request_timer
+	call keyboard_le_send_conn_param_update_timer	
+	call keyboard_le_auto_recognize_timer
+
+	call mouse_current_mult_update_timer
+	call mouse_wheel_trigger_timer
+	call keyboard_store_information_delay_timer
+	call keyboard_capslock_led_on_timer
+	call keyboard_long_press_timer
+	call keyboard_commbination_delay_release_timer
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_check_no_data_timeout_timer
+	branch mouse_check_no_data_timeout_timer
+
+
+keyboard_commbination_key_process:
+	fetch 1,mem_commbination_key_statue
+	rtnne COMMBINATION_KEY_STATE_DOWN	
+	arg mem_combination_ui_button_count,regc
+	arg mouse_bluetooth_fast_conn_init,regb
+	branch timer_single_step
+
+keyboard_commbination_fast_conn_bt_check:
+	fetch 2,mem_keyboard_keyvalue_buffer+2
+	fetcht 2,mem_keyboard_commbination_fast_conn_bt
+	isub temp,null
+	branch keyboard_commbination_key_down,zero
+	byteswap temp,temp
+	isub temp,null
+	branch keyboard_commbination_key_down,zero
+	branch mouse_commbination_key_up
+
+keyboard_commbination_key_down:
+	fetch 1,mem_commbination_key_statue
+	rtneq COMMBINATION_KEY_STATE_DOWN
+	jam COMMBINATION_KEY_STATE_DOWN,mem_commbination_key_statue
+	rtn
+
+
+keyboard_check_discovery_timeout_timer:
+	arg mem_mouse_discovery_timer,regc
+	arg keyboard_check_discovery_timeout,regb
+	branch timer_single_step_2B
+
+keyboard_check_discovery_timeout:
+	call keyboard_stop_discovery
+	branch keyboard_app_enter_hibernate	
+
+
+
+
+keyboard_store_information_delay_timer:
+	arg mem_store_information_delay_timer,regc
+	arg keyboard_store_device_info_check,regb
+	branch timer_single_step
+	
+keyboard_store_device_info_check:
+	call keyboard_store_device_info
+	fetch 1,mem_mouse_need_soft_reset
+	nbranch mouse_soft_reset,blank
+	rtn
+
+keyboard_low_voltage_param_set:
+	fetch 1,mem_mouse_adc_last_low_voltage_flag
+	branch keyboard_low_voltage_param_set_33V,blank
+	jam 58,mem_mouse_vdd_low_vol
+	rtn
+keyboard_low_voltage_param_set_33V:
+	jam 53,mem_mouse_vdd_low_vol
+	rtn	
+
+keyboard_le_auto_recognize_timer:
+
+	arg mem_le_start_auto_reco_timer,regc
+	arg keyboard_le_send_att_find_by_type_value_request_ancs,regb
+	branch timer_single_step
+
+keyboard_check_direct_timeout_timer:	
+	arg mem_mouse_direct_timer,regc
+	arg mouse_check_direct_timeout,regb
+	call timer_single_step
+	branch mouse_check_direct_timeout_timer+3
+
+keyboard_le_battery_updata_timer:
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_ENABLE_LE_BATTERY_SERVICE_CANCEL
+	branch mouse_le_battery_updata_timer
+
+keyboard_le_send_conn_param_update_timer:
+	arg mem_keyboard_le_send_conn_param_update_timer,regc
+	arg mouse_updata_le_param,regb
+	branch timer_single_step
+
+keyboard_24g_repeat_send_data:
+	fetch 1,mem_24g_repeat_send_flag
+	rtn blank
+	jam 0,mem_24g_repeat_send_flag
+	jam 1,mem_keyboard_data_change_flag
+	call g24_txdata_prep
+	branch keyboard_g24_transmit_process
+
+keyboard_24g_led_status_get_timer:
+	arg mem_keyboard_led_status_get_timer,regc
+	arg keyboard_24g_led_status_clear,regb
+	branch timer_single_step
+
+keyboard_24g_led_status_clear:
+	jam 0,mem_keyboard_led_status_get
+	rtn
+
+
+
+
+
+keyboard_device_led_off:
+	call mouse_device_multi_led_off
+	call keyboard_capslock_led_off
+keyboard_power_led_off:
+	fetcht 1,mem_keyboard_power_led_gpio
+	branch gpio_out_inactive
+keyboard_numlock_led_off:
+	rtn
+
+
+keyboard_capslock_led_on_timer:
+	fetch 1,mem_keyboard_caps_led_gpio
+	rtneq GPIO_DISABLE
+	fetch 2,mem_mouse_no_data_timer
+	rtn blank
+	fetch 2,mem_mouse_no_data_timeout
+	fetcht 2,mem_mouse_no_data_timer
+	isub temp,temp
+	fetch 2,mem_keyboard_caps_led_on_timer
+	isub temp,pdata
+	branch keyboard_capslock_led_check_on,positive
+keyboard_capslock_led_off:
+	fetcht 1,mem_keyboard_caps_led_gpio
+	branch gpio_out_inactive
+
+
+
+keyboard_capslock_led_check_on:
+	fetch 1,mem_keyboard_led_status
+	bbit0 KB_PC_KEYSEL_CAPSLOCK,keyboard_capslock_led_off
+	fetcht 1,mem_keyboard_caps_led_gpio
+	branch gpio_out_active
+
+keyboard_long_press_timer:
+	arg mem_same_keyvalue_timer,regc
+	arg keyboard_long_press_timerout,regb
+	branch timer_single_step_2B
+
+keyboard_long_press_timerout:
+	jam 1,mem_same_keyvalue_timerout_flag	
+	branch app_enter_hibernate
+
+keyboard_commbination_delay_release_timer:	
+	arg mem_keyboard_commbination_control_key_delay_release_timer,regc
+	arg keyboard_commbination_key_null_set,regb
+	branch timer_single_step
+
+
+keyboard_check_no_data_timeout_timer:
+	arg mem_mouse_no_data_timer,regc
+	arg keyboard_check_no_data_timeout,regb
+	branch timer_single_step_2B
+
+keyboard_check_no_data_timeout:
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_24g_hibernate_set
+	branch mouse_disconnect
+
+
+keyboard_bb_event_discovery_btn:
+	isolate1 mark_24g,mark
+	call mouse_24g_stop,true
+	call mouse_disconnect
+	call mouse_le_clean_connect_flag
+	branch keyboard_start_discovery
+	
+keyboard_start_discovery:
+	bpatch patch09_0,mem_patch09
+	call mouse_device_discovery_led_config
+	fetch 2,mem_ui_state_map
+	isolate1 UI_STATE_BLE_ADV,pdata
+	call mouse_stop_le_adv,true		//reconnect adv
+
+	setarg 0
+	store 2,mem_le_battery_level_updata_timer
+	call keyboard_capslock_led_off
+	jam 0xff,mem_kb_computer_system
+
+	fetch 2,mem_ui_state_map
+	isolate1 UI_STATE_BLE_ADV,pdata
+	call mouse_stop_le_adv,true		//reconnect adv
+	call mouse_bluetooth_fast_conn_disable
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_ADV,keyboard_start_discovery_norandom
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_BLE_RANDOM_ADDRE,keyboard_start_discovery_norandom
+	fetcht 2,mem_random_addr_increase_count
+	increase 1,temp
+	storet 2,mem_random_addr_increase_count
+	storet 2,mem_le_lap+1
+	random pdata					//random ble addr
+	store 1,mem_le_lap
+keyboard_start_discovery_norandom:
+	fetch 3,mem_mouse_le_lap_temp
+	store 3,mem_le_lap+3
+	call app_lpm_mult_disable
+	fetch 2,mem_mouse_discovery_timeout
+	store 2,mem_mouse_discovery_timer
+	setarg 0
+	store 2,mem_mouse_no_data_timer
+	store 2,mem_le_battery_level_updata_timer
+	store 1,mem_mouse_direct_timer
+	store 1,mem_mouse_bluetooth_reconnect_timeout
+	store 1,mem_mouse_clear_sensor_data_flag
+	arg MOUSE_STORE_EEPROM_FLAG,queue
+	call mouse_enable_function_flag
+	call mouse_bt_discovery_button_down_disable
+	branch mouse_check_51cmd_adv
+
+	
+keyboard_low_voltage_led_blink_disable:
+	jam 0,mem_mouse_adc_last_low_voltage_flag
+	branch mouse_low_voltage_led_off_judge
+	
+keyboard_stop_discovery:
+	bpatch patch09_1,mem_patch09
+	setarg 0
+	store 2,mem_mouse_discovery_timer	
+	arg MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG,queue
+	call mouse_disable_function_flag
+	jam 0,mem_mouse_bluetooth_reconnect_timeout
+	call mouse_stop_le_adv
+	branch keyboard_device_led_off
+
+
+keyboard_store_remote_bdaddr:
+	bpatch patch09_2,mem_patch09
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_STORE_EEPROM_FLAG
+	arg MOUSE_STORE_EEPROM_FLAG,queue
+	call mouse_disable_function_flag
+	call mouse_check_device_addr
+	branch mouse_unplug_clean_bdaddr
+	
+/////////////////////////////////////keyboard process///////////////////////////////////////////////////////////////////////////////
+keyboard_idle:
+	bpatch patch09_3,mem_patch09
+	call mouse_low_voltage_led_no_enter_lpm
+	branch ui_check_paring_button
+	
+
+
+keyboard_start_work:
+	bpatch patch09_4,mem_patch09
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_ADC,keyboard_start_work_next
+	call enable_adc
+	call vdd_calculate_by_mode
+	store 2,mem_mouse_vdd_now_vol
+//	fetcht 2,mem_2v_adc_vinlpm_data
+	fetch 2,mem_adc_current_value
+	isub temp,null
+	branch keyboard_start_work,positive
+	arg mem_mouse_vdd_calculate_set,rega
+	call mouse_adc_bat_percent_lowpower_out
+	fetch 1,mem_adc_power_flag
+	bbit1 1,keyboard_power_down
+keyboard_start_work_next:
+
+	fetch 1,mem_keyboard_pairing_type
+	call keyboard_enable_bt_button_pairing,blank
+	fetch 1,mem_keyboard_bt_button_flag
+	nrtn blank
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,mouse_24g_reconn_general_dongle
+	call mouse_bluetooth_fast_conn_disable
+	fetch 6,mem_device1_addr	
+	branch mouse_bluetooth_fast_conn_init ,blank
+	branch mouse_start_reconnect_device
+
+
+	
+
+
+
+	
+
+
+
+/////////////////////////////////////keyboard le///////////////////////////////////////////////////////////////////////////////////////
+keyboard_le:
+	bpatch patch09_5,mem_patch09
+	call le_fifo_check_nearly_full
+	nrtn blank
+	fetch 1,mem_mouse_bluetooth_fast_conn_flag
+	beq 0xff,keyboard_le_next
+	fetch 1,mem_le_connect_status_flag
+	and pdata,0x03,pdata
+	rtnne 0x03
+keyboard_le_next:	
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit1 MOUSE_24G_PAIRING_FLAG,mouse_le_send_empty_packet
+	bbit1 MOUSE_SELECT_DEVICE_FLAG,mouse_le_send_empty_packet
+	bbit1 MOUSE_BT_DISCOVERY_BUTTON_DOWN_FLAG,mouse_le_send_empty_packet
+	bbit1 MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG,mouse_le_send_empty_packet
+	call keyboard_motion
+	nrtn user
+	call mouse_current_mult_update
+	call mouse_wheel_trigger
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_KEYBOARD,mouse_le_send_mouse_data
+	fetch 1,mem_customer_key
+	branch mouse_le_send_keyboard_package_data		
+
+
+
+
+
+/***********************************kscan and value process***********************************************/
+kscan_dispatch:
+	fetch 1,mem_device_option
+	rtnne DVC_OP_KEYBOARD
+	call keyboard_keyscan
+	call keyboard_key_process
+	branch keyboard_special_key_check
+/***********************************kscan and value process***********************************************/
+
+
+
+
+/***********************************kscan process***********************************************/
+keyboard_keyscan:
+	bpatch patch09_6,mem_patch09
+	call keyboard_stb_state_low							// exmcu wake up
+	setarg 0
+	store 2,mem_keyscan_exmcu_wait_wake_count
+	arg mem_keyscan_value_current,contr
+	arg mem_keyscan_value_check,contw
+	arg 20,loopcnt
+	call memcpy
+	setarg mem_keyscan_value_current
+	store 2,mem_keyscan_value_ptr
+	setarg mem_keyscan_exmcu_value
+	store 2,mem_keyscan_exmcu_value_ptr
+	call keyboard_keyscan_get_exmcu_value
+	call keyboard_keyscan_get_mcu_value
+	call keyboard_stb_state_high							// exmcu sleep
+keyboard_keyscan_copy_value:
+	fetch 2,mem_kb_excol_ptr
+	copy pdata,regb
+	jam 0,mem_keyscan_col_loop_count
+keyboard_compare_col_excol_gpio_loop:		// loop 11 times
+	ifetcht 1,regb
+	fetch 2,mem_kb_col_ptr
+	copy pdata,rega
+	copy rega,regc
+	arg 20,loopcnt
+keyboard_compare_col_gpio_loop:
+	ifetch 1,rega
+	isub temp,null
+	branch keyboard_copy_value_exmcu_to_mcu,zero
+	increase 1,rega
+	loop keyboard_compare_col_gpio_loop
+keyboard_compare_col_excol_gpio_loop_next:	
+	increase 1,regb
+	fetch 1,mem_keyscan_col_loop_count
+	increase 1,pdata
+	store 1,mem_keyscan_col_loop_count
+	sub pdata,10,null
+	branch keyboard_compare_col_excol_gpio_loop,positive
+	
+	rtn
+	
+keyboard_copy_value_exmcu_to_mcu:
+	fetch 2,mem_keyscan_value_ptr
+	copy pdata,contw
+	copy rega,pdata	
+	isub regc,pdata 
+	iadd contw,contw							// offset = rega-regc
+	fetch 2,mem_keyscan_exmcu_value_ptr
+	copy pdata,regc
+	fetch 1,mem_keyscan_col_loop_count
+	iadd regc,regc	
+	ifetch 1, regc								// offset = mem_keyscan_col_loop_count
+	istore 1,contw
+	branch keyboard_compare_col_excol_gpio_loop_next
+	
+keyboard_keyscan_get_exmcu_value:	//	8*11 times
+	bpatch patch09_7,mem_patch09
+	call keyboard_stb_state_high
+	call keyboard_clk_input	
+keyboard_keyscan_exmcu_start:
+	fetch 2,mem_keyscan_exmcu_wait_wake_count
+	increase 1,pdata
+	store 2,mem_keyscan_exmcu_wait_wake_count
+	bbit1 9,keyboard_keyscan_reset_exmcu 				// 953us reset exmcu
+	fetcht 1,mem_mcu_clk_gpio							// waiting for exmcu wake done
+	call gpio_get_bit
+	nbranch keyboard_keyscan_exmcu_start,true
+	nop 20
+	call keyboard_clk_state_high
+	call keyboard_stb_state_low
+	jam 0,mem_keyscan_col_loop_count
+keyboard_keyscan_exmcu_start_loop:	// clk:0 1 0 1 0 1 0 1 0 1 0
+	call keyboard_clk_state_low
+	call keyboard_keyscan_exmcu_get_col_value
+	call keyboard_clk_state_high
+	call keyboard_keyscan_exmcu_get_col_value
+	sub pdata,9,null
+	branch keyboard_keyscan_exmcu_start_loop,positive
+	call keyboard_clk_state_low
+	call keyboard_keyscan_exmcu_get_col_value
+	branch keyboard_clk_state_high	
+	
+keyboard_keyscan_exmcu_get_col_value:
+	jam 0,mem_keyscan_value_temp
+	nop 50
+	call keyboard_keyscan_get_col_value
+	fetch 2,mem_keyscan_exmcu_value_ptr
+keyboard_keyscan_value_store:
+	copy  pdata,contw
+	fetch 1,mem_keyscan_col_loop_count
+	iadd contw,contw
+	fetch 1,mem_keyscan_value_temp
+	istore 1,contw
+	fetch 1,mem_keyscan_col_loop_count
+	increase 1,pdata
+	store 1,mem_keyscan_col_loop_count
+	rtn	
+
+	
+keyboard_keyscan_get_mcu_value: 		// 8*20 = 130us
+	nop 20					// wait exmcu keyscan done
+	fetch 2,mem_kb_col_ptr
+	copy pdata,regb
+	jam 0,mem_keyscan_col_loop_count
+keyboard_keyscan_mcu_start:		// loop 20 times
+	jam 0,mem_keyscan_value_temp
+	ifetcht 1,regb
+	isolate1 7,temp								// exmcu gpio
+	branch keyboard_keyscan_mcu_start_loop,true		//???c????0012?? io
+	call gpio_out_active
+	call keyboard_keyscan_get_col_value
+	ifetcht 1,regb
+	call gpio_set_high_impedance
+keyboard_keyscan_mcu_start_loop:
+	increase 1,regb
+	fetch 2,mem_keyscan_value_ptr		//mcu c?????
+	call keyboard_keyscan_value_store
+	sub pdata,19,null						//sub pdata,19,null
+	branch keyboard_keyscan_mcu_start,positive
+	rtn	
+
+	
+keyboard_keyscan_get_col_value:
+	fetch 2,mem_kb_row_ptr
+	copy pdata,regc
+	arg 8,loopcnt
+	
+keyboard_keyscan_get_col_value_loop:		// loop 8 times
+	ifetcht 1,regc
+	call gpio_get_bit
+	fetch 1,mem_keyscan_value_temp
+	rshift pdata,pdata
+	setflag true,7,pdata
+	store 1,mem_keyscan_value_temp
+	increase 1,regc
+	loop keyboard_keyscan_get_col_value_loop
+	rtn
+keyboard_keyscan_reset_exmcu:
+	fetcht 1,mem_mcu_rstb_gpio
+	call gpio_out_active
+	nop 20
+	fetcht 1,mem_mcu_rstb_gpio
+	call gpio_out_inactive
+	nop 6000						// waiting for exmcu reset done 502us > 301.9us
+	rtn
+	branch keyboard_keyscan	
+keyboard_clk_state_high:
+	fetcht 1,mem_mcu_clk_gpio
+	branch gpio_out_inactive
+
+keyboard_clk_state_low:
+	fetcht 1,mem_mcu_clk_gpio
+	branch gpio_out_active
+keyboard_gpio_config_input_pu:
+	sub temp,UI_BUTTON_GPIO_DISABLE,null
+	rtn zero 
+	set0 GPIO_ACTIVE_BIT,temp
+	branch gpio_config_input
+keyboard_clk_input:
+	fetcht 1,mem_mcu_clk_gpio
+	branch gpio_config_input
+	
+keyboard_stb_state_high:
+	fetcht 1,mem_mcu_stb_gpio
+	branch gpio_out_inactive
+
+keyboard_stb_state_low:
+	fetcht 1,mem_mcu_stb_gpio
+	branch gpio_out_active
+/***********************************kscan process***********************************************/
+
+
+
+
+
+
+
+/**********************************key value process*******************************/
+// same key press check	
+keyboard_press_change_or_no_key:
+	jam 0,mem_same_keyvalue_timerout_flag
+	fetch 2,mem_same_keyvalue_timer_init
+	store 2,mem_same_keyvalue_timer
+	rtn
+
+keyboard_key_process:
+	// key deshake
+	bpatch patch0a_0,mem_patch0a
+	arg mem_keyscan_value_current,rega
+	arg mem_keyscan_value_check,regb
+	arg 20,loopcnt
+	call string_compare
+	nbranch keyboard_press_change_or_no_key,zero	
+	call keyboard_keyscan_value_current_zero_check
+	call keyboard_press_change_or_no_key,blank
+
+	call keyboard_ghost_key_check
+	fetch 1,mem_mouse_ghost_flag
+	nrtn blank
+	fetch 1,mem_keyboard_commbination_key_step
+	rtneq CAMMBINATION_KEY_PRESS
+	rtneq CAMMBINATION_KEY_HOLD
+	rtneq CAMMBINATION_KEY_WAIT_RELEASE
+
+	// keyvalue get from map,and in or out process
+	jam 0,mem_keyscan_col_loop_count
+	arg mem_keyscan_value_current,rega
+	arg mem_keyscan_value_old,regb
+keyboard_keyvalue_process:		// loop 20 times
+	ifetcht 1,rega
+	ifetch 1,regb
+	ixor  temp,pdata
+	branch keyboard_keyvalue_process_loop,blank
+	store 1,mem_keyscan_value_temp
+	storet 1,mem_keyboard_press_flag_temp
+	istoret 1,regb
+	jam 1,mem_keyboard_data_change_flag
+	jam 0,mem_keyboard_keyvalue_bit_loop_count
+keyboard_keyvalue_change:			// loop 8 times
+	fetch 1,mem_keyscan_value_temp
+	bbit0 0,keyboard_keyvalue_change_loop
+	fetch 1,mem_keyscan_col_loop_count
+	mul32 pdata,8,pdata
+	fetcht 1,mem_keyboard_keyvalue_bit_loop_count
+	iadd temp,pdata									// map offset
+	arg mem_keyboard_keyvalue_map,contr
+	iadd contr,contr
+	ifetch 1,contr
+	store 1,mem_keyboard_keyvalue_temp				// keyvalue
+	call keyboard_keyvalue_fn_replace
+	call keyboard_keyvalue_commbination_replace
+	call keyboard_keyvalue_in_out
+keyboard_keyvalue_change_loop:
+	fetch 1,mem_keyscan_value_temp
+	rshift pdata,pdata
+	store 1,mem_keyscan_value_temp
+	fetch 1,mem_keyboard_press_flag_temp
+	rshift pdata,pdata
+	store 1,mem_keyboard_press_flag_temp
+	fetch 1,mem_keyboard_keyvalue_bit_loop_count
+	increase 1,pdata
+	store 1,mem_keyboard_keyvalue_bit_loop_count
+	loop keyboard_keyvalue_change
+keyboard_keyvalue_process_loop:
+	increase 1,rega
+	increase 1,regb	
+	fetch 1,mem_keyscan_col_loop_count
+	increase 1,pdata
+	store 1,mem_keyscan_col_loop_count
+	sub pdata,19,null
+	branch keyboard_keyvalue_process,positive
+	rtn
+
+keyboard_keyscan_value_current_zero_check:
+	fetch 8,mem_keyscan_value_current
+	nrtn blank
+	fetch 8,mem_keyscan_value_current+8
+	nrtn blank
+	fetch 4,mem_keyscan_value_current+16
+	nrtn blank
+	jam CAMMBINATION_KEY_FREE,mem_keyboard_commbination_key_step
+	rtn
+
+/************************************ghost key ******************************************/
+//**input:mem_keyscan_value_current   **output:mem_mouse_ghost_flag   	mem_keyboard_all_press_key_count
+keyboard_ghost_key_check:	// (col[i] press >= 2) && (row[j] press >=2) && (c[i]_r[j] press) 
+	bpatch patch0a_1,mem_patch0a
+	jam 0,mem_mouse_ghost_flag
+	jam 0,mem_keyboard_all_press_key_count
+	arg mem_keyscan_value_current,rega
+	arg 20,loopcnt
+keyboard_ghost_key_check_loop:
+	jam 0,mem_keyboard_current_col_press_key_count
+	ifetch 1,rega
+	branch keyboard_ghost_key_check_next_loop,blank
+keyboard_current_col_press_key_count_check:	
+	fetcht 1,mem_keyboard_current_col_press_key_count
+	increase 1,temp
+	storet 1,mem_keyboard_current_col_press_key_count
+	copy pdata,temp
+	increase -1,pdata
+	iand temp,pdata									// pdata &= pdata -1;  check pdata bit1 count
+	nbranch keyboard_current_col_press_key_count_check,zero
+	fetch 1,mem_keyboard_current_col_press_key_count
+	fetcht 1,mem_keyboard_all_press_key_count
+	iadd temp,temp
+	storet 1,mem_keyboard_all_press_key_count
+	sub pdata,1,null
+	branch keyboard_ghost_key_check_next_loop,positive
+	sub temp,2,null
+	branch keyboard_ghost_key_check_next_loop,positive
+	jam 0,mem_keyscan_col_loop_count					// col[i] press key count >= 2
+	jam 0,mem_keyboard_same_row_press_key_count
+	ifetcht 1,rega
+	arg mem_keyscan_value_current,regb
+keyboard_same_row_key_check:
+	fetch 1,mem_keyscan_col_loop_count
+	increase 1,pdata
+	store 1,mem_keyscan_col_loop_count
+	sub pdata,19,null
+	nbranch keyboard_ghost_key_check_next_loop,positive		// end col[i] row[0~7] check
+	ifetch 1,regb
+	iand temp,null												// col[i] & col[0~19]
+	branch keyboard_same_row_key_check_loop,zero
+	fetch 1,mem_keyboard_same_row_press_key_count		
+	increase 1,pdata
+	store 1,mem_keyboard_same_row_press_key_count
+	sub pdata,1,null
+	branch keyboard_same_row_key_check_loop,positive
+	jam 1,mem_mouse_ghost_flag
+	rtn	
+	
+keyboard_ghost_key_check_next_loop:
+	increase 1,rega
+	loop keyboard_ghost_key_check_loop
+	rtn
+
+keyboard_same_row_key_check_loop:
+	increase 1,regb
+	branch keyboard_same_row_key_check
+	
+/******************************ghost key*********************************************/
+
+
+
+
+/******************************fn replace*********************************************/
+keyboard_keyvalue_fn_replace:
+	bpatch patch0a_2,mem_patch0a
+	fetch 1,mem_keyboard_press_flag_temp
+	ncall keyboard_commbination_delay_release_clear,blank
+	fetch 1,mem_keyboard_fn_flag
+	ncall keyboard_keyvalue_fn_replace_press,blank
+	fetch 1,mem_keyboard_fn_first
+	fetcht 1,mem_keyboard_fn_flag
+	ixor temp,pdata
+	rtn zero
+	fetch 1,mem_keyboard_keyvalue_temp
+	beq HID_KEY_ESC,keyboard_keyvalue_fn_esc
+	beq HID_KEY_DELETE,keyboard_keyvalue_fn_delete
+	sub pdata,HID_KEY_F12,null
+	nrtn positive
+	arg HID_KEY_F1,temp	
+	isub temp,pdata
+	nrtn positive			
+	arg mem_keyboard_fn_f1,contr		//  HID_KEY_F1 <= keyvalue <= HID_KEY_F12
+	iadd contr,contr
+	ifetch 1,contr
+	branch keyboard_keyvalue_store_temp
+	
+keyboard_keyvalue_fn_replace_press:
+	fetch 1,mem_keyboard_keyvalue_temp
+	beq HID_KEY_UP_ARROW,keyboard_keyvalue_fn_up_arrow
+	beq HID_KEY_DOWN_ARROW,keyboard_keyvalue_fn_down_arrow
+	beq HID_KEY_LEFT_ARROW,keyboard_keyvalue_fn_left_arrow
+	beq HID_KEY_RIGHT_ARROW,keyboard_keyvalue_fn_right_arrow
+	beq HID_KEY_LEFT_CTRL,keyboard_keyvalue_fn_left_ctrl
+	beq HID_KEY_SPACE,keyboard_keyvalue_fn_space
+	rtn
+
+keyboard_keyvalue_fn_esc:
+	fetch 1,mem_keyboard_fn_esc
+	branch keyboard_keyvalue_store_temp
+	
+keyboard_keyvalue_fn_delete:
+	fetch 1,mem_keyboard_fn_del
+	branch keyboard_keyvalue_store_temp
+
+keyboard_keyvalue_fn_up_arrow:
+	fetch 1,mem_keyboard_fn_arrow_enable_flag
+	rtn blank
+	setarg HID_KEY_PAGE_UP
+	branch keyboard_keyvalue_store_temp
+	
+keyboard_keyvalue_fn_down_arrow:
+	fetch 1,mem_keyboard_fn_arrow_enable_flag
+	rtn blank
+	setarg HID_KEY_PAGE_DOWN
+	branch keyboard_keyvalue_store_temp
+
+keyboard_keyvalue_fn_left_arrow:
+	fetch 1,mem_keyboard_fn_arrow_enable_flag
+	rtn blank
+	setarg HID_KEY_HOME
+	branch keyboard_keyvalue_store_temp
+
+keyboard_keyvalue_fn_right_arrow:
+	fetch 1,mem_keyboard_fn_arrow_enable_flag
+	rtn blank
+	setarg HID_KEY_END
+	branch keyboard_keyvalue_store_temp
+
+keyboard_keyvalue_fn_left_ctrl:
+	fetch 1,mem_keyboard_fn_left_ctrl_enable_flag
+	rtn blank
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_WINDOWS,keyboard_keyvalue_windows_osk
+	setarg HID_KEY_OS_SOFT_KB
+	branch keyboard_keyvalue_store_temp
+keyboard_keyvalue_windows_osk:	
+	setarg HID_KEY_OSK
+	branch keyboard_keyvalue_store_temp
+
+keyboard_keyvalue_fn_space:
+	fetch 1,mem_keyboard_fn_space_enable_flag
+	rtn blank
+	setarg HID_KEY_LANGUAGE
+keyboard_keyvalue_store_temp:
+	store 1,mem_keyboard_keyvalue_temp
+	rtn
+/**********************************key value process*******************************/	
+
+
+
+/*******************************commbine keyvalue *************************************/
+keyboard_keyvalue_commbination_replace:
+	bpatch patch0a_3,mem_patch0a
+	fetch 1,mem_keyboard_keyvalue_temp
+	beq HID_KEY_PRINT_SCREEN,keyboard_commination_screen_shot_replace
+	beq HID_KEY_PAGE_UP,keyboard_commination_pageup_replace
+	beq HID_KEY_PAGE_DOWN,keyboard_commination_pagedown_replace
+	beq HID_KEY_HOME,keyboard_commination_home_replace
+	beq HID_KEY_END,keyboard_commination_end_replace
+	beq HID_KEY_SELECT_ALL,keyboard_commination_select_all
+	beq HID_KEY_COPY,keyboard_commbination_copy
+	beq HID_KEY_PASTE,keyboard_commbination_paste
+	beq HID_KEY_CUT,keyboard_commbination_cut
+	beq HID_KEY_ALL_OS_LOCK,keyboard_commination_os_lock
+	beq HID_KEY_OSK,keyboard_commbination_osk
+	beq HID_KEY_LANGUAGE,keyboard_commbination_language
+	beq HID_KEY_APP_TILING,keyboard_commbination_app_tiling
+	rtn
+
+keyboard_commbination_delay_release_set:
+	fetch 1,mem_keyboard_press_flag_temp
+	nrtn blank
+	jam 10,mem_keyboard_commbination_control_key_delay_release_timer
+	rtn
+
+keyboard_commbination_delay_release_clear:
+	jam 0,mem_keyboard_commbination_control_key_delay_release_timer
+	rtn
+
+keyboard_commination_screen_shot_replace:
+	fetch 1,mem_kb_computer_system
+	rtneq SYSTEM_OS_WINDOWS
+	rtneq SYSTEM_OS_ANDRIOD
+	jam LEFT_SHIFT_GUI,mem_keyboard_commbination_control_key_value
+	jam HID_KEY_3,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_keypress
+
+keyboard_commination_pageup_replace:
+	jam HID_KEY_UP_ARROW,mem_keyboard_commbination_standard_key_value
+keyboard_commination_ios_mac_command_commiation:	
+	fetch 1,mem_kb_computer_system
+	rtneq SYSTEM_OS_WINDOWS
+	rtneq SYSTEM_OS_ANDRIOD
+	jam LEFT_GUI,mem_keyboard_commbination_control_key_value
+	branch keyboard_commbination_keypress
+
+keyboard_commination_pagedown_replace:
+	jam HID_KEY_DOWN_ARROW,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commination_ios_mac_command_commiation	
+
+keyboard_commination_home_replace:
+	jam HID_KEY_LEFT_ARROW,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commination_ios_mac_command_commiation
+
+keyboard_commination_end_replace:
+	jam HID_KEY_RIGHT_ARROW,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commination_ios_mac_command_commiation
+
+keyboard_commination_select_all:
+	jam HID_KEY_A,mem_keyboard_commbination_standard_key_value
+keyboard_commbination_text_edit:
+	jam LEFT_CONTROL,mem_keyboard_commbination_control_key_value
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_WINDOWS,keyboard_commbination_keypress
+	beq SYSTEM_OS_ANDRIOD,keyboard_commbination_keypress
+	jam LEFT_GUI,mem_keyboard_commbination_control_key_value
+	branch keyboard_commbination_keypress
+
+keyboard_commbination_copy:
+	jam HID_KEY_C,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_text_edit
+
+keyboard_commbination_paste:
+	jam HID_KEY_V,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_text_edit
+
+keyboard_commbination_cut:	
+	jam HID_KEY_X,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_text_edit
+
+keyboard_commination_os_lock:
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_WINDOWS,keyboard_commination_windows_lock
+	beq SYSTEM_OS_MAC,keyboard_commination_mac_lock
+	setarg HID_KEY_IOS_ANDROID_OS_LOCK
+	branch keyboard_keyvalue_store_temp
+keyboard_commination_windows_lock:	
+	jam LEFT_GUI,mem_keyboard_commbination_control_key_value
+	jam HID_KEY_L,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_keypress
+keyboard_commination_mac_lock:
+	jam LEFT_GUI_CONTROL,mem_keyboard_commbination_control_key_value
+	jam HID_KEY_Q,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_keypress
+	
+keyboard_commbination_osk:
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_WINDOWS,keyboard_commbination_windows_osk
+	setarg HID_KEY_OS_SOFT_KB
+	branch keyboard_keyvalue_store_temp
+keyboard_commbination_windows_osk:	
+	jam LEFT_GUI_CONTROL,mem_keyboard_commbination_control_key_value
+	jam HID_KEY_O,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_keypress
+	
+keyboard_commbination_language:
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_WINDOWS,keyboard_commbination_language_windows
+	beq SYSTEM_OS_ANDRIOD,keyboard_commbination_language_andriod
+	jam LEFT_CONTROL,mem_keyboard_commbination_control_key_value
+keyboard_commbination_language_next:
+	jam HID_KEY_SPACE,mem_keyboard_commbination_standard_key_value
+	call keyboard_commbination_delay_release_set	
+	branch keyboard_commbination_keypress
+keyboard_commbination_language_windows:
+	jam LEFT_GUI,mem_keyboard_commbination_control_key_value
+	branch keyboard_commbination_language_next
+keyboard_commbination_language_andriod:
+	jam LEFT_SHIFT,mem_keyboard_commbination_control_key_value
+	branch keyboard_commbination_language_next
+
+keyboard_commbination_app_tiling:
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_WINDOWS,keyboard_commbination_app_tiling_windows_android
+	beq SYSTEM_OS_ANDRIOD,keyboard_commbination_app_tiling_windows_android
+	jam LEFT_CONTROL,mem_keyboard_commbination_control_key_value
+	jam HID_KEY_UP_ARROW,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_keypress	
+keyboard_commbination_app_tiling_windows_android:
+	jam LEFT_GUI,mem_keyboard_commbination_control_key_value
+	jam HID_KEY_TAB,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_keypress	
+
+keyboard_commbination_keypress:
+	jam 0,mem_keyboard_keyvalue_temp
+	fetch 1,mem_keyboard_press_flag_temp
+	bbit0 0,keyboard_commbination_key_wait_release_set
+	fetch 1,mem_keyboard_commbination_key_step
+	beq CAMMBINATION_KEY_COMPLETE,keyboard_commbination_key_hold_set
+keyboard_commbination_key_press_set:	
+	jam CAMMBINATION_KEY_PRESS,mem_keyboard_commbination_key_step
+	rtn
+
+keyboard_commbination_key_wait_release_set:
+	jam CAMMBINATION_KEY_WAIT_RELEASE,mem_keyboard_commbination_key_step
+	rtn
+
+keyboard_commbination_key_null_set:
+	jam CAMMBINATION_KEY_NULL,mem_keyboard_commbination_key_step
+	rtn
+
+//**input:   pdata:control key vaule       temp:standard key value
+keyboard_commbination_key_value_store:
+	store 1,mem_keyboard_tx_data+1
+	storet 1,mem_keyboard_tx_data+3
+	call enable_user
+	jam HID_REPORTID_KEY_STANDARD,mem_keyboard_tx_data
+	branch keyboard_motion_data_check_next	
+	
+keyboard_commbination_key_press_process:
+	fetch 1,mem_keyboard_commbination_control_key_value
+	arg 0,temp
+	call keyboard_commbination_key_value_store
+keyboard_commbination_key_hold_set:
+	jam CAMMBINATION_KEY_HOLD,mem_keyboard_commbination_key_step
+	rtn
+
+keyboard_commbination_key_hold_process:
+	jam CAMMBINATION_KEY_COMPLETE,mem_keyboard_commbination_key_step
+	fetch 1,mem_keyboard_commbination_control_key_value
+	fetcht 1,mem_keyboard_commbination_standard_key_value
+	branch keyboard_commbination_key_value_store
+	
+keyboard_commbination_key_wait_release_process:
+	jam HID_REPORTID_KEY_STANDARD,mem_keyboard_tx_data
+	fetch 1,mem_keyboard_commbination_control_key_value
+	arg 0,temp
+	call keyboard_commbination_key_value_store
+	fetch 1,mem_keyboard_commbination_control_key_delay_release_timer
+	branch keyboard_commbination_key_null_set,blank
+keyboard_commbination_key_release_set:	
+	jam CAMMBINATION_KEY_RELEASE,mem_keyboard_commbination_key_step
+	rtn
+
+keyboard_commbination_key_release_process:
+	branch keyboard_commbination_key_value_store+2
+
+keyboard_commbination_key_null_process:
+	jam CAMMBINATION_KEY_FREE,mem_keyboard_commbination_key_step
+	arg 0,pdata
+	arg 0,temp
+	branch keyboard_commbination_key_value_store	
+
+
+
+keyboard_keyvalue_in_out:
+	bpatch patch0a_4,mem_patch0a
+	fetch 1,mem_keyboard_keyvalue_temp
+	sub pdata,HID_KEY_RIGHT_GUI,null
+	branch keyboard_keyvalue_standard,positive		// value  <= 0xe7
+	jam KEYBOARD_CONSUMER_KEY_PRESS,mem_keyboard_consumer_key_status		
+	fetch 1,mem_keyboard_press_flag_temp
+	bbit1 0,keyboard_keyvalue_standard
+	jam KEYBOARD_CONSUMER_KEY_RELEASE,mem_keyboard_consumer_key_status
+keyboard_keyvalue_standard:
+	jam 0,mem_keyboard_keyvalue_buffer+8
+	fetch 1,mem_keyboard_press_flag_temp
+	bbit1 0,keyboard_keyvalue_standard_in
+keyboard_keyvalue_standard_out:	
+	fetcht 1,mem_keyboard_keyvalue_temp
+	arg 6,loopcnt
+	arg mem_keyboard_keyvalue_buffer+2,contr
+keyboard_keyvalue_standard_out_loop:
+	ifetch 1,contr
+	branch keyboard_keyvalue_standard_out_next+1,blank
+	isub temp,null
+	nbranch keyboard_keyvalue_standard_out_next,zero
+	ifetch 1,contr
+	increase -2,contr
+	istore 1,contr
+	rtn blank
+	increase 1,contr
+	istoret 1,contr
+keyboard_keyvalue_standard_out_next:	
+	loop keyboard_keyvalue_standard_out_loop
+	sub temp,HID_KEY_RIGHT_GUI,null
+	nrtn positive
+	sub temp,0xbf,null
+	rtn positive
+keyboard_keyvalue_control_key_out:
+	and temp,0x07,queue
+	fetch 1,mem_keyboard_keyvalue_buffer
+	qset0 pdata
+	store 1,mem_keyboard_keyvalue_buffer
+	rtn	
+
+keyboard_keyvalue_standard_in:
+	fetcht 1,mem_keyboard_keyvalue_temp
+	arg 6,loopcnt
+	arg mem_keyboard_keyvalue_buffer+2,contr
+keyboard_keyvalue_standard_in_loop:
+	ifetch 1,contr
+	branch keyboard_keyvalue_standard_in_data,blank
+	isub temp,null
+	rtn zero
+	loop keyboard_keyvalue_standard_in_loop
+	sub temp,HID_KEY_RIGHT_GUI,null
+	nrtn positive
+	sub temp,0xbf,null
+	rtn positive
+keyboard_keyvalue_control_key_in:
+	and temp,0x07,queue
+	fetch 1,mem_keyboard_keyvalue_buffer
+	qset1 pdata
+	store 1,mem_keyboard_keyvalue_buffer
+	rtn
+	
+keyboard_keyvalue_standard_in_data:
+	sub temp,HID_KEY_RIGHT_GUI,null
+	nbranch keyboard_keyvalue_standard_in_data_next,positive
+	sub temp,0xbf,null
+	nbranch keyboard_keyvalue_control_key_in,positive
+keyboard_keyvalue_standard_in_data_next:	
+	increase -1,contr
+	istoret 1,contr
+	rtn
+	
+/******************************** special key ****************************************************/
+// check Fn,pairing button,control key
+keyboard_special_key_check:
+	bpatch patch0a_5,mem_patch0a
+	call keyboard_pairing_button_check
+	jam 0,mem_keyboard_fn_flag
+	jam 0,mem_keyboard_control_key_flag
+	jam 0,mem_keyboard_bt_button_flag
+	fetch 1,mem_keyboard_keyvalue_buffer
+	ncall keyborad_control_key_set,blank
+	arg mem_keyboard_keyvalue_buffer+2,contr
+	arg 6,loopcnt
+keyboard_special_key_check_loop:
+	ifetch 1,contr
+	sub pdata,HID_KEY_FN,null
+	call keyboard_fn_set,zero
+	sub pdata,HID_KEY_PB,null
+	call keyboard_pb_set,zero
+	loop keyboard_special_key_check_loop
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_special_key_check_24g
+keyboard_special_key_check_bluetooth:
+	call keyboard_commbination_fast_conn_bt_check
+	fetch 1,mem_keyboard_pairing_type
+	branch keyboard_enable_bt_button_pairing,blank
+	fetch 2,mem_keyboard_keyvalue_buffer+2
+	fetcht 2,mem_keyboard_commbination_key_bt
+	isub temp,null
+	branch keyboard_long_button_bt_discovery,zero
+	byteswap temp,temp
+	isub temp,null
+	branch keyboard_long_button_bt_discovery,zero
+	rtn
+keyboard_special_key_check_24g:
+	fetch 1,mem_keyboard_pairing_type
+	branch keyboard_enable_bt_button_pairing,blank
+	branch keyboard_commbination_pairing_24g_check	
+	
+keyboard_pairing_button_check:
+	fetch 1,mem_keyboard_pairing_type
+	nrtn blank
+	fetcht 1,mem_config_select_device_button_gpio
+	sub temp,UI_BUTTON_GPIO_DISABLE,null
+	rtn zero
+	call gpio_get_bit
+	nbranch keyboard_pairing_button_release,true
+	arg 8,loopcnt
+	arg mem_keyboard_keyvalue_buffer,contw
+	call clear_mem
+	jam HID_KEY_PB,mem_keyboard_keyvalue_buffer+2
+	rtn
+
+keyboard_pairing_button_release:
+	fetch 1,mem_keyboard_keyvalue_buffer+2
+	rtnne HID_KEY_PB
+	jam HID_KEY_NULL,mem_keyboard_keyvalue_buffer+2
+	rtn	
+
+keyboard_enable_bt_button_pairing:
+	bpatch patch0a_6,mem_patch0a
+	fetch 1,mem_keyboard_bt_button_flag
+	rtn blank
+	fetch 1,mem_device_flag
+	beq MODE_24G_DEVICE,keyboard_24g_start_pair_mode
+keyboard_long_button_bt_discovery:
+//	call keyboard_pairing_check_otp_offset
+	jam 0,mem_keyboard_data_change_flag
+	fetch 1,mem_device_flag
+	rtneq MODE_24G_DEVICE
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit1 MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG
+	arg MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG,queue
+	call mouse_enable_function_flag
+	call app_evt_button_long_pressed
+	branch keyboard_bb_event_discovery_btn
+
+	
+
+keyboard_commbination_pairing_24g_check:
+	fetch 2,mem_keyboard_keyvalue_buffer+2
+	fetcht 2,mem_keyboard_commbination_key_24g
+	isub temp,null
+	branch keyboard_24g_start_pair_mode,zero
+	byteswap temp,temp
+	isub temp,null
+	nrtn zero
+keyboard_24g_start_pair_mode:
+	call keyboard_pairing_check_otp_offset		
+	jam 0,mem_keyboard_data_change_flag
+	fetch 2,mem_24g_pair_timeout
+	nrtn blank
+	setarg 0
+	store 2,mem_mouse_no_data_timer
+	call keyboard_capslock_led_off
+	branch mouse_24g_start_pair_mode
+
+
+keyborad_control_key_set:
+	jam 1,mem_keyboard_control_key_flag
+	rtn
+
+keyboard_fn_set:
+	jam 1,mem_keyboard_fn_flag
+	rtn
+
+keyboard_pb_set:
+	jam 1,mem_keyboard_bt_button_flag
+	rtn
+
+
+
+///////////////////////////////////////////////////////////////---motion----//////////////////////////////////
+keyboard_motion:
+	bpatch patch0a_7,mem_patch0a
+	disable user
+	jam 0,mem_customer_key
+	jam 0,mem_customer_data_trigger
+	jam 0,mem_customer_data_trigger_last
+	fetch 1,mem_keyboard_commbination_key_step
+	beq CAMMBINATION_KEY_PRESS,keyboard_commbination_key_press_process
+	beq CAMMBINATION_KEY_HOLD,keyboard_commbination_key_hold_process
+	beq CAMMBINATION_KEY_COMPLETE,keyboard_commbination_key_hold_process
+	beq CAMMBINATION_KEY_WAIT_RELEASE,keyboard_commbination_key_wait_release_process
+	beq CAMMBINATION_KEY_NULL,keyboard_commbination_key_null_process
+	fetch 1,mem_keyboard_data_change_flag
+	branch keyboard_no_key_press,blank
+	increase -1,pdata
+	store 1,mem_keyboard_data_change_flag	
+	call keyboard_current_mult_update	
+	jam 10,mem_keyboard_led_status_get_timer
+	call mouse_no_data_timer_init
+	fetch 1,mem_keyboard_commbination_key_step
+	beq CAMMBINATION_KEY_RELEASE,keyboard_commbination_key_release_process
+	arg mem_keyboard_tx_data,contw
+	arg 10,loopcnt
+	call clear_mem
+	call keyboard_motion_data_check
+	jam 0,mem_keyboard_data_send_flag
+	rtn
+
+keyboard_current_mult_update:
+	jam 3,mem_lpm_mult
+	jam 10,mem_mouse_current_mult_timer
+	rtn
+
+
+
+keyboard_no_key_press:
+	fetch 1,mem_device_flag
+	rtneq MODE_BT_DEVICE1
+	fetch 1,mem_keyboard_led_status_get
+	rtn blank
+	fetch 1,mem_24g_repeat_send_flag
+	nrtn blank
+	fetcht 1,mem_keyboard_led_status_get_timer_last
+	fetch 1,mem_keyboard_led_status_get_timer
+	isub temp,null
+	store 1,mem_keyboard_led_status_get_timer_last
+	rtn zero
+	arg mem_keyboard_tx_data,contw
+	arg 10,loopcnt
+	call clear_mem
+	call enable_user
+	branch keyboard_motion_data_check_next	
+
+
+
+keyboard_motion_data_check:
+	fetch 1,mem_keyboard_consumer_key_status
+	beq KEYBOARD_CONSUMER_KEY_RELEASE,keyboard_value_consumer_release
+	arg mem_keyboard_keyvalue_buffer+2,contr
+	arg 6,loopcnt
+keyboard_value_tpye_check:
+	ifetch 1,contr
+	sub pdata,HID_KEY_RIGHT_GUI,null
+	nbranch keyboard_value_tpye_consumer_set,positive
+keyboard_value_tpye_check_loop:	
+	loop keyboard_value_tpye_check
+
+	fetch 1,mem_keyboard_all_press_key_count
+	call keyboard_value_release_all_key,blank
+	jam HID_REPORTID_KEY_STANDARD,mem_keyboard_tx_data
+	fetch 1,mem_keyboard_keyvalue_buffer+2
+	sub pdata,HID_KEY_FN,null
+	branch keyboard_tx_data_skip_fn,zero
+	arg mem_keyboard_keyvalue_buffer,contr
+	arg mem_keyboard_tx_data+1,contw
+	arg 8,loopcnt
+keyboard_tx_data_store:
+	ifetch 1,contr
+	beq HID_KEY_FN,keyboard_tx_data_clear_fn
+keyboard_tx_data_store_loop:
+	istore 1,contw
+	loop keyboard_tx_data_store
+
+keyboard_motion_data_check_next:
+	call keyboard_device_data_tpye_check
+
+	fetch 1,mem_keyboard_data_send_flag
+	beq DEVICE_DATA_TPYE_MOUSE,enable_user
+	beq DEVICE_DATA_TPYE_STANDARD_KEYBOARD,device_send_keyboard_data
+	beq DEVICE_DATA_TPYE_NONSTARNDARD_KEYBOARD,device_send_keyboard_data
+	beq DEVICE_DATA_TPYE_CONSUMER,device_send_keyboard_data
+	beq DEVICE_DATA_TPYE_SYSTEM_CONCTOL,device_send_keyboard_data
+device_send_keyboard_data:
+	call mouse_customerkey_press
+	branch enable_user
+
+keyboard_value_release_all_key:
+	arg mem_keyboard_keyvalue_buffer,contw
+	arg 9,loopcnt
+	branch clear_mem
+
+
+keyboard_tx_data_skip_fn:
+	fetch 2,mem_keyboard_keyvalue_buffer
+	store 2,mem_keyboard_tx_data+1
+	fetch 6,mem_keyboard_keyvalue_buffer+3
+	store 6,mem_keyboard_tx_data+3
+	branch keyboard_motion_data_check_next
+
+keyboard_tx_data_clear_fn:
+	setarg 0
+	branch keyboard_tx_data_store_loop
+
+////////////////////////////////////////////////////---fn---//////////////////////////////////////////////////////////
+keyboard_value_tpye_consumer_set:
+	copy pdata,temp
+	bpatch patch0b_0,mem_patch0b
+	copy temp,pdata
+	jam HID_REPORTID_CONSUMER_KEY,mem_keyboard_tx_data
+	fetcht 1,mem_keyboard_all_press_key_count
+	sub temp,HID_KEY_NULL,null
+	branch keyboard_value_consumer_all_key_release,zero
+	beq 	HID_KEY_MULTIKEY_MEDIA,keyboard_value_media
+	beq 	HID_KEY_MULTIKEY_PALY,keyboard_value_play
+	beq 	HID_KEY_MULTIKEY_STOP,keyboard_value_stop
+	beq 	HID_KEY_MULTIKEY_PRE_TRACK,keyboard_value_pre_track
+	beq 	HID_KEY_MULTIKEY_NEXT_TRACK,keyboard_value_next_track
+	beq 	HID_KEY_MULTIKEY_VOL_DOWN,keyboard_value_vol_down
+	beq 	HID_KEY_MULTIKEY_VOL_UP,keyboard_value_vol_up
+	beq 	HID_KEY_MULTIKEY_MUTE,keyboard_value_mute
+	beq 	HID_KEY_MY_COMPUTER,keyboard_value_my_computer
+	beq 	HID_KEY_MAIL,keyboard_value_mail
+	beq 	HID_KEY_CALCULATOR,keyboard_value_calculator
+	beq 	HID_KEY_LIGHT_DOWN,keyboard_value_light_down
+	beq 	HID_KEY_LIGHT_UP,keyboard_value_light_up
+	beq 	HID_KEY_AC_FAVORITES,keyboard_value_ac_favorites
+	beq 	HID_KEY_AC_FORWARD,keyboard_value_ac_forward
+	beq 	HID_KEY_AC_BACK,keyboard_value_ac_back
+	beq 	HID_KEY_AC_STOP,keyboard_value_ac_stop
+	beq 	HID_KEY_AC_REFRESH,keyboard_value_ac_refresh
+	beq 	HID_KEY_AC_SEARCH,keyboard_value_ac_search
+	beq 	HID_KEY_AC_HOME,keyboard_value_ac_home
+	beq 	HID_KEY_IOS_ANDROID_OS_LOCK,keyboard_value_os_lock
+	beq 	HID_KEY_OS_SOFT_KB,keyboard_value_os_soft_kb
+	beq 	HID_KEY_SYSTEM_SLEEP,keyboard_value_system_sleep
+	branch keyboard_motion_data_check_next
+
+keyboard_value_media:
+	setarg 0x0183
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_play:
+	setarg 0x00cd
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_stop:
+	setarg 0x00b7
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_pre_track:
+	setarg 0x00b6
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_next_track:
+	setarg 0x00b5
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next	
+keyboard_value_vol_down:
+	setarg 0x00ea
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_vol_up:
+	setarg 0x00e9
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_mute:
+	setarg 0x00e2
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_my_computer:
+	setarg 0x0194
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_mail:
+	setarg 0x018a
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_calculator:
+	setarg 0x0192
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next	
+keyboard_value_light_down:
+	setarg 0x0070
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_light_up:
+	setarg 0x006f
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_ac_favorites:
+	setarg 0x022a
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_ac_forward:
+	setarg 0x0225
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_ac_back:
+	setarg 0x0224
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_ac_stop:
+	setarg 0x0226
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_ac_refresh:
+	setarg 0x0227
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_ac_search:
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_IOS,keyboard_value_ac_home
+	beq SYSTEM_OS_MAC,keyboard_value_ac_home
+	setarg 0x0221
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next	
+keyboard_value_ac_home:
+	setarg 0x0223
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_os_lock:
+	setarg 0x0030
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_os_soft_kb:
+	fetch 1,mem_kb_computer_system
+	beq SYSTEM_OS_ANDRIOD,keyboard_value_os_soft_kb_andriod
+	setarg 0x01ae
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+keyboard_value_os_soft_kb_andriod:
+	setarg 0x0307
+	store 2,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next
+	
+keyboard_value_consumer_all_key_release:
+keyboard_value_consumer_release:
+	jam 2,mem_keyboard_data_change_flag	
+	fetch 1,mem_keyboard_all_press_key_count
+	call keyboard_value_release_all_key,blank
+	jam KEYBOARD_CONSUMER_KEY_STANDBY,mem_keyboard_consumer_key_status
+	setarg 0x03
+	store 3,mem_keyboard_tx_data
+	branch keyboard_motion_data_check_next
+keyboard_value_system_sleep:
+	jam HID_REPORTID_SYSTEM_CTRL,mem_keyboard_tx_data
+	setarg 0x02
+	store 1,mem_keyboard_tx_data+1
+	branch keyboard_motion_data_check_next		
+
+
+/************************************fn**********************************************/
+
+
+
+keyboard_device_data_tpye_check:
+	bpatch patch0b_1,mem_patch0b
+	fetch 1,mem_device_flag
+	bne MODE_24G_DEVICE,keyboard_device_data_tpye_check_next
+	jam 0,mem_24g_repeat_send_flag
+	fetch 2,mem_keyboard_tx_data
+	ncall keyboard_set_repeat_send_flag,blank
+	fetch 6,mem_keyboard_tx_data+3
+	ncall keyboard_set_repeat_send_flag,blank
+
+keyboard_device_data_tpye_check_next:
+	fetch 1,mem_keyboard_tx_data
+	beq HID_REPORTID_KEY_STANDARD,keyboard_standard_data_send
+	beq HID_REPORTID_MOUSE,keyboard_mouse_data_send
+	beq HID_REPORTID_CONSUMER_KEY,keyboard_consumer_data_send
+	beq HID_REPORTID_SYSTEM_CTRL,keyboard_system_control_data_send
+	rtn
+
+keyboard_mouse_data_send:
+	jam DEVICE_DATA_TPYE_MOUSE,mem_keyboard_data_send_flag
+	arg mem_keyboard_tx_data,contr
+	arg mem_mouse_key,contw
+	arg 7,loopcnt
+	branch memcpy
+	
+keyboard_standard_data_send:
+	jam DEVICE_DATA_TPYE_STANDARD_KEYBOARD,mem_keyboard_data_send_flag
+	call keyboard_clear_key_data
+	fetch 1,mem_device_flag
+	beq MODE_BT_DEVICE1,keyboard_standard_data_send_end
+	call keyboard_24g_led_get_status_check
+	fetch 1,mem_keyboard_led_status_get
+	store 1,mem_keyboard_tx_data+2
+keyboard_standard_data_send_end:
+	arg mem_keyboard_tx_data,contr
+	arg mem_customer_key_press,contw
+	arg 9,loopcnt
+	branch memcpy
+
+keyboard_consumer_data_send:
+	jam DEVICE_DATA_TPYE_CONSUMER,mem_keyboard_data_send_flag
+	call keyboard_clear_key_data
+	setarg 0x03
+	call mouse_customer_media_key_set
+	arg mem_keyboard_tx_data+1,contr
+	arg mem_customer_key_press+1,contw
+	arg 2,loopcnt
+	branch memcpy
+
+keyboard_system_control_data_send:
+	jam DEVICE_DATA_TPYE_SYSTEM_CONCTOL,mem_keyboard_data_send_flag
+	call keyboard_clear_key_data
+	setarg 0x02
+	store 8,mem_customer_key_press
+	store 8,mem_customer_key_release
+	fetch 1,mem_keyboard_tx_data+1
+	store 1,mem_customer_key_press+1
+	rtn
+
+
+keyboard_clear_key_data:
+	arg 18,loopcnt
+	arg mem_customer_key_press,contw
+	branch clear_mem
+
+
+
+////////////////////////////////////////lpm/////////////////////////////////////////////////////////////////////////	
+keyboard_lpm_before_common:	
+	call clear_wake
+	call mouse_wheel_check
+	fetcht 1,mem_whee_a_data_gpio
+	call gpio_set_wake_by_current_state
+	fetcht 1,mem_whee_b_data_gpio
+	call gpio_set_wake_by_current_state
+
+	fetcht 1,mem_config_select_device_button_gpio
+	call gpio_set_wake
+
+	fetch 2,mem_kb_col_ptr
+	copy pdata,regb
+	arg 20,loopcnt
+keyboard_key_col_wake_init:
+	ifetcht 1,regb
+	isolate1 7,temp				// exmcu gpio
+	ncall gpio_out_active,true
+	increase 1,regb
+	loop keyboard_key_col_wake_init
+
+	fetch 2,mem_kb_row_ptr
+	copy pdata,regb
+	arg 8,loopcnt
+keyboard_key_row_wake_init:
+	ifetcht 1,regb
+	sub temp,UI_BUTTON_GPIO_DISABLE,null
+	ncall gpio_set_wake_by_current_state,zero
+	increase 1,regb
+	loop keyboard_key_row_wake_init
+	rtn
+
+keyboard_key_row_wake_set:
+	fetch 1,mem_same_keyvalue_timerout_flag
+	branch gpio_set_wake,blank
+	branch gpio_set_wake_by_current_state
+keyboard_process_lpm_before:
+	rtnmark1 mark_24g
+	call keyboard_lpm_before_common
+	fetch 1,mem_lpm_current_mult
+	nrtn blank					// 7.5ms, no gpio wakeup
+	branch gpio_clr_wake
+keyboard_before_hibernate:
+	bpatch patch0b_2,mem_patch0b
+	jam 0xff,mem_sensor_motion_gpio
+	call disable_authrom
+	call keyboard_device_led_all_off
+	call mouse_before_hibernate_wheel_gpio_set
+	call mouse_setgpio_hibernate
+	call mouse_flash_power_down
+	fetcht 1,mem_sensor_motion_gpio
+	branch gpio_clr_wake
+	
+keyboard_power_down:
+	call keyboard_device_led_all_off
+keyboard_app_enter_hibernate:
+	bpatch patch0b_3,mem_patch0b
+	call keyboard_setgpio_hibernate
+	call ice_break
+	branch app_enter_hibernate
+	
+keyboard_device_led_all_off:
+	bpatch patch0b_4,mem_patch0b
+	call keyboard_device_led_off
+	call keyboard_numlock_led_off
+	call keyboard_capslock_led_off
+	branch keyboard_power_led_off			
+
+
+
+
+
+	
+keyboard_setgpio_hibernate:
+	bpatch patch0b_5,mem_patch0b
+	call clear_wake
+	call keyboard_device_led_all_off
+	call mouse_set_sdio_high
+	call keyboard_lpm_before_common
+	call mouse_gpio_pd_idle
+	fetcht 1,mem_mouse_reuse_2ice_gpio
+	call mouse_gpio_config_input_pu
+	call mouse_gpio_set_high_impedance
+	branch mouse_adc_gpio_set_before_hibernate
+////////////////////////////////////////24g/////////////////////////////////////////////////////////////////////////	
+
+
+
+
+
+
+
+
+
+
+keyboard_g24_reconn_dispatch:
+	fetch 2,mem_24g_reconn_count
+	and_into 0xe0,pdata
+	branch keyboard_g24_reconn_dispatch_next,blank		// each 0x100 times,reconnect 16 times
+	fetch 2,mem_24g_reconn_count
+	increase 1,pdata
+	store 2,mem_24g_reconn_count
+	rtn
+keyboard_g24_reconn_dispatch_next:
+	call g24_reconn_data_prep
+	call g24_transmit_receive_ack
+	nbranch g24_reconn_device_fail,sync
+	nbranch g24_reconn_device_fail,user3
+	call keyboard_g24_ackpayload_parse
+	branch g24_reconn_dispatch_next+5
+
+
+
+keyboard_g24_transmit_no_interrupt:
+
+	call g24_txdata_prep
+	nbranch keyboard_g24_nodata_transmit,user
+keyboard_g24_transmit_start:
+	call keyboard_g24_transmit_process
+	call keyboard_power_ctrl_start
+	branch keyboard_g24_transmit_start_next
+
+keyboard_g24_nodata_transmit:
+	fetch 8,mem_keyscan_value_current
+	nbranch keyboard_g24_transmit_start,blank
+	fetch 8,mem_keyscan_value_current+8
+	nbranch keyboard_g24_transmit_start,blank
+	fetch 4,mem_keyscan_value_current+16
+	nbranch keyboard_g24_transmit_start,blank
+
+	fetch 1,mem_24g_transmit_by_interrupt
+	rtneq G24_TX_TIMER_INT_ENABLE
+	call g24_search_receiver
+keyboard_g24_long_sleep:
+	call keyboard_g24_lpm_wait
+	nrtn user
+	fetch 1,mem_sensor_shutdown_flag
+	ncall keyboard_setgpio_hibernate,blank
+	fetch 4,mem_24g_enter_hibernate
+	branch g24_long_seep2
+
+keyboard_g24_transmit_process:
+	bpatch patch0b_6,mem_patch0b
+	jam 0,mem_24g_retry
+keyboard_g24_transmit_loop:
+	fetchr timeup,2,mem_param_rx_setup
+	until clkn_rt,meet
+	call keyboard_special_key_check
+	fetch 1,mem_keyboard_bt_button_flag
+	nbranch mouse_soft_reset,blank
+	call g24_transmit_receive_ack
+	fetch 1,mem_24g_no_ack	//tx noack
+	beq no_ack_24g,g24_transmit_no_ack
+	nbranch keyboard_g24_retransmit,sync
+	nbranch keyboard_g24_retransmit,user3
+	call keyboard_g24_ackpayload_parse
+	jam 0,mem_sensor_shutdown_flag
+	branch g24_transmit_no_ack
+	
+
+keyboard_g24_retransmit:
+	fetch 1,mem_24g_abort_pac
+	nrtn blank
+	fetch 2,mem_24g_txfail_cnt
+	increase 1,pdata
+	store 2,mem_24g_txfail_cnt	
+	fetch 1,mem_24g_txfail_cnt
+	beq 0xff,g24_tx_attempt_fail
+	call keyboard_g24_transmit_hop_process
+	branch keyboard_g24_transmit_loop
+
+
+keyboard_g24_transmit_hop_process:
+	fetcht 1,mem_24g_retry
+	sub temp,20,null
+	branch keyboard_g24_tx_fast_hop,positive		//  1-3 current channel  4~ 20 fast hop
+	arg 25,loopcnt
+	call delay_ms_wait
+	branch g24_hop_ch_disable
+
+keyboard_g24_tx_fast_hop:
+	increase 1,temp
+	storet 1,mem_24g_retry
+	fetch 4,mem_24g_addr
+	fetcht 4,mem_24g_fast_conn_addr
+	isub temp,null
+	branch g24_ch,zero
+	fetch 1,mem_24g_retry
+	sub pdata,3,null
+	rtn positive
+	branch g24_tx_fast_hop
+
+
+keyboard_g24_lpm_wait:
+	enable user
+	call lpo_calibration
+	fetch 3,mem_clks_per_lpo
+	branch disable_user,blank
+	fetch 1,mem_keyboard_fn_flag
+	nbranch disable_user,blank
+	fetch 1,mem_keyboard_control_key_flag
+	nbranch disable_user,blank
+	fetch 1,mem_keyboard_commbination_control_key_delay_release_timer
+	nbranch disable_user,blank
+	fetch 1,mem_24g_transmit_by_interrupt
+	beq G24_TX_TIMER_INT_ENABLE,disable_user
+	branch g24_lpm_wait+5
+	
+keyboard_power_ctrl_start:
+	fetch 4,mem_24g_addr
+	fetcht 4,mem_24g_fast_conn_addr
+	isub temp,null
+	nbranch power_ctrl_start+1,zero
+	jam TX_POWER_F30DB,mem_tx_power
+	rtn
+keyboard_g24_transmit_start_next:
+	fetch 8,mem_24g_long_sleep_set
+	store 8,mem_24g_enter_hibernate
+	fetch 2,mem_24g_long_sleep_param_update_timer_init
+	store 2,mem_24g_long_sleep_param_update_timer
+keyboard_g24_short_sleep:
+	bpatch patch0b_7,mem_patch0b
+	call g24_lpm_wait
+	nrtn user
+	call clear_wake
+	fetch 3,mem_24g_short_sleep_set
+	branch g24_long_seep2	
+	
+
+
+
+
+
+keyboard_24g_package_data:
+	
+	rtnmark0 mark_24g
+	call keyboard_motion
+	nrtn user
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	bbit0 MOUSE_ENABLE_KEYBOARD,mouse_24g_mouse_package_data
+	fetch 1,mem_customer_key
+	nbranch keyboard_24g_keyboard_package_data,blank
+	branch mouse_24g_mouse_package_data
+
+keyboard_24g_keyboard_package_data:
+	jam TYPE_KB,mem_24g_data_type
+	arg 9,rega	//length
+	fetch 1,mem_customer_data_trigger
+	nbranch keyboard_customer_key_press,blank
+	arg mem_customer_key_release,regb	//tx buff
+	rtn
+keyboard_customer_key_press:
+	arg mem_customer_key_press,regb
+	rtn
+
+
+/**************************************g24 search receiver*****************************************/
+
+keyboard_24g_search_dongle_init:
+	setarg 0
+	store 3,mem_mouse_search_dongle_action
+	rtn
+
+keyboard_24g_search_dongle:
+	bpatch patch0c_0,mem_patch0c
+	fetch MOUSE_FLAG_LEN,mem_mouse_flag
+	rtnbit0 MOUSE_ENABLE_24G_SEARCH_DONGLE
+	fetch 1,mem_mouse_long_mult_flag
+	rtn blank
+	fetch 1,mem_24g_abort_pac
+	rtn blank
+	fetch 1,mem_mouse_search_dongle_interval
+	increase 1,pdata
+	and_into 3,pdata
+	store 1,mem_mouse_search_dongle_interval
+	nrtn blank	//400ms
+	jam 0,mem_mouse_search_dongle_ch
+keyboard_24g_search_dongle_loop:
+	
+	fetch 1,mem_mouse_search_dongle_ch
+	increase 1,pdata
+	store 1,mem_mouse_search_dongle_ch
+	sub pdata,G24_CH_NUMBER,null
+	nbranch keyboard_24g_search_dongle_loop_end,positive
+	call g24_reconn_data_prep
+	call g24_transmit_receive_ack
+	nbranch keyboard_24g_search_dongle_loop_retry,sync
+	nbranch keyboard_24g_search_dongle_loop_retry,user3
+	call keyboard_g24_ackpayload_parse
+	call keyboard_24g_search_dongle_success
+keyboard_24g_search_dongle_loop_end:
+	call g24_txbuf_clear
+	fetch 1,mem_mouse_search_dongle_count
+	increase 1,pdata
+	store 1,mem_mouse_search_dongle_count
+	beq G24_CH_POLL_COUNT,keyboard_24g_search_dongle_check
+	rtn
+
+keyboard_24g_search_dongle_loop_retry:
+	call g24_ch
+	branch keyboard_24g_search_dongle_loop
+
+keyboard_24g_search_dongle_check:
+	jam 0,mem_mouse_search_dongle_count
+	fetch 1,mem_mouse_search_dongle_action
+	rtnbit1 G24_DISCONN_STATE
+	set1 G24_DISCONN_STATE,pdata
+	store 1,mem_mouse_search_dongle_action
+	fetch 2,mem_mouse_24g_search_dongle_time_init		//3min
+	store 2,mem_mouse_no_data_timer
+	rtn
+	
+	
+keyboard_24g_search_dongle_success:
+	fetch 1,mem_24g_abort_pac
+	branch keyboard_24g_search_dongle_init,blank
+	jam 0,mem_mouse_search_dongle_count
+	fetch 1,mem_mouse_search_dongle_action
+	rtnbit0 G24_DISCONN_STATE
+	set0 G24_DISCONN_STATE,pdata
+	store 1,mem_mouse_search_dongle_action
+	branch mouse_no_data_timer_init
+
+
+keyboard_g24_ackpayload_parse:
+	call g24_ackpayload_parse
+	fetch 1,mem_24g_rxbuf+1
+	compare 0x08,pdata,0xf8
+	nrtn true
+	fetch 1,mem_24g_rxbuf+2		// pc sleep mouse ackpayload: 01 08 ff
+	beq 0xff,keyboard_24g_hibernate_set
+	rtn
+
+
+
+/////////////////////////////////////////////////////// ble auto recognize////////////////////////////////////////////////////////////	
+keyboard_le_send_att_find_by_type_value_request_ancs:
+	jam 1,mem_le_connect_ios_mac_flag
+	arg 23,rega
+	arg LE_L2CAP_CID_ATT,regb
+	call le_fifo_malloc_tx_l2cap
+	setarg ATTOP_FIND_BY_TYPE_VALUE_REQUEST
+	istore 1,contw
+	setarg 0x0001		//start handle
+	istore 2,contw
+	setarg 0xffff		//end handle
+	istore 2,contw
+	setarg 0x2800		//uuid type
+	istore 2,contw
+	arg mem_le_search_service_uuid,contr
+	branch memcpy16	
+keyboard_le_att_auto_reco_process:
+	bpatch patch0c_1,mem_patch0c
+	fetch 1,mem_le_connect_ios_mac_flag
+	rtn blank
+	copy rega,contr
+	ifetch 3,contr
+	store 3,mem_le_att_opcode
+	beq ATTOP_READ_RESPONSE,keyboard_le_parse_att_manu_resp
+	beq ATTOP_READ_BY_TYPE_RESPONSE,keyboard_le_send_att_read_by_type_rsp_mac	
+	beq ATTOP_FIND_BY_TYPE_VALUE_RESPONSE,keyboard_le_parse_att_find_by_type_value_rsp	
+	beq ATTOP_ERROR_RESPONSE,keyboard_le_send_att_find_by_type_value_request_mac
+	branch le_parse_att2
+	
+keyboard_le_parse_att_find_by_type_value_rsp:
+	fetch 1,mem_le_connect_ios_mac_flag
+	beq 2,keyboard_le_parse_att_find_by_type_value_rsp_mac
+keyboard_le_parse_att_find_ios_report:	
+	jam SYSTEM_OS_IOS,mem_kb_computer_system
+	branch keyboard_otp_store_computer_system_ble
+keyboard_le_parse_att_not_find_mac_report:	
+
+	fetch 1,mem_le_conn_peer_addr_type
+	store 1,mem_kb_computer_system
+	branch keyboard_otp_store_computer_system_ble
+keyboard_le_parse_att_find_mac_report:	
+	jam SYSTEM_OS_MAC,mem_kb_computer_system
+keyboard_otp_store_computer_system_ble:
+	jam 0,mem_le_connect_ios_mac_flag
+	fetcht 2,mem_otp_read_retention_offset
+	setarg 0x1fd0
+	isub temp,regb
+	arg mem_kb_computer_system,rega
+//	copy regb,temp
+	arg 1,loopcnt
+	call otp_write   
+	fetcht 2,mem_otp_read_retention_offset
+	increase 14,temp
+	storet 2,mem_otp_read_retention_offset
+	rtn
+
+
+// second time read device info service differ phone from other	
+keyboard_le_send_att_find_by_type_value_request_mac:
+	fetch 1,mem_le_connect_ios_mac_flag
+	beq 2,keyboard_le_parse_att_not_find_mac_report
+	jam 2,mem_le_connect_ios_mac_flag
+	arg 9,rega
+	arg LE_L2CAP_CID_ATT,regb
+	call le_fifo_malloc_tx_l2cap
+	setarg ATTOP_FIND_BY_TYPE_VALUE_REQUEST
+	istore 1,contw
+	setarg 0x0001		//start handle
+	istore 2,contw
+	setarg 0xffff		//end handle
+	istore 2,contw
+	setarg 0x2800		//uuid type
+	istore 2,contw
+	arg 2,loopcnt
+	arg mem_le_search_mac_uuid,contr
+	branch memcpy
+//third time read handle for manufactory name 
+keyboard_le_parse_att_find_by_type_value_rsp_mac:
+	arg 7,rega
+	arg LE_L2CAP_CID_ATT,regb
+	call le_fifo_malloc_tx_l2cap
+	setarg ATTOP_READ_BY_TYPE_REQUEST
+	istore 1,contw
+	fetcht 2,mem_le_payload_ptr
+	increase 5,temp
+	ifetch 4,temp
+	istore 4,contw
+	setarg 0x2803
+	istore 2,contw
+	rtn	
+//fourth time whether read manufactory name isn't in device info service	
+keyboard_le_send_att_read_by_type_rsp_mac:
+	fetch 2,mem_le_l2cap_size
+	increase -2,pdata
+	div pdata,7
+	call wait_div_end
+	quotient loopcnt
+	fetch 2,mem_le_payload_ptr
+	add pdata,6,contr
+	branch keyboard_le_check_att_read_type_manu_loop
+
+keyboard_le_check_att_read_type_manu_loop:
+	increase 3,contr
+	ifetch 2,contr
+	copy pdata,regc
+	ifetch 2,contr
+	arg 0x2a29,temp
+	isub temp,null
+	branch keyboard_le_send_att_read_by_type_rsp_manufactory,zero
+	loop keyboard_le_check_att_read_type_manu_loop
+	branch keyboard_le_parse_att_not_find_mac_report
+keyboard_le_send_att_read_by_type_rsp_manufactory:
+	arg 3,rega
+	arg LE_L2CAP_CID_ATT,regb
+	call le_fifo_malloc_tx_l2cap
+	setarg ATTOP_READ_REQUEST
+	istore 1,contw
+	copy regc,pdata
+	istore 2,contw
+	rtn	
+//fifth time 	read manufactory name make sure is Apple Inc
+keyboard_le_parse_att_manu_resp:
+	fetch 2,mem_le_l2cap_size
+	arg 9,loopcnt
+	fetch 2,mem_le_payload_ptr
+	add pdata,5,rega	
+	arg mem_le_search_mac_manu_name,regb
+	call string_compare 
+	branch keyboard_le_parse_att_find_mac_report,zero
+	branch  keyboard_le_parse_att_not_find_mac_report
+	
+
+
+
+

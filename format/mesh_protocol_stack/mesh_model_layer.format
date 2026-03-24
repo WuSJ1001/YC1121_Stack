@@ -1,0 +1,70 @@
+
+
+xmemalloc ali_mesh(
+	2 mem_mesh_last_CTL_Temperature
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	1 mem_mesh_module_message_opcode
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	//generic OnOff Set
+	1 mem_mesh_module_message_opcode_onoff_set
+	1 mem_mesh_generic_onoff_set_payload_OnOff
+	1 mem_mesh_generic_onoff_set_payload_TID
+	1 mem_mesh_generic_onoff_set_payload_Transition_Time
+	1 mem_mesh_generic_onoff_set_payload_Delay
+
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	//Scene recall ƒ£ Ω…Ë÷√
+	1 mem_mesh_module_message_opcode_scene_recall
+	2 mem_mesh_scene_recall_payload_scene_number
+	1 mem_mesh_scene_recall_payload_TID
+	1 mem_mesh_scene_recall_payload_Transition_Time
+	1 mem_mesh_scene_recall_payload_Delay
+
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	//light lightness
+	1 mem_mesh_module_message_opcode_set_light_lightness
+	2 mem_mesh_light_lightness_set_payload_lightness
+	1 mem_mesh_light_lightness_set_payload_TID
+	1 mem_mesh_light_lightness_set_payload_Transition_Time
+	1 mem_mesh_light_lightness_set_payload_Delay
+	1 mem_mesh_light_lightness_calc_lightness
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	//light CTL
+	1 mem_mesh_module_message_opcode_set_light_ctl
+	2 mem_mesh_CTL_Lightness
+	2 mem_mesh_CTL_Temperature
+	2 mem_mesh_CTL_Delta_UV
+	1 mem_mesh_CTL_lightness_TID
+	1 mem_mesh_CTL_lightness_Transition_Time
+	1 mem_mesh_CTL_lightness_Delay	
+	1 mem_mesh_CTL_calc_lightness
+	1 mem_mesh_CTL_calc_temperature
+
+)
+
+(//Generic OnOff
+0x00 GENERIC_ONOFF_CMD_OFF
+0x01 GENERIC_ONOFF_CMD_ON
+)
+
+(//LIGHTNESS
+0xFFFF ALI_MESH_LIGHTNESS_MAX
+0x0064 ALI_MESH_LIGHTNESS_LEVEL
+)
+
+(//TEMPERATURE
+0x4E20 ALI_MESH_TEMPERATURE_MAX
+0x0320 ALI_MESH_TEMPERATURE_MIN
+0x0064 ALI_MESH_TEMPERATURE_LEVEL
+)
+

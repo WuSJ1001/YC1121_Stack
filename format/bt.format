@@ -1,0 +1,661 @@
+
+	width = 32
+	const length = 12000
+
+	/* ========= memory ============== */
+memalloc(
+ 1 mem_le_adv_transmit
+1 mem_le_adv_waitcnt
+1 mem_le_adv_rcv
+1 mem_le_req_rcv
+1 mem_le_scanrsp_rcv
+1 mem_le_conn_rcv
+
+1 mem_current_context
+1 mem_le_ch_mapped
+1 mem_last_freq
+1 mem_rssi
+2 mem_context_ptr
+2 mem_rx_window
+
+
+/* lpo related */
+1 mem_lpm_adjust
+6 mem_sync_clke
+1 mem_lpm_current_mult
+12 mem_gpio_wakeup_cfg
+
+
+4 mem_clkn_bt
+4 mem_clke_bt
+4 mem_dpll_clkn
+
+2 mem_slot_offset
+
+
+1 mem_loadcode_times
+1 mem_select_list_item
+0 mem_temp_reconn_record
+1 mem_record_bt_mode
+2 mem_list_item_ptr
+
+1 mem_rssi_hex
+
+
+2 mem_param_tx_setup
+2 mem_param_rf_setup
+2 mem_param_conn_access
+2 mem_param_clke_cal
+2 mem_param_pll_setup
+2 mem_param_rx_setup
+2 mem_param_dpll_start_delay
+2 mem_param_rt_rthalfslot
+2 mem_param_clke_cal_le_1m
+2 mem_param_clke_cal_le_2m
+2 mem_param_clke_cal_le_coded
+
+)
+
+memalloc test (
+/* test related */
+2 mem_le_test_sync
+2 mem_le_test_pcnt
+2 mem_tst_pktcnt_crc
+2 mem_tst_pktcnt_dmh
+3 mem_tmp_buffer_head
+80 mem_tmp_buffer
+
+)
+
+
+xmemalloc(
+/* patch enable 0x4000-0x403f  */
+
+1 mem_patch00
+1 mem_patch01
+1 mem_patch02
+1 mem_patch03
+1 mem_patch04
+1 mem_patch05
+1 mem_patch06
+1 mem_patch07
+1 mem_patch08
+1 mem_patch09
+1 mem_patch0a
+1 mem_patch0b
+1 mem_patch0c
+1 mem_patch0d
+1 mem_patch0e
+1 mem_patch0f
+1 mem_patch10
+1 mem_patch11
+1 mem_patch12
+1 mem_patch13
+1 mem_patch14
+1 mem_patch15
+1 mem_patch16
+1 mem_patch17
+1 mem_patch18
+1 mem_patch19
+1 mem_patch1a
+1 mem_patch1b
+1 mem_patch1c
+1 mem_patch1d
+1 mem_patch1e
+1 mem_patch1f
+1 mem_patch20
+1 mem_patch21
+1 mem_patch22
+1 mem_patch23
+1 mem_patch24
+1 mem_patch25
+1 mem_patch26
+1 mem_patch27
+1 mem_patch28
+1 mem_patch29
+1 mem_patch2a
+1 mem_patch2b
+1 mem_patch2c
+1 mem_patch2d
+1 mem_patch2e
+1 mem_patch2f
+1 mem_patch30
+1 mem_patch31
+1 mem_patch32
+1 mem_patch33
+1 mem_patch34
+1 mem_patch35
+1 mem_patch36
+1 mem_patch37
+1 mem_patch38
+1 mem_patch39
+1 mem_patch3a
+1 mem_patch3b
+1 mem_patch3c
+1 mem_patch3d
+1 mem_patch3e
+1 mem_patch3f
+
+	/* 3 device contexts  */
+83 mem_context
+1 mem_current_amaddr
+1 mem_lpm_mode
+4 mem_last_clkn
+
+	/* parameters */
+1 mem_fcomp_div
+2 mem_rx_window_sniff
+2 mem_rf_init_ptr
+
+
+1 mem_rf_rccal
+1 mem_handle_num
+
+
+	/* lpm related */
+2 mem_chip_functions
+2 mem_lpm_wake_lock
+2 mem_lpm_interval
+1 mem_lpm_overhead
+1 mem_lpm_hibernate_switch
+1 mem_sniff_unint_lost
+4 mem_sleep_counter   
+4 mem_sleep_counter_all
+6 mem_sleep_clkn
+3 mem_sniff_rcv
+3 mem_sniff_lost
+3 mem_clks_per_lpo
+
+1 mem_lpm_mult
+1 mem_lpm_mult_timeout
+1 mem_lpm_mult_cnt
+
+1 mem_lpm_xtalcnt
+1 mem_lpm_buckcnt
+1 mem_lpm_ldocnt
+1 mem_lpm_isogate
+1 mem_lpm_isogate_stage2
+1 mem_lpm_isogate_final
+1 mem_lpm_ldo_sel
+1 mem_lpm_sysctl
+1 mem_lpm_hv_sel
+
+24 mem_saved_gpio	 
+3 mem_saved_gsel
+8 mem_saved_mark
+1 mem_saved_spidctrl
+2 mem_patch_ptr
+2 mem_patch_len
+
+32 mem_timers
+
+
+/* HCI */
+1 mem_hci_cmd
+1 mem_hci_conn_handle
+3 mem_hci_plap
+1 mem_hci_puap
+2 mem_hci_pnap
+
+
+1 mem_xtal_c_sel
+24 mem_ghpc_table
+12 mem_aac_res_table
+1 mem_tx_power
+1 mem_modem_rssi
+1 mem_gain_fix
+3 mem_gain_table
+1 mem_gain_second_agc_en
+1 mem_system_clk
+
+ifdef DEBUG_RF_INIT
+5 mem_rf_init_data
+endif
+
+0 mem_adc_reference3v_ft_data	
+2 mem_adc_reference3v_gpio1v_ft_data	
+2 mem_adc_reference3v_gpio2v_ft_data	
+2 mem_adc_reference3v_vdcdc3p6v_ft_data	
+2 mem_adc_reference3v_vdcdc4p6v_ft_data	
+2 mem_adc_reference3v_inter1v_ft_data
+2 mem_adc_reference3v_inter1v_now_data	
+1 mem_adc_reference_mode
+
+1 mem_otp_charge_pump_x
+1 mem_otp_dpll_ibais_x
+
+1 mem_xtal_freq
+)
+
+(//mem_system_clk
+12 SYSTEM_CLK_12M
+24 SYSTEM_CLK_24M
+)
+
+(//bluetooth tx power
+0x00 TX_POWER_0DB
+0x03 TX_POWER_3DB
+0x05 TX_POWER_5DB
+0x06 TX_POWER_6DB
+0x07 TX_POWER_7DB
+0x0a TX_POWER_10DB
+
+0x83 TX_POWER_F3DB
+0x85 TX_POWER_F5DB
+0x8a TX_POWER_F10DB
+0x94 TX_POWER_F20DB
+0x9e TX_POWER_F30DB
+0xaa TX_POWER_FACTORY
+)
+
+
+	/* context */
+(
+0x01 coffset_mode
+0x02 coffset_tsniff
+0x04 coffset_sniff_anchor
+0x08 coffset_clk_offset
+0x0e coffset_rx_window
+0x10 coffset_plap
+0x16 coffset_conn_handle
+0x17 coffset_arq
+	/* 3.0 only */
+	
+	/* le only */
+0x18 coffset_le_ch
+0x19 coffset_le_hop
+0x1a coffset_le_event_cnt
+0x1c coffset_le_supervision_timer
+0x20 coffset_le_instant
+0x22 coffset_le_channels
+0x23 coffset_le_op
+0x24 coffset_le_access
+0x28 coffset_le_crcinit
+0x2b coffset_le_window_size
+0x2c coffset_le_slave_latency
+0x2e coffset_le_slave_superto
+0x30 coffset_le_channel_map
+0x35 coffset_le_rx_phy
+0x36 coffset_le_tx_phy
+0x37 coffset_le_new_map
+0x37 coffset_le_new_m2s_phy
+0x38 coffset_le_new_s2m_phy
+0x37 coffest_le_new_transmitwindowsize
+0x38 coffest_le_new_transmitwindowoffset
+0x3a coffest_le_new_conninterval
+0x3c coffest_le_new_connslavelatency
+0x3e coffest_le_new_connsupervisiontimeout
+0x40 coffset_le_sk
+0x50 coffset_le_peer_sca
+0x53 coffset_le_transmit_window
+	
+83 context_size
+1 context_num
+)
+
+(
+0 lpm_flag_wake
+1 lpm_flag_loadcode
+)
+
+/* ========= parameters ============== */
+(
+0x0a00 param_snooze_setup_orig
+0x5353 param_snooze_ahead_orig
+
+/* 24Mhz clock setting */
+ifdef CLK24M
+0x1c86 param_tx_setup
+0x0c00 param_rf_setup
+0x0c00 param_conn_access 
+0x1a00 param_rx_setup
+0x0776 param_clke_cal
+0x0a00 param_pll_setup
+4000 param_dpll_start_delay
+7500 param_halfclk
+60084 param_halfclk_neg
+-60084 param_halfclk_neg1
+else
+/* 12Mhz clock setting */
+0x0e43 param_tx_setup
+0x0600 param_rf_setup
+0x0600 param_conn_access 
+0x03bb param_clke_cal
+0x0500 param_pll_setup		// 120 is minimum
+0x0d00 param_rx_setup	// 114us before sync
+2000 param_dpll_start_delay
+3750 param_rt_rthalfslot
+
+480 param_clke_cal_le_1m	//preamble(1B) & access address(4B) time (1+4)*8*1 * 12
+288 	param_clke_cal_le_2m	//preamble(2B) & access address(4B) time (1+4)*8*1 * 12
+282 param_clke_cal_le_coded	//preamble(80us) & access address(256us)-312.5us(0.5slot)
+endif
+
+110 param_lpm_fix
+10 param_lpo_extra
+200 param_lpm_adjmax
+
+-1 param_hibernate_clks
+
+ifdef SIM
+1 param_chgpump_delay_100us
+6 param_chgpump_delay_500us
+12 param_chgpump_delay_1ms
+else
+1000 param_chgpump_delay_100us
+6000 param_chgpump_delay_500us
+12000 param_chgpump_delay_1ms
+endif
+
+
+0x000a04 param_lmp_version
+0x12e9 param_lmp_subversion
+0x0012 param_tisw
+0x0012 param_tpsw
+0x1000 param_tisi
+0x0800 param_tpsi
+39 param_fcomp_div
+2 param_fcomp_mul
+
+)
+
+
+/* ========== flag[6] =============== */
+(
+0        always        /* always 1 */
+1        true          /* set/rstn by verify,compare,icompare (true) */
+2        positive      /* set/rstn by all alu operations (opcode = 0x03,0x13,0x0f,0x1f), if alu output >= 0 */
+3        timeout       /* read only, the timeout from timers */
+4        init_adpcm
+5        zero          /* set/rstn by all alu operations (opcode = 0x03,0x13,0x0f,0x1f), if alu output == 0 */
+6        crc_failed    /* level, cleared by hop_start */
+7        enable_white  /* outside mux decide whether to load bt_clk or response_X */
+8        enable_parity /* level */
+9        enable_crc    /* level */
+10       enable_hec    /* level */
+11       decode_fec1   /* level */
+12       decode_fec2   /* level */
+13       decode_fec0   /* level */
+14       encrypt       /* level */
+15       crc16       /* for caculate ccitt crc16 */
+16       swfine	/* =0 stop_watch count based on oneslot =1 on 1 clock */
+20       rqst_freq    /* pulse, to start calculating frequency */
+21       recalc        /* pulse, to recalculate the fhs_parity */
+22       init_encrypt  /* pulse, issued to initialize encrption */
+23       mhalfbnd    /* half slot boundary of clke_rt, or when clke_bt[0] toggles */
+24       sync          /* sync found as a result of correlation,set/rstn by correlate opcode */
+25       user10    /* user10 */
+26       kc_p_activate  /* pulse to recalc the kc_p */
+27       encode_fec1   /* level */
+28       encode_fec2   /* level */
+29       encode_fec0   /* level */
+30       packet_end    /* pulse */
+32       is_tx         /* level */
+33       is_rx         /* level */
+34       halfslot     /* pulse, read only, when clkn_bt[0] toggles */
+35       oneslot      /* pulse, read only, when clkn_bt[1] toggles */
+36       mslotbnd     /* pulse, read only, when clke_bt[1] toggles */
+37       expire       /* level, read only, when selected clock source exceed timeup value */
+38       meet         /* level, read only, when selected clock source meet timeup value */
+39       tx_clear     /* level, read only, indicate tx pipe is cleared */
+40       user         /* user0 */
+41       master        /* user1 */
+42       rxon         /* user2 */
+43       wake           /* user3 */
+44       user2        /* user4 */
+45       match         /* user5 */
+46       attempt        /* user6 */
+47       user3          /* user7 */
+48       clknt         /* user8 */
+49	   user7 	/* user9 */
+50       synchronize   /* synchronize lpo and regular version of the clock */
+51       lpo_edge  /* read only, 3 clocks after risling edge of lpo clock */
+52       blank         /* C0 only, means pdata == 0 */
+53       modone          /* set divide operation is done */
+55       aes_ready	/* set when aes is ok */
+56       encode_fec3   /* level */
+57       dewhiten_code_calc   /* dewhiten code calculate */
+58       lr_s2en       /* long range s2 enable */
+60	   ble_coded_info	//1:s2 0:s8
+63       never         /* read only, always 0 */
+)
+
+default flag = always
+
+/* ========== reg[6] =============== */
+(
+0        mark   /* for keeping strobes, more permanent */
+1        type   /* save and verify during rx */     /* rw */
+2        temp   /* general purpose register, 64 bits */
+3        contu  /* contr uart */
+3	 contru	/*contr uart*/
+3	 contwu	/*contw uart*/
+4        am_addr      /* verify during rx, read and send during tx */ /* ro */
+5        contw        /* last mem_addr during write */
+6        contr        /* last mem_addr during read */
+7        queue    /* the index of qset*,qisolate* commands, ie, if queue = 3, qset/qisolate operate on bit3 */
+8        debug    /* can be wired out for observation */
+9        access   /* the 72 bit access word */
+10       contus   /* contw uart */
+11       timeup        /* when does certain counter expire */
+12       pwindow       /* bit 71-61 of pdata; because on rx, bits shifts in from 71 down */
+13       fhs_parity    /* re-gernated based on bt_adr( {nap,uap,lap} ) when recalc flag is pulsed */
+14       white_init    /* init value of the whitening */
+15       crc24_init        /* init crc24 lfsr, 24 bits */
+16       contue    /* set interrupts, 40 bits */
+17       rega          /* general purpose register, 32 bits */
+18       regb          /* general purpose register, 32 bits */
+19       regc          /* general purpose register, 17 bits */
+20       regab         /* concat of {rega,regb}, thus 64 bits */
+21       radio_ctrl   /* radio i/f direct i/o ctrl, check following "radio_ctrl" section */
+
+23       freq_index   /* 7 bit read only */
+24       regd    /* 32 bit regext[1,0] */
+25       clkn              /* {clkn_bt, clkn_rt} */
+26       clke              /* {clke_bt, clke_rt} */
+27       stop_watch		
+28       fhs_misc   /* SR, SP, pscan mode */
+29       fhs_class  /* class field in fhs */
+30       fhs0   /* read only, bit 0-71 of fhs word */
+31       fhs1   /* read only, bit 72-142 of fhs word */
+32       bt_adr /* r/w, the bt_addr to access gen and freq hopping, contain only lap and uap */
+33       bt_clk /* r/w, the bt_clk for freq hopping */
+34       clkn_bt  /* read only, native bluetooth clock, free running 3.2KHz  or controlled by RTHALFSLOT register */
+35       clkn_rt  /* read only, native realtime clock, free running 12MHz, count from 0-3749, or controlled by RTHALFSLOT register */
+36       freq_mode
+37       xin   /* x parameter, read only */
+38       N_tx_slot /* the N factor in equations for Xi,Xp,Xprm,Xprs */
+39 	   auxcnt
+40       clke_bt  /* r/w,  external bluetooth clock , free running 3.2KHz or controlled by RTHALFSLOT register */
+41       clke_rt  /* r/w,  external realtime clock, , free running 12MHz, count from 0-3749, or controlled by RTHALFSLOT register */
+42       branch_addr	/* last branch address */
+43       rege         /* 64bit regext[3,2] */
+44       lap
+45       uap
+46       nap         
+47       regext		/* r/w extended 12x32bit registers,  indexed by regext_index */
+48       alarm             /* r/w, lpo wake up time, this is also how lpo and current clock keep sync */
+49       lpo_time          /* read only, this is the value to be copied back to clkn/clke after wakeup */
+50       kc_ls             /* secret key,                71: 0 */
+51       kc_ms             /* secret key,               127:72 */
+52       g1l               /* encryption length                */
+53		mask3ff		/* for mask 0x3ff operation */
+54       aes_ctrl		
+55       regf			/* 64bit regext[5,4] */
+56       regext_index   /* index of regext */
+57	     loopcnt
+58      stack			/* current return address */
+59       stack_ptr		/* stack depth */
+61         pc /* direct goto */
+62       null              /* to nowhere */
+63       pdata /* the shift register */
+)
+default reg = pdata
+
+/* regext_index */
+(
+0 regidx_data
+4 regidx_key
+8 regidx_xor
+12 regidx_result
+)
+/* ========== radio_ctrl========= */
+(
+0 TXGFSK
+1 PSK
+2 PSK3M
+3 RESET
+)
+/* assign BPWR = radio_ctrl[0]; */
+/* assign PARAMP = radio_ctrl[1]; */
+/* assign XTALPU = radio_ctrl[2]; */
+/* assign SYNTHPU = radio_ctrl[3]; */
+/* assign TXPU = radio_ctrl[4]; */
+/* assign RXPU = radio_ctrl[5]; */
+/* assign SLCTRL = radio_ctrl[6]; */
+/* assign XTALSEL_MUX_SEL = radio_ctrl[7] */
+
+
+/* =========== destination[4] ============== */
+(
+0 bucket
+1 rxf
+2 back
+3 mod
+)
+default dest = bucket
+
+/* =========== source[4] ============= */
+(
+1 txf
+3 demod
+)
+default source = 0
+
+
+/* ============== mark ============= */
+(
+5  mark_loopback
+9  mark_context
+13 mark_lpm_mult_enable
+14 mark_usb_first_resp
+15 mark_old_packet
+34 mark_otp_write
+35 mark_isstr
+36 mark_loadcode
+37 mark_ext_patch
+38 mark_24g
+39 mark_24g_rxmode
+40 mark_eeprom_size
+41 mark_ble_tx_md
+42 mark_ble_rx_md
+43 mark_otp_encrypt
+44 mark_temp
+45 mark_ble_2M
+46 mark_ble_lr_s8
+47 mark_ble_lr
+48 mark_ble_crc_fail
+50 mark_ble_encryption
+51 mark_first_packet
+)
+
+(
+1 reload_type_otp
+2 reload_type_spi
+3 reload_type_iic
+)
+
+
+/* ============== soft timers ============== */
+(
+0 le_adv_interval_timer
+2 le_scan_interval_timer
+9 key_scan_timer
+7 smp_pairing_timer
+11  ui_led_blink  
+
+8 G24_TIMER_NODATA
+13 G24_TIMER_MS_BLANK
+12 G24_TIMER_KB_MUL_BLANK
+10 G24_TIMER_KB_SYS_CRTL_BLANK
+14 G24_TIMER_KB_BLANK
+
+1 USB_TIMER_NAK
+15 USB_TIMER_WAKEUP
+)
+
+(
+
+27 hci_cmd_le_create_conn
+29 hci_cmd_le_disconn
+30 hci_cmd_le_att_req
+)
+
+
+
+/* ============== mode ==========*/
+(
+0 mode_le
+1 mode_master
+)
+
+(
+0 state_inconn
+1 state_insniff
+)
+(
+3 op_disconn
+)
+
+
+
+//mem_lpm_wake_lock
+(
+0 wake_lock_ble_rx
+1 wake_lock_ble_tx
+
+3 wake_lock_key_press
+4 wake_lock_ble_tx_patch
+5 wake_lock_uart_tx
+6 wake_lock_uart_rx
+7 wake_lock_button
+8 wake_lock_cmd
+9 wake_lock_app
+12 wake_lock_l2cap_tx
+13 wake_lock_l2cap_rx
+14 wake_lock_ipc_c512bt
+15 wake_lock_ipc_bt2c51
+
+)
+
+(//mem_fcomp_div
+0x18 XTAL_24M
+0x10 XTAL_16M
+)
+
+( //verion
+6 BLUETOOTH_CORE_SPECIFICATION_4_0
+7 BLUETOOTH_CORE_SPECIFICATION_4_1
+8 BLUETOOTH_CORE_SPECIFICATION_4_2
+9 BLUETOOTH_CORE_SPECIFICATION_5_0
+10 BLUETOOTH_CORE_SPECIFICATION_5_1
+)
+
+(
+0x050e COMPANY_ID_YICHIP
+)
+
+(
+0x33  REC_3_MODE
+0x34  REC_4_MODE
+0x35  REC_4_MODE_STATIC_ADDRESS
+0x36  REC_4_MODE_RANDOM_RESOLVABLE_PRIVATE_ADDRESS
+0x37  REC_4_MODE_RANDOM_NON_RESOLVABLE_PRIVATE_ADDRESS
+)
+
+(
+0 bt_disabled
+1 ble_disabled
+2 module_disable
+)
+

@@ -1,0 +1,209 @@
+
+xmemalloc ali_mesh(
+	1 mem_mesh_vendor_mesh_receive_tid
+	1 mem_mesh_vendor_mesh_send_tid
+
+	4 mem_mesh_vendor_timer_current_time
+	4 mem_system_time
+
+	0 mem_mesh_vendor_timer_timing_delete_index1
+	1 mem_mesh_vendor_timer_timing_index1
+	0 mem_mesh_vendor_timer_timing_delete_index2
+	4 mem_mesh_vendor_timer_timing_time1
+	2 mem_mesh_vendor_timer_timing_attr_type1
+	1 mem_mesh_vendor_timer_timing_attr_para1
+	234 mem_mesh_vendor_timer_timing_buffer
+
+	18 mem_mesh_vendor_timer_timing_palyload
+	2  mem_mesh_vendor_timer_timing_temp
+
+	1 mem_mesh_vendor_timer_timing_time_cyclic_temp
+	1 mem_mesh_vendor_timer_check_loop
+	1 mem_tmall_revd_device_power_on_msge_flag
+	2 mem_tmall_send_power_on_msge_timeout
+
+	2 mem_mesh_vendor_timer_timing_temp1
+	1 mem_mesh_timer_index_buffer_len
+	32 mem_mesh_timer_index_buffer
+	1 mem_mesh_timer_index_count
+)
+
+amemalloc mem_mesh_vendor_timer_timing_palyload(
+	1 mem_mesh_vendor_timer_timing_index_cyclic
+	2 mem_mesh_vendor_timer_timing_time_cyclic
+	2 mem_mesh_vendor_timer_timing_zone_cyclic
+	1 mem_mesh_vendor_timer_timing_weekdays_cyclic
+	2 mem_mesh_vendor_timer_timing_attr_type_cyclic
+	1 mem_mesh_vendor_timer_timing_attr_para_len_cyclic
+	8 mem_mesh_vendor_timer_timing_attr_para_cyclic
+	1 mem_mesh_vendor_timer_timing_cyclic_flag
+)
+
+amemalloc mem_mesh_vendor_timer_timing_palyload(
+	1 mem_mesh_vendor_timer_timing_index
+	4 mem_mesh_vendor_timer_timing_time
+	2 mem_mesh_vendor_timer_timing_attr_type
+	1 mem_mesh_vendor_timer_timing_attr_para_len
+	8 mem_mesh_vendor_timer_timing_attr_para
+	2 mem_mesh_vendor_timer_timing_flag
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	2 mem_mesh_vendor_message_cid
+	1 mem_mesh_vendor_message_tid
+	2 mem_mesh_vendor_message_attr_type
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_header
+	0 mem_mesh_vendor_attr_parameter
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_delay_close_time_header
+	2 mem_mesh_vendor_delay_close_time
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_night_light_onoff_header
+	1 mem_mesh_vendor_night_light_onoff
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_color_header
+	2 mem_mesh_vendor_color_lightness
+	2 mem_mesh_vendor_color_hue
+	2 mem_mesh_vendor_color_saturation
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_back_light_onoff_header
+	1 mem_mesh_vendor_back_light_onoff
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_main_light_onoff_header
+	1 mem_mesh_vendor_main_light_onoff
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_standby_brightness_header
+	2 mem_mesh_vendor_standby_brightness
+)
+
+amemalloc mem_mesh_receive_model_message_payload(
+	5 mem_mesh_vendor_message_current_time_header
+	4 mem_mesh_vendor_message_current_time
+)
+
+
+//amemalloc mem_mesh_receive_model_message_payload(
+//	5 mem_mesh_vendor_message_timer_header
+//	1 mem_mesh_vendor_timer_timing_index
+//	0 mem_mesh_vendor_timer_timing_index1
+//	4 mem_mesh_vendor_timer_timing_time
+//	2 mem_mesh_vendor_timer_timing_attr_type
+//	1 mem_mesh_vendor_timer_timing_attr_para
+//)
+
+//amemalloc mem_mesh_receive_model_message_payload(
+//	5 mem_mesh_vendor_message_timer_cyclic_header
+//	1 mem_mesh_vendor_timer_timing_index_cyclic
+//	2 mem_mesh_vendor_timer_timing_time_cyclic
+//	1 mem_mesh_vendor_timer_timing_weekdays_cyclic
+//	2 mem_mesh_vendor_timer_timing_attr_type_cyclic
+//	1 mem_mesh_vendor_timer_timing_attr_para_cyclic
+//	1 mem_mesh_vendor_timer_timing_cyclic_flag
+//)
+
+amemalloc mem_mesh_access_layer_payload(
+	//ali mesh vendor struct
+	1 mem_mesh_access_layer_payload_vendor_command
+	2 mem_mesh_access_layer_payload_vendor_CID
+	1 mem_mesh_access_layer_payload_vendor_tid
+	2 mem_mesh_access_layer_payload_vendor_attr_type
+	1 mem_mesh_access_layer_payload_vendor_attr_parameter
+)
+
+
+(
+0x00F0 VENDOR_MESSAGE_TMALL_DST
+)
+
+(// vendor model attribute
+0x0123 VENDOR_ATTR_COLOR_SERVER
+0x0100 VENDOR_ATTR_GENERIC_ONOFF_SERVER
+0x0121 VENDOR_ATTR_LIGHTNESS_LEVEL_SERVER
+0x0122 VENDOR_ATTR_COLOR_TEMPERATURE_SERVER
+0x0534 VENDOR_ATTR_MAIN_LIGHT_SERVER
+0x0533 VENDOR_ATTR_BACKGROUND_LIGHT_ONOFF_SERVER
+0xf004 VENDOR_ATTR_SCENE_SERVER
+)
+
+(//Timer opcode
+0x01A8 VENDOR_MESSAGE_OPCODE_COMPANY_ID
+//时间
+0xF01F VENDOR_MESSAGE_ATTR_TYPE_TIME
+//时区
+0xF01E VENDOR_MESSAGE_ATTR_TYPE_TIME_ZONE
+//对时
+0xF01D VENDOR_MESSAGE_ATTR_TYPE_ON_TIME
+//定时
+0xF010 VENDOR_MESSAGE_ATTR_TYPE_TIMING
+//周期定时
+0xF011 VENDOR_MESSAGE_ATTR_TYPE_CYCLE_TIMING
+//删除定时
+0xF012 VENDOR_MESSAGE_ATTR_TYPE_DELETE_TIMING
+
+//颜色
+0x0123 VENDOR_MESSAGE_ATTR_TYPE_COLOR
+//主灯
+0x0534 VENDOR_MESSAGE_ATTR_TYPE_MAIN_LIGHT
+//背光灯
+0x0533 VENDOR_MESSAGE_ATTR_TYPE_BACKGROUND_LIGHT
+)
+
+(//天猫event事件表
+//设备发生的事件，比如上电或者定时完成
+0xF009 VENDOR_ATTR_TYPE_EVENT_TRIGGER
+
+//天猫设备上电
+0x03 VENDOR_MESSAGE_EVENT_DEVICE_POWER_ON
+//天猫定时完成
+0x11 VENDOR_MESSAGE_EVENT_FINISH_TIMING
+)
+
+(
+0x80 VENDOR_MESSAGE_SEND_TID_MIN
+0xC0 VENDOR_MESSAGE_SEND_TID_MAX
+)
+
+(
+0x59 TIMER_CYCLICAL_FALG
+60 SECONDS_OF_MIN
+345600 SECONDS_OF_FOUR_DAYS
+604800 SECONDS_OF_WEEK
+86400 SECONDS_OF_DAY
+0x01e0 EIGHT_HOURS_TIME_ZONE_OFFSET
+
+)
+
+(
+0xF013 VENDOR_MSEEAGE_ATTR_TYPE_SET_TIME_SINGLE
+0xF014 VENDOR_MSEEAGE_ATTR_TYPE_SET_TIME_REPEAT
+0xF015 VENDOR_MSEEAGE_ATTR_TYPE_SET_TIME_CIRCULATION
+0xF016 VENDOR_MSEEAGE_ATTR_TYPE_TIMER_ENABLE
+0xF017 VENDOR_MESSAGE_ATTR_TYPE_TIMER_DELEATE
+0xF018 VENDOR_MESSAGE_ATTR_TYPE_TIMER_INQUIRE
+0xF019 VENDOR_MESSAGE_ATTR_TYPE_TIMER_EVENT_INQUIRE
+
+)
+
+(
+0xF020 VENDOR_ATTR_TYPE_EVENT_INDEX_REPORT
+)
+
+(
+0x0d MESH_X_TIMERS
+)
+

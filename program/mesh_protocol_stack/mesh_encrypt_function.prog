@@ -1,0 +1,650 @@
+/*
+	mesh加密算法层，包含配网阶段的算法和配网后的算法
+*/
+
+
+/*
+	provision random输入，计算出provision confirmation等参数
+*/
+
+ali_mesh_encrypt_calc_random_data:
+	call ali_mesh_encrypt_calc_random_data_calc_ConfirmationKey
+	call ali_mesh_encrypt_calc_random_data_calc_AuthValueProv
+	call ali_mesh_encrypt_calc_random_data_calc_AuthValueDevice
+	call ali_mesh_encrypt_calc_random_data_calc_ConfirmationCloud
+	call ali_mesh_encrypt_calc_random_data_calc_ConfirmationDevice
+	branch ali_mesh_encrypt_calc_random_data_calc_DeviceKey
+
+
+//calc confirmation key
+//ConfirmationKey=SHA256(Random A||RandomB||"ConfirmationKey")[0:15]
+ali_mesh_encrypt_calc_random_data_calc_ConfirmationKey:
+	call ali_mesh_encrypt_load_randomAB_to_sha256
+	arg mem_mesh_sha256_ConfirmationKey_ascii,contr
+	arg 0xf,loopcnt
+	call ali_mesh_encrypt_base_function_sha256_load_data_without_hex2ascii
+	call ali_mesh_encrypt_base_function_sha256_calc
+	arg memresult,contr
+	arg mem_mesh_Confirmationkey,contw
+	branch memcpy16
+
+
+//calc Auth value prov
+//AuthValueProv = SHA256(PID,MAC,Secret,random B||random A)[0:15]
+ali_mesh_encrypt_calc_random_data_calc_AuthValueProv:
+	call ali_mesh_encrypt_load_three_tuple_to_sha256
+	call ali_mesh_encrypt_load_randomBA_to_sha256
+ifdef V1_2
+	call ali_mesh_encrypt_load_randomBA_to_sha256
+endif
+	call ali_mesh_encrypt_base_function_sha256_calc
+	arg memresult,contr
+	arg mem_mesh_AuthValueProv,contw
+	branch memcpy16
+
+//calc Auth Value Device
+//AuthValueDevice= SHA256(PID,MAC,Secret,random B||random A)[0:15]
+ali_mesh_encrypt_calc_random_data_calc_AuthValueDevice:
+	call ali_mesh_encrypt_load_three_tuple_to_sha256
+	call ali_mesh_encrypt_load_randomAB_to_sha256
+ifdef V1_2
+	call ali_mesh_encrypt_load_randomAB_to_sha256
+endif
+	call ali_mesh_encrypt_base_function_sha256_calc
+	arg memresult,contr
+	arg mem_mesh_AuthValueDevice,contw
+	branch memcpy16
+
+// calc Confirmation Cloud
+//Confirmation Cloud=AES-CMAC(Random B || Random A || AuthValueProv)
+//k=ConfirmationKey
+ali_mesh_encrypt_calc_random_data_calc_ConfirmationCloud:
+	fetch 8,mem_mesh_provisioning_random_A
+	store 8,mem_mesh_ConfirmationCloud_RandomA
+	fetch 8,mem_mesh_provisioning_random_B
+	store 8,mem_mesh_ConfirmationCloud_RandomB
+	
+	arg mem_mesh_calc_ConfirmationCloud_data,contr
+	arg mem_mesh_Confirmationkey,rega
+	arg mem_mesh_ConfirmationCloud,alarm
+	branch ali_mesh_encrypt_base_function_AES_CMAC_32Byte
+
+
+// calc confirmation Device
+//Confirmation Device=AES-CMAC(Random A || Random B || AuthValueDevice)
+//k=ConfirmationKey
+ali_mesh_encrypt_calc_random_data_calc_ConfirmationDevice:
+	arg mem_mesh_calc_ConfirmationDevice_data,contr
+	arg mem_mesh_Confirmationkey,rega
+	arg mem_mesh_ConfirmationDevice,alarm
+	branch ali_mesh_encrypt_base_function_AES_CMAC_32Byte
+
+
+//calc Device Key
+//DeviceKey = SHA256(ConfirmationCloud||"DeviceKey")[0:15]
+ali_mesh_encrypt_calc_random_data_calc_DeviceKey:
+//	call ice_break
+	arg mem_mesh_ConfirmationCloud,contr
+	arg 0x10,loopcnt
+	call ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii
+	arg mem_mesh_sha256_DeviceKey_ascii,contr
+	arg 9,loopcnt
+	call ali_mesh_encrypt_base_function_sha256_load_data_without_hex2ascii
+	call ali_mesh_encrypt_base_function_sha256_calc
+	arg memresult,contr
+	arg mem_mesh_Device_Key,contw
+	branch memcpy16
+
+
+ali_mesh_encrypt_load_randomBA_to_sha256:
+	call ali_mesh_encrypt_load_randomB_to_sha256
+ali_mesh_encrypt_load_randomA_to_sha256:
+	arg mem_mesh_provisioning_random_A,contr
+	branch ali_mesh_encrypt_base_function_sha256_load_data_64bit
+
+ali_mesh_encrypt_load_randomAB_to_sha256:
+	call ali_mesh_encrypt_load_randomA_to_sha256
+ali_mesh_encrypt_load_randomB_to_sha256:
+	arg mem_mesh_provisioning_random_B,contr
+	branch ali_mesh_encrypt_base_function_sha256_load_data_64bit
+
+
+ali_mesh_encrypt_load_three_tuple_to_sha256:
+	arg mem_mesh_three_tuple_ProductID,contr
+	arg 4,loopcnt
+	call ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii_add_comma
+	arg mem_mesh_three_tuple_MAC,contr
+	arg 6,loopcnt
+	call ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii_add_comma
+	arg mem_mesh_three_tuple_secret,contr
+	arg 0x10,loopcnt
+ifdef V1_2
+	call ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii_add_comma
+else
+	call ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii
+endif
+	call ali_mesh_encrypt_base_function_sha256_check_first_load_data
+	branch ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii_add_comma+2
+
+
+//calc provisioning data
+//Encrupted provisioning data = prov_data XOR SessionKey
+ali_mesh_encrypt_calc_provisioning_data:
+	call ali_mesh_encrypt_calc_provisioning_data_calc_SessionKey
+//	branch ali_mesh_encrypt_calc_provisioning_data_xor_prov_data
+ali_mesh_encrypt_calc_provisioning_data_xor_prov_data:
+	arg mem_mesh_Encrypt_Provisioning_Data,rega
+	arg memresult,regb
+	arg 0xb,loopcnt
+ali_mesh_encrypt_calc_provisioning_data_xor_prov_data_loop:
+	ifetch 2,rega
+	ifetcht 2,regb
+	ixor temp,pdata
+	istore 2,rega
+	increase 2,rega
+	increase 2,regb
+	loop ali_mesh_encrypt_calc_provisioning_data_xor_prov_data_loop
+	rtn
+
+
+//calc SessionKey
+//SessionKey = SHA256(ConfirmationCloud||"SessionKey")[0:15]
+//output:sessionKey in memresult
+ali_mesh_encrypt_calc_provisioning_data_calc_SessionKey:
+	arg mem_mesh_ConfirmationCloud,contr
+	arg 0x10,loopcnt
+	call ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii
+	arg mem_mesh_sha256_SessionKey_ascii,contr
+	arg 0xa,loopcnt
+	call ali_mesh_encrypt_base_function_sha256_load_data_without_hex2ascii
+	branch ali_mesh_encrypt_base_function_sha256_calc
+
+
+
+ali_mesh_encrypt_calc_network_key_by_k2:
+	arg mem_mesh_Network_Key,contr
+	arg mem_k2_N,contw
+	call memcpy16
+
+/************k2 function*************/
+//input:mem_k2_N N data
+ali_mesh_encrypt_base_function_k2:
+/*******************generate T*************************/
+	arg mem_k2_N,contr
+	arg mem_k2_SALT,rega
+	arg mem_k2_T,alarm
+	call ali_mesh_encrypt_base_function_AES_CMAC_16Byte
+/*******************generate T1************************/
+	arg mem_k2_T1,alarm
+	arg 0x01,regb
+	setarg 0
+	call ali_mesh_encrypt_base_function_k2_AES_CMAC_T
+	fetch 1,mem_k2_T1+15
+	and pdata,0x7f,pdata
+	store 1,mem_k2_NID
+/*******************generate T2************************/
+	arg mem_k2_T2,alarm
+	arg 0x02,regb
+	setarg 0x10
+	arg mem_k2_T1,rega
+	call ali_mesh_encrypt_base_function_k2_AES_CMAC_T
+/*******************generate T3************************/
+	arg mem_k2_T3,alarm
+	arg 0x03,regb
+	setarg 0x10
+	arg mem_k2_T2,rega
+	branch ali_mesh_encrypt_base_function_k2_AES_CMAC_T
+
+ali_mesh_encrypt_base_function_k4:
+/*******************generate T*************************/
+	arg mem_mesh_application_key,contr
+	arg mem_k4_SALT,rega
+	arg mem_k4_T,alarm
+	call ali_mesh_encrypt_base_function_AES_CMAC_16Byte
+	arg mem_k4_id6_01,contr
+	arg mem_k4_T,rega
+	arg mem_k4_k4N,alarm
+	setarg 4
+	call ali_mesh_encrypt_base_function_AES_CMAC
+	fetch 1,mem_k4_k4N+15
+	and pdata,0x3f,pdata
+	set1 TRANSPORT_HEAD_BIT_AKF,pdata
+	store 1,mem_mesh_transport_AID
+	rtn
+
+ali_mesh_encrypt_base_function_k3:
+/*******************generate T*************************/
+	arg mem_mesh_Network_Key,contr
+	arg mem_k3_SALT,rega
+	arg mem_k3_T,alarm
+	call ali_mesh_encrypt_base_function_AES_CMAC_16Byte
+	arg mem_k3_id64_01,contr
+	arg mem_k3_T,rega
+	arg mem_k3_k4N,alarm
+	setarg 5
+	call ali_mesh_encrypt_base_function_AES_CMAC
+
+//	call ali_mesh_proxy_init_adv
+	
+	fetch 2,mem_ui_state_map
+	rtnbit1 UI_STATE_BLE_CONNECTED
+	jam 1,mem_le_adv_enable
+	rtn
+
+
+//********* network PDU header obfuscation *********//
+ali_mesh_encrypt_obfuscation_deceypt_send_message:
+	arg mem_mesh_send_upper_layer_CTL_and_TTL,rega
+	fetch 7,mem_mesh_send_upper_layer_DST	
+	branch ali_mesh_encrypt_obfuscation_deceypt
+ali_mesh_encrypt_obfuscation_deceypt_recevie_message:
+	arg mem_mesh_message_TTL,rega
+	fetch 7,mem_mesh_message_DST
+ali_mesh_encrypt_obfuscation_deceypt:
+	store 7,mem_mesh_Privacy_Plaintext_Privacy_Random
+	setarg 0
+	store 5,mem_mesh_Privacy_Plaintext_Zero_String
+	call ali_mesh_encrypt_generate_PECB
+	fetch 6,mem_mesh_PECB
+	ifetcht 6,rega
+	ixor temp,pdata
+	istore 6,rega
+	rtn
+
+ali_mesh_encrypt_generate_PECB:
+ali_mesh_encrypt_generate_privacy_random:
+	fetch 4,mem_mesh_IV_Index
+	store 4,mem_mesh_Privacy_Plaintext_IV_Index
+// generate PECB with AES-128/ function e
+ali_mesh_encrypt_base_function_generate_PECB:
+	arg mem_k2_PrivacyKey,contr
+	call load_key
+	arg mem_mesh_Privacy_Plaintext,contr
+	call load_data128
+	call do_aes_ocb
+	arg mem_mesh_PECB,contw
+	branch store_aes_result
+
+
+/************sha256 function*************/
+//input  : (big endian)
+// data addr : contr
+// point : call clear_sha256_chunk
+ali_mesh_encrypt_base_function_sha256_load_data_64bit:
+	arg 8,loopcnt
+//input  : (big endian)
+// data addr : contr
+// data len : loopcnt
+// point : call clear_sha256_chunk
+ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii:
+	call ali_mesh_encrypt_base_function_sha256_check_first_load_data
+	call ali_mesh_encrypt_base_function_hex2ascii
+	branch ali_mesh_encrypt_base_function_sha256_store_dataptr
+ali_mesh_encrypt_base_function_sha256_load_data_without_hex2ascii:
+	call ali_mesh_encrypt_base_function_sha256_check_first_load_data
+	call memcpy
+	branch ali_mesh_encrypt_base_function_sha256_store_dataptr
+ali_mesh_encrypt_base_function_sha256_load_data_with_hex2ascii_add_comma:
+	call ali_mesh_encrypt_base_function_sha256_check_first_load_data
+	call ali_mesh_encrypt_base_function_hex2ascii
+	setarg COMMA
+	istore 1,contw
+ali_mesh_encrypt_base_function_sha256_store_dataptr:
+	copy contw,pdata
+	store 2,mem_mesh_sha256_data_end_addr
+	rtn
+ali_mesh_encrypt_base_function_sha256_check_first_load_data:
+	copy contr,temp
+	copy loopcnt,rega
+	fetch 2,mem_mesh_sha256_data_end_addr
+	copy pdata,contw
+	fetch 1,mem_mesh_sha256_load_first_data_flag
+	call ali_mesh_encrypt_base_function_sha256_first_load_data,blank
+	copy temp,contr
+	copy rega,loopcnt
+	rtn
+ali_mesh_encrypt_base_function_sha256_first_load_data:
+	jam 1,mem_mesh_sha256_load_first_data_flag
+	call ali_mesh_encrypt_base_function_sha256_clear_data_chunk				
+	arg mem_mesh_sha256_chunk_start,contw
+	rtn
+
+ali_mesh_encrypt_base_function_sha256_clear_data_chunk:
+	arg 0x100,loopcnt
+	arg mem_mesh_sha256_chunk_start,contw
+	branch memset0
+
+ // output :
+ // sha256 result : memresult(big endian)
+ali_mesh_encrypt_base_function_sha256_calc:
+ 	call ali_mesh_encrypt_base_function_sha256_load_data_end
+ ifdef mesh_debug_log
+ 	arg MESH_ENCRYPT_SHA256_FUNCTION_INPUT,regb
+	arg mem_mesh_sha256_chunk_start,rega
+	fetchr loopcnt,8,mem_mesh_sha256_data_len_byte
+	call logging_tx_debug
+endif
+	call ali_mesh_encrypt_base_function_sha256_input_data_init_inverse
+
+	setarg mem_mesh_sha256_chunk_start
+	store 2,mem_mesh_sha256_chunk_ptr
+	call sha_init
+//	call ice_break
+ali_mesh_encrypt_base_function_sha256_calc_loop:
+	fetch 2,mem_mesh_sha256_chunk_ptr
+	copy pdata,contr
+	arg mem_dat,contw
+	call memcpy64
+	call sha
+	fetch 2,mem_mesh_sha256_chunk_ptr
+	pincrease 64
+	store 2,mem_mesh_sha256_chunk_ptr
+	fetch 1,mem_mesh_sha256_chunk_count
+	pincrease -1
+	store 1,mem_mesh_sha256_chunk_count
+	nbranch ali_mesh_encrypt_base_function_sha256_calc_loop,blank
+	call sha_result
+	arg memresult,rega
+	arg 0x20,loopcnt
+	call inverse_data
+ ifdef mesh_debug_log
+ 	arg MESH_ENCRYPT_SHA256_FUNCTION_RESULT,regb
+	arg memresult,rega
+	arg 0x20,loopcnt
+	call logging_tx_debug
+endif
+	rtn
+
+
+ali_mesh_encrypt_base_function_sha256_load_data_end:
+	jam 0,mem_mesh_sha256_load_first_data_flag
+	fetch 2,mem_mesh_sha256_data_end_addr
+	copy pdata,contw
+	arg 0x80,temp	//第一个bit补1，后面补0
+	istoret 1,contw
+	arg mem_mesh_sha256_chunk_start,temp
+	isub temp,pdata
+	store 8,mem_mesh_sha256_data_len_byte
+	//计算bit数
+	lshift3 pdata,temp
+	storet 8,mem_mesh_sha256_data_len_bit
+	rshift4 pdata,regc
+	rshift2 regc,regc
+	and pdata,0x3f,pdata
+	sub pdata,55,null
+//55-(len mod 63)<0,内存填充448以后的，需要填充到第二块
+	ncall ali_mesh_encrypt_base_function_sha256_add_chunk,positive
+	add regc,1,pdata
+	store 1,mem_mesh_sha256_chunk_count
+	mul32 pdata,64,rega		//计算块的数量地址
+	lshift4 pdata,regc			//计算4byte包的数量
+	increase -1,regc			//最好一个包长度不交换
+	setarg mem_mesh_sha256_chunk_start + DECREASED_FOUR
+	iadd rega,rega
+	fetch 4,mem_mesh_sha256_data_len_bit
+	istore 4,rega
+	rtn
+
+
+//增加块数量
+ali_mesh_encrypt_base_function_sha256_add_chunk:
+	increase 1,regc
+	rtn
+	
+ali_mesh_encrypt_base_function_sha256_input_data_init_inverse:
+	arg mem_mesh_sha256_chunk_start,rega
+
+//每4个字节，需要高低位交换一下
+//input :
+// data addr : rega
+ali_mesh_encrypt_base_function_sha256_data_inverse_4Byte:
+	arg 4,loopcnt
+	call inverse_data
+	increase 2,rega	
+	add regc,-1,regc
+	nbranch ali_mesh_encrypt_base_function_sha256_data_inverse_4Byte,zero
+	rtn
+
+
+// input : 
+// data ptr : contr
+// data save ptr : contw 
+// data len : loopcnt
+ali_mesh_encrypt_base_function_hex2ascii:
+	ifetch 1,contr
+	rshift4 pdata,temp
+	call ali_mesh_encrypt_base_function_dialog2uchar
+	istoret 1,contw
+	and pdata,0x0f,temp
+	call ali_mesh_encrypt_base_function_dialog2uchar
+	istoret 1,contw
+	loop ali_mesh_encrypt_base_function_hex2ascii
+	rtn
+ali_mesh_encrypt_base_function_dialog2uchar:
+	sub temp,9,null
+	branch ali_mesh_encrypt_base_function_dialog2uchar_num,positive
+	add temp,87,temp
+	rtn
+ali_mesh_encrypt_base_function_dialog2uchar_num:	
+	add temp,48,temp
+	rtn
+
+
+ali_mesh_encrypt_base_function_AES_CMAC_32Byte:
+	setarg 0x20 
+	branch ali_mesh_encrypt_base_function_AES_CMAC
+
+ali_mesh_encrypt_base_function_AES_CMAC_16Byte:
+	setarg 0x10
+	branch ali_mesh_encrypt_base_function_AES_CMAC
+
+
+//pdata:data length
+//regb:last data
+ali_mesh_encrypt_base_function_k2_AES_CMAC_T:
+	fetcht 1,mem_k2_P_len
+	increase 1,temp
+	iadd temp,temp
+	storet 1,mem_AES_CMAC_data_length
+	copy rega,contr
+	copy pdata,loopcnt
+	call memcpy_fast
+	fetcht 1,mem_k2_P_len
+	copy temp,loopcnt
+	call memcpy
+	copy regb,pdata
+	istore 1,contw
+	arg mem_k2_T,rega
+	branch ali_mesh_encrypt_base_function_AES_CMAC + 3
+
+
+//input:
+//pdata:data length
+//contr:data prt
+//rega:key ptr
+//output:
+//alarm:output prt
+ali_mesh_encrypt_base_function_AES_CMAC:
+	store 1,mem_AES_CMAC_data_length
+	copy pdata,loopcnt
+	call memcpy_fast
+	copy rega,contr
+	arg mem_AES_CMAC_k,contw
+	call memcpy16
+ifdef mesh_debug_log
+ 	arg MESH_ENCRYPT_AES_CMAC_FUNCTION_INPUT_M,regb
+	arg mem_dat,rega
+	fetchr loopcnt,1,mem_AES_CMAC_data_length
+	call logging_tx_debug
+ 	arg MESH_ENCRYPT_AES_CMAC_FUNCTION_INPUT_K,regb
+	arg mem_AES_CMAC_k,rega
+	arg 16,loopcnt
+	call logging_tx_debug
+endif
+	call function_AES_CMAC
+	copy alarm,contw
+	call store_aes_result
+ifdef mesh_debug_log
+ 	arg MESH_ENCRYPT_AES_CMAC_FUNCTION_RESULT,regb
+	copy alarm,rega
+	arg 16,loopcnt
+	call logging_tx_debug
+endif
+	rtn
+
+
+//////**AES-CCM**////////
+ali_B0_block_generate:
+ 	fetcht 1,mem_ccm_type
+ 	branch  ali_block_generate
+ali_A_block_generate:
+	force 0x01,temp
+ali_block_generate:
+	force regidx_data,regext_index
+	fetch 2,mem_nonce_ptr
+	copy pdata,contr
+	ifetch 3,contr
+	lshift8 pdata,pdata
+	ior temp, regext
+	increase 1,regext_index
+	ifetch 4,contr
+	copy pdata,regext
+	increase 1,regext_index
+	ifetch 4,contr
+	copy pdata,regext
+	increase 1,regext_index
+	byteswap rega,regext
+	lshift16 regext,regext
+	ifetch 2,contr
+	ior regext,regext
+	rtn
+ali_generate_mic:
+	fetch 1,mem_ccm_data_len
+	copy pdata,rega
+	call ali_B0_block_generate
+	call do_aes_ocb
+	force regidx_result,regext_index
+	deposit regext
+	copy rega,loopcnt
+	fetcht 2,mem_ccm_data_ptr
+	copy temp,contr
+	call padding_data
+	branch generate_mic_loop
+/*
+function name:ali_CCM_encrypt
+input:pdata is the encrypt data length
+temp is encrypt data ptr
+*/
+ali_CCM_encrypt_64Bit:
+	jam MIC_SIZE_64BIT,mem_ccm_type
+	branch ali_CCM_encrypt_function
+ali_CCM_encrypt:
+	jam MIC_SIZE_32BIT,mem_ccm_type
+	branch ali_CCM_encrypt_function
+ali_CCM_encrypt_function:
+	store 1,mem_ccm_data_len
+	storet 2,mem_ccm_data_ptr
+	bpatchx patch34_5,mem_patch34
+	call ali_generate_mic
+	force regidx_xor,regext_index
+	iforce regext
+	force regidx_result+1,regext_index
+	copy regext,pdata
+	force regidx_xor+1,regext_index
+	iforce regext
+	force 0,rega
+	copy temp,regc
+	call ali_A_block_generate
+	call do_aes_ctr
+	call ali_fetcht_ccm_mic
+	storet 8,mem_ccm_mic
+	fetch 1,mem_ccm_data_len
+	copy pdata,regb
+	call ali_aes_crypt_data
+	fetcht 1,mem_ccm_data_len
+	fetch 2,mem_ccm_data_ptr
+	iadd temp,rega
+	fetcht 8,mem_ccm_mic
+	istoret 4,rega
+	fetch 1,mem_ccm_type
+	sub pdata,MIC_SIZE_32BIT,pdata
+	rtn blank
+	istoret 8,rega
+	rtn
+/*
+function name:ali_CCM_decrypt_function
+input:pdata is the encrypt data length
+temp is encrypt data ptr
+*/
+ali_CCM_decrypt_64Bit:
+	jam MIC_SIZE_64BIT,mem_ccm_type
+	branch ali_CCM_decrypt_function
+ali_CCM_decrypt:
+	jam MIC_SIZE_32BIT,mem_ccm_type
+	branch ali_CCM_decrypt_function
+
+/*
+1 解密；
+2 算MIC
+3 把算出来的MIC和收到的MIC对比
+4 MIC合法，rtn zero = 1;
+*/	
+ali_CCM_decrypt_function:
+	store 1,mem_ccm_data_len
+	storet 2,mem_ccm_data_ptr
+	copy temp,regc
+	copy pdata,regb
+	iadd regc,contr
+	bpatchx patch34_6,mem_patch34
+	ifetch 8,contr
+	force regidx_xor,regext_index
+	iforce regext
+	force regidx_xor+1,regext_index
+	rshift32 pdata,pdata
+	iforce regext
+	force 0,rega
+	call ali_A_block_generate
+	call do_aes_ctr
+	call ali_fetcht_ccm_mic
+	storet 8,mem_ccm_mic
+	call ali_aes_crypt_data
+	call ali_generate_mic
+	call ali_fetcht_ccm_mic
+	fetch 1,mem_ccm_type
+	beq MIC_SIZE_64BIT,ali_CCM_decrypt_function_check_mic64
+	storet 4,mem_ccm_mic+4
+	fetch 4,mem_ccm_mic
+	fetcht 4,mem_ccm_mic+4
+	isub temp,pdata
+	rtn
+
+ali_CCM_decrypt_function_check_mic64:
+	fetch 8,mem_ccm_mic
+	isub temp,pdata
+	rtn
+
+ali_fetcht_ccm_mic:
+	force regidx_result,regext_index
+	deposit regext
+	force regidx_result+1,regext_index
+	copy regext,temp
+	lshift16 temp,temp
+	lshift16 temp,temp
+	ior temp,temp
+   	rtn
+ali_aes_crypt_data: 
+	increase 1,rega
+	call ali_A_block_generate
+	copy regc,contr
+	call aes_load_xor
+	call do_aes_ctr
+	call store_enc_data
+	increase 16,regc
+	increase -16,regb
+	branch ali_aes_crypt_data,positive
+	rtn
+//////**AES-CCM**////////
+
+
+
+

@@ -1,0 +1,438 @@
+mem_mouse_flag:
+#mouse flag byte1
+#bit0 MOUSE_SELECT_DEVICE_FLAG
+#bit1 MOUSE_24G_PAIRING_FLAG
+#bit2 MOUSE_STORE_EEPROM_FLAG
+#bit3 MOUSE_BT_CANNEL_RECONN_FLAG
+#bit4 MOUSE_LOW_VOLTAGE_FLAG
+#bit5 MOUSE_BT_DISCOVERY_BUTTON_DOWN_FLAG
+#bit6 MOUSE_BT_DISCOVERY_BUTTON_LONG_DOWN_FLAG
+04
+
+#mouse flag byte2
+#bit0 MOUSE_ENABLE_BLE_RANDOM_ADDRE
+#bit1 MOUSE_ENABLE_2K_EEPROM
+#bit2 MOUSE_ENABLE_INIT_DELAY
+#bit3 MOUSE_ENABLE_WAKEUP_FROM_POWER
+#bit4 MOUSE_ENABLE_16M
+#bit5 MOUSE_ENABLE_USB
+#bit6 MOUSE_ENABLE_24G_SEARCH_DONGLE
+#bit7 MOUSE_ENABLE_LOAD_AND_STORE_DPI
+49
+
+#mouse flag byte3
+#bit0 MOUSE_ENABLE_SPI2
+#bit1 MOUSE_ENABLE_24G
+#bit2 MOUSE_ENABLE_FLASH
+#bit3 MOUSE_ENABLE_EEPROM
+#bit4 MOUSE_ENABLE_OTP
+#bit5 MOUSE_ENABLE_ADC
+#bit6 MOUSE_ENABLE_KEYBOARD
+#bit7 MOUSE_ENABLE_DOUBLE_DPI_KEY
+0a
+
+#mouse flag byte4
+#bit0 MOUSE_ENABLE_24G_250Hz
+#bit1 MOUSE_ENABLE_24G_500Hz
+#bit2 MOUSE_ENABLE_24G_1000
+#bit3 MOUSE_ENABLE_BT_125Hz
+#bit4 MOUSE_ENABLE_DPI_LEVEL_4
+#bit5 MOUSE_ENABLE_USB_250
+#bit6 MOUSE_ENABLE_USB_500
+#bit7 MOUSE_ENABLE_USB_1000
+00
+
+#mouse flag byte5
+#bit0 MOUSE_ENABLE_1IO2LED
+#bit1 MOUSE_ENABLE_BT_RECONN_LED_EFFECT
+#bit2 MOUSE_ENABLE_LOW_LED_BLINK_LIMIT
+#bit3 MOUSE_ENABLE_LOW_LED
+#bit4 MOUSE_ENABLE_LOW_FOR_LED
+#bit5 MOUSE_ENABLE_DPI_FOR_LED
+#bit6 MOUSE_ENABLE_DPI_LOW_FOR_LED
+00
+
+#mouse flag byte6 
+#bit0 MOUSE_ENABLE_SELECT_DEVICE_BY_DPI_BUTTON
+#bit1 MOUSE_ENABLE_SELECT_DEVICE_BY_PB_BUTTON
+#bit2 MOUSE_ENABLE_SELECT_DEVICE_BY_SWITCH_GPIO
+#bit3 MOUSE_ENABLE_DPI_KEY_CONNECT_GND
+#bit4 MOUSE_ENABLE_ANOTHER_DPI_KEY_CONNECT_GND
+#bit5 MOUSE_ENABLE_PB_BUTTON_CONNECT_GND
+#bit6 MOUSE_ENABLE_FIRE_KEY_CONNECT_GND
+#bit7 MOUSE_ENABLE_CUSTOMER_KEY_CONNECT_VIN_OR_MATRIX
+00
+
+#mouse flag byte7
+#bit0 MOUSE_ENABLE_AUTO_24G_PARING
+#bit1 MOUSE_ENABLE_24G_POWER_ON_PAIRING
+#bit2 MOUSE_ENABLE_COMMBINATION_KEY_BY_24G_PAIRING
+#bit3 MOUSE_ENABLE_BT_RECONNECT_TIMEOUT_ENTER_DISCOVERY
+#bit4 MOUSE_ENABLE_PB_BUTTON_SHORT_PRESS_ENTER_DISCOVERY
+#bit5 MOUSE_ENABLE_COMMBINATION_KEY_BY_BT_DISCOVERY
+#bit6 MOUSE_ENABLE_DPI_KEY_LONG_PRESS_DISCONVERY
+#bit7 MOUSE_ENABLE_PB_BUTTON_LONG_PRESS_DISCONVERY
+01
+
+#mouse flag byte8
+#bit0 MOUSE_ENABLE_SMOOTHER
+#bit1 MOUSE_ENABLE_XY_OFFSET
+#bit2 MOUSE_ENABLE_24G_AUTO_PAIR_NERVER_BEEN_PAIRED
+#bit3 MOUSE_ENABLE_LE_BATTERY_SERVICE_CANCEL
+#bit4 MOUSE_ENABLE_WHEEL_WAKE_UP_CANCEL
+#bit5 MOUSE_ENABLE_24G_2M_PHY
+#bit6 MOUSE_ENABLE_24G_FIRST_AUTO_PAIRING
+1b
+
+mem_mouse_param_config:
+08 #mem_lbutton_gpio
+09 #mem_mbutton_gpio
+0a #mem_rbutton_gpio
+0a #mem_bk_button_gpio
+08 #mem_fw_button_gpio
+09 #mem_dpi_button_gpio
+ff #mem_whee_a_data_gpio
+ff #mem_whee_b_data_gpio
+0b #mem_mouse_sensor_sclk_gpio
+0c #mem_mouse_sensor_sdio_gpio
+ff #mem_select_sensor_angle_gpio
+00 #mem_sensor_angle_default
+00 #mem_sensor_angle_switch
+00 #mem_config_sensor_dpi	#power on default dpi 00--1200  01--1600
+ff #mem_whee_ta_data_gpio
+ff #mem_whee_tb_data_gpio
+ff #mem_matrix_public_gpio
+ff #mem_config_select_device_button_gpio
+ff #mem_customer_key_gpio
+ff #mem_firebutton_gpio
+ff #mem_dpi_another_button_gpio
+ff #mem_sensor_motion_gpio
+ff #mem_device_switch_gpio
+05 #mem_mouse_reuse_2ice_gpio
+ff #mem_mouse_logo_led_gpio
+ff #mem_mouse_1io2led_multi_24gled
+ff #mem_mouse_1io2led_multi_bt1led
+ff #mem_mouse_1io2led_multi_bt2led
+ff #mem_mouse_low_voltage_alarm_gpio
+ff #mem_mouse_dpi_gpio
+
+#mouse sensor angle
+#0x00 MOUSE_6CLK_ANGLE
+#0X01 MOUSE_9CLK_ANGLE
+#0X02 MOUSE_12CLK_ANGLE
+#0X03 MOUSE_3CLK_ANGLE
+
+mem_mouse_customer_function:01  #01--win+d     02--ctrl+alt+a    03--ie home    04--play
+
+#1io2led multi start
+#time parm
+mem_mouse_le_reconn_blink_limit:00		#00:disable 	01:enable
+mem_mouse_multi_led_powon_timer_init:14	#2s
+mem_mouse_multi_24gled_blink_timer_init:05			#24gled blink time		500ms on,500ms off
+mem_mouse_multi_le_discovery_blink_timer_init:02		#le discovery blink time	500ms on,500ms off
+mem_mouse_multi_le_reconn_blink_timer_init:05			#le reconn blink time		500ms on,500ms off
+mem_mouse_low_led_blink_timer:14				#low blink time			1000ms on,1000ms off
+mem_mouse_dpi_led_blink_timer_init:02			#dpi blink time			200ms on,200ms off
+#blink count=count/2
+mem_mouse_multi_24gled_blink_count_init:02		#24g count
+mem_mouse_multi_le_reconn_blink_count_init:06	#le reconn count
+mem_mouse_multi_lowled_blink_count_init:0a		#low count=count
+mem_mouse_dpi_led_delay_count_init:0a		#1s
+#1io2led multi end
+
+#time parm
+mem_mouse_logo_led_on_time_init:58 02	#1min
+mem_mouse_24g_pair_timeout_init:2c 01  #30s	    24g reconn timer&pair timer
+mem_mouse_24g_reconn_timeout_init:64 #10s
+mem_mouse_24g_power_on_fast_conn_timer:05 00	#500ms
+mem_mouse_direct_timeout:32  #05s
+mem_mouse_discovery_timeout:b0 04	#2min
+mem_mouse_fast_direct_timeout:0a #1s
+mem_mouse_no_data_timeout:70 17   #10mins
+
+#device parm
+mem_device_option:08
+mem_device_number:01   #01--only 2.4g   02--2.4g+ble
+
+mem_lpm_mode:01
+mem_lpm_mult:20
+mem_lpm_mult_init:20
+
+mem_device_flag:
+00		#00--24g 01--bt
+34
+ff ff ff ff ff ff
+mem_device2_type:
+34
+ff ff ff ff ff ff
+mem_device3_type:
+33
+ff ff ff ff ff ff
+
+#adc
+mem_mouse_vdd_full_vol:dc 05		#1.5V
+84 03#mem_mouse_vdd_empty_vol  :0.9V
+e8 03#mem_mouse_vdd_low_vol   :1.0V
+#mem_mouse_vdd_full_vol:e4 0c		#3.3V
+#b8 0b#mem_mouse_vdd_empty_vol  :3.0V
+#80 0c#mem_mouse_vdd_low_vol   :3.2V
+
+mem_adc_channel_gpio:04
+#04
+#02
+#01
+#03
+#00
+#05
+#06
+#07
+
+#bit0:mouse_key_l    bit1:mouse_key_r  bit2:mouse_key_m
+mem_mouse_commbination_key_24g:03
+mem_mouse_commbination_key_bt:07
+
+mem_mouse_compare_addr:ff ff ff ff ff ff#00 00 00 00 00 00		#otp/flash=0	eeprom=ff
+
+#2.4g
+mem_24g_lap: 12 31 31 41 51 61
+mem_24g_data_type:01	#01--mouse  02--keyboard
+mem_24g_fast_conn_enable:01
+mem_24g_fast_conn_addr:0f 0f 0f 0f
+mem_24g_ch_map_update:00   #00--disable   01--enable
+mem_24g_long_sleep_set_level:02    #00--30ms   01--50ms  02--80ms  03--100ms
+mem_24g_disable_fec1:00	 	#00--default mode  01--new process
+mem_mouse_sleep_deal_type:00	#00:old version	01 new version	
+mem_24g_rx_window:c0 12     #400us  ## e0 2e#1ms #transmitter long range min:520us
+
+mem_mouse_24g_short_sleep_set_4ms:ee 4d 00	#1662us
+mem_mouse_24g_long_sleep_set_4ms:80 bb 00
+mem_mouse_24g_fast_hop_count_4ms:05
+mem_mouse_24g_tsniff_4ms:80 bb 00 00
+
+mem_mouse_24g_short_sleep_set_8ms:e8 fd 00#ac 07 01	#5625us	40 19 01:72000:6ms
+mem_mouse_24g_long_sleep_set_8ms:00 77 01
+mem_mouse_24g_fast_hop_count_8ms:0b
+mem_mouse_24g_tsniff_8ms:00 77 01 00
+
+mem_24g_enter_hibernate:00 48 60
+mem_24g_long_sleep_param_update_timer_init:2c 01	#30s
+mem_24g_transmit_by_interrupt_exit_count_init:50 00
+mem_mouse_24g_search_dongle_time_init:64 00	#10s
+mem_store_information_delay_timer_init:05
+
+
+#ble
+mem_le_lap:71 81 91 a1 b1 c1
+mem_le_adv_channel_map:07
+mem_local_rx_max_octets:fb 00 48 08 fb 00 48 08  # 1b
+mem_le_battery_level_updata_timer_init:96 00
+
+mem_le_keyboard_handle:15 00
+mem_le_notify_handle:19 00
+mem_le_multimedia_handle:1d 00
+mem_le_systemctrl_handle:21 00
+mem_le_pairing_handle:2d 00
+mem_le_battery_level_handle:30 00
+
+mem_le_adv_data_len:1f
+mem_le_adv_data:
+#flag
+02 01 05 
+#uuid
+03 03 12 18 
+#appearance
+03 19 c2 03
+
+mem_le_adv_swift_pair:
+#microsoft swift pair
+06 ff 06 00 03 00 80	
+#name
+'\09BT5.2 Mouse
+
+mem_le_scan_data_len:1f
+mem_le_scan_data:
+#name
+'\09BT5.2 Mouse
+
+
+mem_le_name_len:
+'BT5.2 Mouse
+
+mem_le_name_patch_len:	#max 18bytes
+'BT5.2 Mouse
+
+mem_le_interval_min:
+06 00 #min interval
+09 00 #max interval
+20 00 #latency
+2c 01 #timeout
+
+mem_le_adv_ind:03 12 18
+mem_le_adv_direct_ind:ff 00 00
+
+mem_flash_base:00 50 00
+mem_eeprom_base:80 1f
+mem_eeprom_block_size:80
+
+#otp write info offset
+mem_otp_offset_dpi:5d 1c										#7261 begin		60count----------info begin	
+mem_otp_offset_dpi_end:7a 1c								#7290 end
+
+mem_otp_offset_device_flag:7b 1c							#7291 begin		80count
+mem_otp_offset_device_flag_end:a2 1c						#7330 end
+
+mem_otp_offset_24g_addr:a3 1c								#7331 begin		25 count
+mem_otp_offset_24g_addr_end:06 1d						#7430 end
+
+mem_otp_offset_le_addr1:07 1d								#7431 begin		25 count
+mem_otp_offset_le_addr1_end:9c 1d						#7580 end
+
+mem_otp_offset_le_locall_addr1:9d 1d						#7581 begin		25 count
+mem_otp_offset_le_locall_addr1_end:32 1e				#7730 end
+
+mem_otp_offset_le_addr2:33 1e								#7731 begin		25 count
+mem_otp_offset_le_addr2_end:c8 1e						#7880 end
+
+mem_otp_offset_le_locall_addr2:c9 1e						#7881 begin		25 count
+mem_otp_offset_le_locall_addr2_end:5e 1f				#8030  end
+
+mem_otp_offset_le_addr_increase_count:5f 1f			#8031 begin		100 count
+mem_otp_offset_le_addr_increase_count_end:c2 1f		#8130 end				----------info over	
+
+mem_otp_offset_app_initflag:c4 1f		#8132 end
+
+#ui
+mem_ui_button_gpio:ff
+mem_ui_button_timeout:1e
+mem_ui_led_struct_num:00
+
+#rf
+mem_tx_power:00	#00--0db 01--3db  02--5db  03--f3db  04--f5db
+mem_mouse_24g_pair_tx_power:94 #94: -20dBm
+mem_rssi_buff_index:07
+mem_rssi_signal_buf_ptr:mem_mouse_rssi_signal_buf
+mem_rssi_dis_min_24g_init:85
+mem_rssi_dis_max_24g_init:90
+mem_rssi_dis_min_ble_init:75
+mem_rssi_dis_max_ble_init:80
+mem_rssi_hex_received_max_value_init:63
+mem_power_ctrl_pac_succ_cnt_init:7d
+mem_power_ctrl_disable:00	#01,disable   00,enable
+mem_tx_power_factory_param:5b 01		#f17dbm
+
+#usb
+mem_usb_offline_check_gpio:ff
+
+#sensor
+mem_mouse_dpi_seting:
+03	#mem_320x_dpi_0
+04	#mem_320x_dpi_1
+01	#mem_320x_dpi_2
+02	#mem_320x_dpi_3
+
+20	#mem_3212_dpi_0
+2a	#mem_3212_dpi_1
+3f	#mem_3212_dpi_2
+15	#mem_3212_dpi_3
+
+14	#mem_ka8g2_dpi_0
+1b	#mem_ka8g2_dpi_1
+11	#mem_ka8g2_dpi_2
+0e	#mem_ka8g2_dpi_3
+
+mem_sensor_s201_dpi:
+8a  #mem_sensor_s201_dpi_0	1200
+8b  #mem_sensor_s201_dpi_1	1600
+83  #mem_sensor_s201_dpi_2	2400
+84  #mem_sensor_s201_dpi_3	3200
+88  #mem_sensor_s201_dpi_4	800
+
+mem_sensor_ka8g2_poweron_init:
+09 a5
+0b f3
+09 00
+ff ff
+
+mem_sensor_poweron_init:
+09 5a
+0b f3
+09 00
+ff ff
+
+mem_sensor_3212_init:
+09 5a
+26 34
+19 04
+09 00
+ff ff
+
+mem_sensor_3205_init:
+09 5a
+0d 10
+1d ed
+7d 80
+ff ff
+
+mem_sensor_ka8g2_init:
+09 a5
+46 34
+60 07
+69 04
+7d 20
+7e 00
+09 00
+ff ff
+
+mem_sensor_8650_init:
+09 5a
+ff 27
+ab 40
+b3 56
+9b e6
+a8 12
+a9 c0
+be e6
+a5 af
+a0 21
+a1 02
+b8 10
+b9 0b
+a7 ff
+b5 d0
+b6 00
+ff 00
+09 00
+ff ff
+
+mem_sensor_ka8ul_init:
+09 5a
+0d 10
+0e c5
+5b 9a
+10 38
+11 42
+28 28
+41 23
+49 39
+4a b0
+4b a0
+4c 90
+4d 70
+09 00
+ff ff
+
+mem_sensor_8009_init:
+09 5a
+06 02
+09 69
+0d 48
+0e 9f
+0f ba
+09 00
+ff ff
+
+# rf debug
+#bit7:0 means disable rf debug function
+#mem_rf_debug_rx_gpio:86
+#mem_rf_debug_tx_gpio:86
+

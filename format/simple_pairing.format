@@ -1,0 +1,68 @@
+
+ifdef SECURE_CONNECTION
+
+memalloc(
+0 mem_sp_state_start
+1 mem_sp_dhkey_invalid
+4 mem_gkey
+0 mem_sp_state_end
+
+32 mem_le_pubkey_remote_x_256
+32 mem_le_pubkey_remote_y_256
+32 mem_le_dhkey_256
+
+16 mem_sp_confirm_remote
+)
+
+xmemalloc(
+1 mem_sc_only_mode
+1 mem_sp_debug_mode
+1 mem_secure_connections_enable
+1 mem_sc_calc
+1 mem_sc_local_key_invalid
+
+
+32 mem_sc_private_key_256
+32 mem_sc_pubkey_local_x_256
+32 mem_sc_pubkey_local_y_256
+
+
+0 mem_sp_state_xmem
+1 mem_authentication_passkey_times
+1 mem_passkey_1bit
+0 mem_sp_state_xmem_end
+)
+endif
+
+/* simple pairing status flag */
+(
+  0x00   SP_FLAG_STANDBY
+  0x02   LE_SP_FLAG_COMMIT_256
+
+)
+
+/* simple pairing calc flag */
+(
+  0x00   SP_CALC_STANDBY
+  0x03   SP_CALC_PUBKEY_256
+  0x04   SP_CALC_DHKEY_256
+)
+
+
+
+/* simple paring invalid flag */
+(
+  0x00   SP_KEY_INVALID
+  0x03   SP_KEY_VALID_256
+
+)
+
+
+//mem_secure_connections_enable
+(
+0 SECURE_CONNECTIONS_LE_BIT
+1 SECURE_CONNECTIONS_BR_BIT
+)
+
+
+  

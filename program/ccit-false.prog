@@ -1,0 +1,32 @@
+
+
+
+//regc: read buffer
+//loopcnt: (length)
+//mem_adv_CRC_False_initValue: 初值和最终结果
+//mem_CRC16_polynomial:多项式
+p_CRC16_CCITT_False:
+	fetch 2, mem_adv_CRC_False_initValue //pdata crc
+	
+p_CRC16_CCITT_False_loop:
+	ifetcht 1, regc
+	increase 1, regc
+	lshift8 temp, temp
+	ixor temp,pdata
+	
+p_CRC16_for_byte:
+	copy loopcnt,regb		
+	arg 8,loopcnt
+p_CRC16_for_byte_loop:
+	isolate1 15,pdata
+	lshift pdata,pdata
+	nbranch p_CRC16_for_byte_continue,true
+	fetcht 2, mem_CRC16_polynomial
+	ixor temp,pdata
+p_CRC16_for_byte_continue:
+	loop p_CRC16_for_byte_loop
+	copy regb,loopcnt
+	
+	loop p_CRC16_CCITT_False_loop
+	store 2,mem_adv_CRC_False_initValue
+	rtn

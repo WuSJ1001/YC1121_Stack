@@ -1,0 +1,138 @@
+
+/*
+	多元素设置，检查是否发送给子元素的信息
+	输入:
+		temp is 包的DST地址
+*/
+ali_mesh_more_element_check_unicast_address:
+	arg 0,queue
+	fetchr loopcnt,1,mem_mesh_element_number
+	call disable_user
+	fetch 2,mem_mesh_Unicast_Address
+ali_mesh_more_element_check_unicast_address_loop:
+	isub temp,null
+	branch ali_mesh_more_element_found_unicast_address_element,zero
+	byteswap pdata,pdata
+	pincrease 1
+	byteswap pdata,pdata
+	increase 1,queue
+	loop ali_mesh_more_element_check_unicast_address_loop
+	rtn
+
+ali_mesh_more_element_found_unicast_address_element:
+	jam 0,mem_mesh_receive_group_address
+	storer queue,1,mem_mesh_receive_element_number
+	call ali_mesh_more_element_calc_queue_address
+	branch enable_user
+
+
+/*
+	多元素设置，检查是否发送给子元素组播的信息
+	输入:
+		temp is 包的DST地址
+*/
+ali_mesh_more_element_check_group_address:
+	arg 0,queue
+	arg 0,regc
+	call mesh_get_element_info_config
+	call disable_user
+ali_mesh_more_element_check_group_address_loop:
+	fetch 2,mem_mesh_core_feature
+	bbit0 MESH_FEATURE_DISABLE_SUBSCRIPTION,ali_mesh_more_element_check_subscription_address
+	ifetch 2,rega
+	isub temp,null
+	call ali_mesh_more_element_found_group_address_element,zero
+ali_mesh_more_element_check_address_common:
+	copy regb,pdata
+	iadd rega,rega
+	increase 1,queue
+	loop ali_mesh_more_element_check_group_address_loop
+	copy regc,pdata
+	rtn blank
+	store 1,mem_mesh_receive_group_address
+	branch enable_user
+
+ali_mesh_more_element_found_group_address_element:
+	qset1 regc
+	rtn
+
+ali_mesh_more_element_check_subscription_address:
+	add rega,ELEMENT_DEVICE_SUBSCRIPTION_LABEL,contr
+	arg SUBSCRIPTION_MAX_COUNT,alarm
+ali_mesh_more_element_check_subscription_address_loop:
+	ifetch 2,contr
+	isub temp,null
+	branch ali_mesh_more_element_found_subscription_address_element,zero
+	increase -1,alarm
+	branch ali_mesh_more_element_check_address_common,zero
+	branch ali_mesh_more_element_check_subscription_address_loop
+
+ali_mesh_more_element_found_subscription_address_element:
+	call ali_mesh_more_element_found_group_address_element
+	branch ali_mesh_more_element_check_address_common
+
+/*
+	多元素设置，检查哪些元素需要执行的操作
+	输入:
+		regc:对应的回调
+*/
+ali_mesh_more_element_check_element_address:
+	arg 0,queue
+	fetch 1,mem_mesh_receive_group_address
+	branch ali_mesh_more_element_check_element_address_no_group_address,blank
+	copy pdata,regb
+	fetchr loopcnt,1,mem_mesh_element_number
+ali_mesh_more_element_check_element_address_loop:
+	storer queue,1,mem_mesh_receive_element_number
+
+	qisolate1 regb
+	call ali_mesh_more_element_check_element_address_no_group_address,true
+	fetchr queue,1,mem_mesh_receive_element_number
+	increase 1,queue
+	loop ali_mesh_more_element_check_element_address_loop
+	rtn
+
+ali_mesh_more_element_check_element_address_no_group_address:
+	call ali_mesh_more_element_push_stack
+	call ali_mesh_more_element_calc_queue_address
+	copy regc,pdata
+	call callback_func
+	branch ali_mesh_more_element_pop_stack
+
+ali_mesh_more_element_push_stack:
+	storer loopcnt,2,mem_mesh_loopcnt_tmep
+	storer rega,2,mem_mesh_rega_temp
+	storer regb,2,mem_mesh_regb_temp
+	storer regc,2,mem_mesh_regc_temp
+	rtn
+
+ali_mesh_more_element_pop_stack:
+	fetchr loopcnt,2,mem_mesh_loopcnt_tmep
+	fetchr rega,2,mem_mesh_rega_temp
+	fetchr regb,2,mem_mesh_regb_temp
+	fetchr regc,2,mem_mesh_regc_temp
+	rtn
+
+
+/*
+	多元素设置，计算发送数据时的SRC和获取upper tsport layer 的buffer指针
+	输入:
+		queue当前数据编号
+*/
+ali_mesh_more_element_calc_queue_address:
+	bpatchx patch35_6,mem_patch35
+	fetch 2,mem_mesh_Unicast_Address
+	byteswap pdata,pdata
+	iadd queue,pdata
+	byteswap pdata,pdata
+	store 2,mem_mesh_send_message_SRC
+	call mesh_get_element_info_config
+	copy queue,pdata
+	imul32 regb,pdata
+	iadd rega,rega
+	add rega,ELEMENT_DEVICE_UPPER_QUEUE_PTR,contr
+	ifetch 2,contr
+	store,2,mem_queue_ptr
+	rtn
+
+

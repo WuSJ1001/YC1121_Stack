@@ -1,0 +1,63 @@
+
+
+xmemalloc ali_mesh(
+	1 mem_mesh_advertising_unprovisioned_device_beacon_switch
+	//未配网广播间隔
+	2 mem_mesh_advertising_unprovisioned_device_beacon_timer
+
+	//广播生存周期
+	1 mem_mesh_advertising_unprovisioned_device_beacon_duration
+	//广播周期之间的间隔
+	1 mem_mesh_advertising_unprovisioned_device_beacon_interval
+
+)
+
+(//mem_mesh_advertising_unprovisioned_device_beacon_switch
+0 DEVICE_BEACON_OFF
+1 DEVICE_BEACON_ON
+)
+
+(
+//未配网广播超时10min
+0x1770	ADV_UNPROVISIONED_DEVICE_BEACON_TIMEOUT
+//未配网广播间隔500ms
+5		ADV_UNPROVISIONED_DEVICE_BEACON_INTERVAL
+//未配网广播时长120ms=20ms*6
+6		ADV_UNPROVISIONED_DEVICE_BEACON_DURATION
+
+//静默广播超时:无
+0		ADV_SILENCE_DEVICE_BEACON_TIMEOUT
+//静默广播间隔60s
+600		ADV_SILENCE_DEVICE_BEACON_INTERVAL
+//静默广播时长120ms=20ms*6
+6		ADV_SILENCE_DEVICE_BEACON_DURATION
+
+
+//配网后广播间隔
+0x4		ADV_PAIRING_MESH_MESSAGE_INTERVAL
+//配网后广播时长
+20		ADV_PAIRING_MESH_MESSAGE_DURATION
+
+30		ADV_RELAY_MESH_MESSAGE_DURATION
+)
+
+(
+0x12 MAX_APP_MSSAGE_PAYLOAD_LENGTH
+7 BIT_OF_APP_PACKAGE_NUM
+6 BIT_OF_ADV_IN_OFF
+)
+
+(
+//mesh 回复APP广播间隔24*0.625ms = 15ms
+0x15 MESH_ADV_APP_MESSAGE_INTERVAL
+//mesh回复tmall广播间隔32*0.625ms = 20ms
+0x1d MESH_ADV_TMALL_MESSAGE_INTERVAL
+)
+(
+13 mesh_ble_adv_app
+//Tiny Mesh锟姐播tmall锟截革拷
+14 mesh_ble_adv_tmall
+//Tiny Mesh relay
+15 mesh_ble_relay_timer
+)
+

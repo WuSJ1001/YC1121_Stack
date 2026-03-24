@@ -1,0 +1,137 @@
+
+
+memalloc ali_mesh(
+	1 mem_mesh_message_Transport_NetMIC_length
+
+	1 mem_mesh_message_NID
+	1 mem_mesh_message_TTL
+	3 mem_mesh_message_SEQ
+	2 mem_mesh_message_SRC
+	2 mem_mesh_message_DST
+	0 mem_mesh_message_Proxy_TransportPDU_opcode
+	0 mem_mesh_message_Transport_NetMIC
+	1 mem_mesh_message_Transport_Head
+	//unsegmented access message
+	0 mem_mesh_message_Proxy_TransportPDU_Parameters
+	0 mem_mesh_message_Transport_unsegmented_access_messagePDU
+	//segmented access message
+	0 mem_mesh_message_Transport_segmented_access_messagePDU
+	3 mem_mesh_message_segment_access_SZMIC_SeqZero_SegO_SegN
+	0 mem_mesh_message_Transport_segmented_access_messagePDU_Segment
+	16 mem_mesh_message_Transport_NetMIC_end
+
+	13 mem_mesh_nonce_struct
+
+	2 mem_mesh_send_message_DST
+	3 mem_mesh_last_message_SEQ
+	1 mem_mesh_network_packet_type
+
+	1 mem_mesh_receive_message_count
+	2 mem_mesh_receive_message_first_unicast_address
+	2 mem_mesh_receive_message_second_unicast_address
+	2 mem_mesh_receive_message_third_unicast_address
+	2 mem_mesh_receive_message_fourth_unicast_address	
+
+)
+
+xmemalloc ali_mesh(
+	1 mem_mesh_network_dup_cache_next
+	1 mem_mesh_network_msg_cache_next
+	2 mem_mesh_network_proxy_unicast_address
+
+	4 mem_mesh_IV_Index
+
+
+
+// mesh SRC/SEQ  cache
+	0 mem_mesh_TMALL_cache_start
+	2 mem_mesh_TMALL_SRC1
+	3 mem_mesh_TMALL_SEQ1
+	45 mem_mesh_TMALL_cache
+	0 mem_mesh_TMALL_cache_end
+
+	0 mem_mesh_transport_message_mic_cache
+	4 mem_mesh_transport_message_mic_cache_buff1
+	36 mem_mesh_transport_message_mic_cache_buff2_10
+
+	0 mem_mesh_network_relay_queue
+	1 mem_mesh_network_relay_queue_each_size
+	1 mem_mesh_network_relay_queue_length
+	1 mem_mesh_network_relay_queue_current_num
+	1 mem_mesh_network_relay_queue_read_ptr
+	1 mem_mesh_network_relay_queue_write_ptr
+	136 mem_mesh_network_relay_queue_ele
+
+)
+
+
+amemalloc mem_k2_T2(
+	16 mem_k2_EncryptionKey
+)
+
+amemalloc mem_k2_T3(
+	16 mem_k2_PrivacyKey
+)
+
+amemalloc mem_mesh_nonce_struct(
+	//DST and TransportPDU encryption
+	0 mem_mesh_Network_Nonce
+	1 mem_mesh_Network_Nonce_nonce_type
+	1 mem_mesh_Network_Nonce_CTL_and_TTL
+	3 mem_mesh_Network_Nonce_SEQ
+	2 mem_mesh_Network_Nonce_SRC
+	2 mem_mesh_Network_Nonce_Pad	//0x0000
+	4 mem_mesh_Network_Nonce_IV_Index
+
+)
+
+amemalloc mem_le_txheader_mesh_temp(
+	1 mem_mesh_network_packet_type_temp
+
+	1 mem_mesh_message_NID_temp
+	1 mem_mesh_message_TTL_temp
+	3 mem_mesh_message_SEQ_temp
+	2 mem_mesh_message_SRC_temp
+	2 mem_mesh_message_DST_temp
+	20  mem_mesh_message_Transport_PDU_temp
+)
+
+(//nonce type
+0x00 NETWORK_NONCE
+0x01 APPLICATION_NONCE
+0x02 DEVICE_NONCE
+0x03 PROXY_NONCE
+)
+
+
+(
+0x00c0 GROUP_ADDRESS_0XC000_little_endian
+0xffcf GROUP_ADDRESS_0XCFFF_little_endian
+0x02c0 GROUP_ADDRESS_0XC002_little_endian
+0x07c0 GROUP_ADDRESS_0XC007_little_endian
+0x01c0 GROUP_ADDRESS_0XC001_little_endian
+0xffff GROUP_ADDRESS_0XFFFF_little_endian
+)
+
+
+(//SRC SEQ cache parameter
+10 CACHE_SPACE_NUM
+5 CACHE_SPACE_SIZE
+)
+
+(
+12 MESH_NETWORK_PACKET_MIN_LENGTH
+30 MESH_NETWORK_PACKET_MAX_LENGTH
+)
+
+(
+0 MESH_MESSAGE_TMALL
+1 MESH_MESSAGE_APP
+2 MESH_MESSAGE_PROXY
+)
+
+(
+
+0x20 MESH_ADV_RELAY_MESSAGE_INTERVAL
+)
+

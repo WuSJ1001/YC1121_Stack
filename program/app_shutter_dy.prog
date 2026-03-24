@@ -1,0 +1,1416 @@
+
+ifdef COMPILE_SHUTTER
+
+/*************dy config*********************/
+shutter_dy_6_key_conf:
+	//6key
+	fetch SHUTTER_SIX_KEY,mem_shutter_dy_key_conf
+	store SHUTTER_SIX_KEY,mem_shutter_key_conf0
+	jam SHUTTER_SIX_KEY,mem_shutter_key_num
+	setarg mem_shutter_key_num
+	store 2,mem_keyscan_ptr
+	rtn
+
+shutter_dy_7_key_conf:
+	//7key
+	fetch SHUTTER_SEVEN_KEY,mem_shutter_dy_key_conf
+	store SHUTTER_SEVEN_KEY,mem_shutter_key_conf0
+	jam SHUTTER_SEVEN_KEY,mem_shutter_key_num
+	setarg mem_shutter_key_num
+	store 2,mem_keyscan_ptr
+	rtn
+
+shutter_dy_8_key_conf:
+	//8key
+	fetch SHUTTER_EIGHT_KEY,mem_shutter_dy_key_conf
+	store SHUTTER_EIGHT_KEY,mem_shutter_key_conf0
+	jam SHUTTER_EIGHT_KEY,mem_shutter_key_num
+	setarg mem_shutter_key_num
+	store 2,mem_keyscan_ptr
+	rtn
+
+shutter_dy_key_conf:
+	fetch 1,mem_shutter_key_num_conf
+	beq SHUTTER_SIX_KEY,shutter_dy_6_key_conf
+	beq SHUTTER_SEVEN_KEY,shutter_dy_7_key_conf
+	beq SHUTTER_EIGHT_KEY,shutter_dy_8_key_conf
+	rtn
+	
+shutter_dy_adv_conf:
+	bpatch patch14_1,mem_patch14
+	//adv data
+	fetch 8,mem_shutter_ble_discovery_time_conf
+	store 8,mem_ble_shutter_discovery_timeout
+	setarg 0x0096
+	store 2,mem_ble_shutter_reconn_timeout
+
+	fetch 7,mem_shutter_led_on_light_dark_led_conf
+	store 7,mem_shutter_led_struct_app_led
+	fetch 7,mem_shutter_led_off_light_dark_led_conf
+	store 7,mem_shutter_power_off_led_style
+	
+	fetch 4,mem_shutter_reconn_blink_on_time_conf
+	store 4,mem_ble_shutter_reconn_blink_on_time
+	fetch 4,mem_shutter_discovery_blink_on_time_conf
+	store 4,mem_ble_shutter_discovery_blink_on_time
+	/*
+	fetch 8,mem_le_dy_adv_data
+	store 8,mem_le_adv_data
+	fetch 3,mem_le_dy_adv_data+8
+	store 3,mem_le_adv_data+8
+	
+	fetch 8,mem_le_dy_scan_data
+	store 8,mem_le_scan_data
+	fetch 4,mem_le_dy_scan_data+8
+	store 4,mem_le_scan_data+8
+	*/
+	
+	setarg 0x000e
+	store 2,mem_ble_shutter_reconn_adv_interval
+	setarg 0x0140
+	store 2,mem_ble_shutter_discovery_adv_interval
+	store 2,mem_le_adv_interval
+
+//	setarg mem_shutter_le_uuid_sup	//BLE ATT LIST 
+//	store 2,mem_ui_le_uuid_table
+
+//	call shutter_load_dy_keyvalue_buffer_config_form_DataRom
+
+	fetch 8,mem_ble_shutter_dy_interval_min_new
+	store 8,mem_ble_shutter_interval_min_new
+	rtn
+
+
+
+shutter_dy_init:
+	call enable_authrom
+	rtn wake
+
+	call shutter_dy_key_conf
+	call shutter_dy_adv_conf
+
+
+	setarg shutter_dy_process_idle
+	store 2,mem_cb_idle_process
+		
+	setarg shutter_dy_process_bb_event
+	store 2,mem_cb_bb_event_process
+
+	setarg ble_shutter_dy_receive_data
+	store 2,mem_cb_att_write
+
+	setarg shutter_dy_le_bb_event_timer
+	store 2,mem_cb_event_timer
+
+	setarg shutter_dy_key_change
+	store 2,mem_cb_shutter_keycan
+
+	call shutter_common_init
+	
+	fetch 2,mem_shutter_le_pairing_handle
+ 	store 2,mem_le_pairing_handle
+	fetch 8,mem_ble_shutter_interval_min_new
+	store 8,mem_ble_shutter_interval_min
+	call shutter_dy_iphone_every_move_max_set
+	bpatch patch14_2,mem_patch14
+	branch shutter_power_switch
+
+
+shutter_dy_process_idle:
+	call shutter_dy_shutter_send_data_to_master
+	arg key_scan_timer,queue
+	call timer_check
+	nrtn blank
+	setarg 0x20
+	arg key_scan_timer,queue
+	call timer_init
+	disable user
+	call keyscan_process_lpm_before
+	branch shutter_dy_keyscan_key_process
+
+shutter_dy_iphone_every_move_max_set:	
+	setarg 0x1f
+	mul32 pdata,EVERY_PAYLOAD_LEN,pdata
+	arg mem_shutter_mousekey_value_list,temp
+	iadd temp,rega
+	increase 3,rega
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+	istoret 1,rega
+	increase 11,rega
+	arg 0xfff,pdata
+	isub temp,pdata
+	lshift4 pdata,pdata
+	istore 2,rega
+	rtn
+	
+shutter_dy_shutter_send_data_to_master:	
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,shutter_dy_pop_queue_to_ble_data
+	arg mem_queue_curr_num,contw
+	arg 35,loopcnt
+	branch clear_mem
+
+shutter_dy_pop_queue_to_ble_data:
+	call le_fifo_check_nearly_full
+	nrtn blank
+	call queue_empty
+	rtn blank
+	fetcht 4,mem_key_send_clk
+	copy clkn_bt,pdata
+	isub temp,temp
+	rtn zero
+	nbranch shutter_dy_pop_queue_to_ble_data2, positive
+	fetch 1,mem_send_data_delay
+	isub temp,null
+	rtn positive
+shutter_dy_pop_queue_to_ble_data2:
+	copy clkn_bt,pdata
+	store 4,mem_key_send_clk	
+	call queue_pop_one_byte
+	nrtn user
+	pincrease -1
+	mul32 pdata,10,pdata
+	arg mem_shutter_mousekey_value_list,temp
+	iadd temp,contr
+	branch le_send_notify_from_list
+
+
+shutter_dy_le_bb_event_timer:
+	call shutter_dy_shutter_1s_timer
+	call shutter_dy_link_key_loop_timer
+	call shutter_dy_long_key_volume_timer
+	call shutter_dy_iphone_move_mid_timer
+	call shutter_dy_clear_key_state_timer
+	call shutter_check_sleep_timer
+	branch shutter_dy_check_power_off_timer
+	
+shutter_dy_iphone_move_mid_timer:
+	arg mem_shutter_move_mid_timer,regc
+	arg shutter_dy_iphone_move_mid_timeout,regb
+	branch timer_single_step
+
+shutter_dy_iphone_move_mid_timeout:
+	call queue_empty
+	nrtn blank
+	fetch 2,mem_key_value_xmem
+	nrtn blank
+shutter_dy_iphone_move_mid:
+	call shutter_dy_check_iphone
+	branch shutter_dy_android_like_loaction_mid,blank
+	copy queue,pdata
+	compare 0x04,pdata,0x07 //SHUTTER_UP_KEY_NUM
+	branch shutter_dy_iphone_up_mid,true
+
+	copy queue,pdata
+	compare 0x01,pdata,0x07 //SHUTTER_LIKE_KEY_NUM
+	branch shutter_dy_iphone_like_mid,true
+	arg mem_shutter_iphone_move_mid,regc
+	branch push_buffer_in_queue
+
+shutter_dy_android_like_loaction_mid:
+	arg mem_shutter_android_move_mid,regc
+	branch push_buffer_in_queue
+
+shutter_dy_iphone_up_mid:
+	arg mem_shutter_iphone_up_mid,regc
+	branch push_buffer_in_queue
+
+shutter_dy_iphone_like_mid:
+	arg mem_shutter_iphone_like_mid,regc
+	branch push_buffer_in_queue
+
+shutter_dy_clear_key_state_timer:
+	arg mem_shutter_like_timeout,regc
+	arg shutter_dy_clear_key_state_timeout,regb
+	branch timer_single_step
+
+shutter_dy_clear_key_state_timeout:
+	arg SHUTTER_KEY_CONF_SATE_BYTES,loopcnt
+	arg mem_shutter_key_state1,contw
+	branch clear_mem
+
+
+shutter_dy_check_power_off_timer:
+	arg mem_shutter_power_off_timer,regc
+	arg shutter_dy_check_power_off_timeout,regb
+	branch timer_single_step
+shutter_dy_check_power_off_timeout:
+	fetch 2,mem_ui_state_map
+	bbit1 UI_STATE_BLE_CONNECTED,shutter_wait_power_off
+	branch app_enter_hibernate
+
+shutter_dy_process_bb_event:
+	copy regc,pdata
+	beq BT_EVT_LE_CONNECTED,ble_shutter_dy_process_baseband_connect
+	beq BT_EVT_LE_DISCONNECTED,ble_shutter_dy_process_baseband_disconnect
+	beq BT_EVT_LE_PAIRING_SUCCESS,ble_shutter_dy_pairing_success
+	rtneq BT_EVT_LE_PARSE_CONN_PAPA_UPDATE_RSP
+	beq BT_EVT_LE_START_ENC,shutter_dy_le_find_service_hand_by_uuid
+	branch shutter_process_bb_event
+
+ble_shutter_dy_pairing_success:
+	jam 1,mem_shutter_pairing_success
+	call shutter_dy_clear_move_config
+//	setarg ANDROID_INITIAL_MOVE_X
+	fetch 2,mem_android_initial_move_x
+	store 2, mem_shutter_move_data_x
+//	arg ANDROID_INITIAL_MOVE_Y,temp
+	fetcht 2,mem_android_initial_move_y
+	setarg 0xfff
+	isub temp,pdata
+	store 2, mem_shutter_move_data_y
+	rtn
+
+ble_shutter_dy_process_baseband_disconnect:
+	jam 0,mem_shutter_le_conned
+	jam 0,mem_shutter_pairing_success
+	call shutter_dy_move_mode_disable
+	call shutter_dy_over_clear
+	branch ble_shutter_process_baseband_disconnect
+	
+ble_shutter_dy_process_baseband_connect:
+	copy clkn_bt,pdata
+	store 4,mem_key_send_clk
+	call shutter_dy_remote_not_iphone
+	branch ble_shutter_process_baseband_connect
+	
+
+shutter_dy_check_send_data:
+	disable user2
+	fetch 2,mem_shutter_sleep_timeout
+	store 2,mem_shutter_sleep_timer
+	call shutter_check_bluetooth_conn
+	branch shutter_change_bluetooth_status_bt_disconn,user
+	call shutter_check_data_enable
+	nrtn user
+	branch enable_user2
+
+shutter_dy_over_clear:
+	jam 0,mem_last_press_key_value
+	rtn
+
+shutter_dy_key_value_filter:
+	copy queue,pdata
+	rtnne SHUTTER_LIKE_KEY_NUM
+	branch shutter_dy_key_press_next
+
+shutter_dy_key_change:
+	call shutter_dy_check_send_data
+	nrtn user2 
+	deposit rega
+	branch shutter_dy_shutter_key_release,blank//no data release
+shutter_dy_key_press:
+	bpatch patch14_3,mem_patch14
+	fetch 1,mem_shutter_link_loop_flag
+	nbranch shutter_dy_key_value_filter,blank
+shutter_dy_key_press_next:
+	jam 1,mem_shutter_key_pressed
+	call app_led_on
+	call shutter_dy_key_press_clk
+	call shutter_dy_jude_queue_size
+	branch shutter_dy_over_clear,positive
+	copy queue,pdata
+	fetcht 1,mem_last_press_key_value
+	isub temp,null
+	ncall shutter_dy_iphone_check_move_mid,zero
+	copy queue,pdata
+	store 1,mem_last_press_key_value
+	fetcht 1,mem_move_mode_key_index
+	isub temp,null
+	branch shutter_dy_key_move_to_specify_location,zero
+	fetch 1,mem_move_mode_trigger_enable
+	nbranch shutter_dy_move_set,blank
+shutter_dy_page_set:
+	call shutter_dy_le_get_press_ptr
+	arg MAX_QUEUE_NEW_PRESS,pdata
+	branch shutter_dy_push_queue_press_or_release
+
+shutter_dy_move_set:
+	call shutter_dy_jude_clear_move_config
+	copy queue,pdata
+	beq SHUTTER_LIKE_KEY_NUM,shutter_dy_page_set
+	call shutter_dy_check_move_data
+	branch shutter_dy_move_to_specify_location
+
+shutter_dy_key_move_to_specify_location:
+	jam 1,mem_shutter_first_move
+	branch shutter_dy_move_to_specify_location
+
+shutter_dy_iphone_check_move_mid:
+	bpatch patch14_4,mem_patch14
+	fetch 1,mem_move_mode_trigger_enable
+	branch shutter_dy_iphone_move_mid,blank
+	copy queue,pdata
+	beq SHUTTER_LIKE_KEY_NUM,shutter_dy_iphone_move_mid
+	rtn
+shutter_dy_key_press_clk:
+	arg SHUTTER_KEY_CONF_SATE_BYTES,pdata
+	imul32 queue,pdata
+	arg mem_shutter_key_state0,regc
+	iadd regc,regc
+	copy clkn_bt,pdata
+	istore KEY_STATE_PRESS_CLK_LENGTH,regc
+	increase KEY_STATE_PRESS_COUNT_OFFSET,regc
+	ifetch 1,regc
+	increase 1,pdata
+	istore 1,regc
+	rtn
+shutter_dy_shutter_key_release:
+	bpatch patch14_5,mem_patch14
+	fetch 1,mem_move_mode_trigger_enable
+	call shutter_dy_key_release_led,blank
+shutter_dy_shutter_key_release_time:
+	arg SHUTTER_KEY_CONF_SATE_BYTES,pdata
+	imul32 queue,pdata
+	arg mem_shutter_key_state0,regc
+	iadd regc,regc
+	ifetcht  4,regc
+	sub temp,0,null
+	rtn zero //already release
+	copy clkn_bt,pdata
+	isub temp,temp
+	ncall ui_timer_timeout,positive
+	add regc,KEY_STATE_LONGPRESS_OFFSET,contr
+	ifetch 1,contr
+	nbranch shutter_dy_push_queue_long_release, blank
+	increase KEY_STATE_RELEASE_CLK_OFFSET,regc
+	copy clkn_bt,pdata
+	istore KEY_STATE_RELEASE_CLK_LENGTH,regc
+	rtn
+
+shutter_dy_key_release_led:
+	fetch 1,mem_shutter_link_loop_flag
+	nbranch app_led_on,blank
+	branch app_led_off
+
+shutter_dy_push_queue_release:
+	add regc,4,contr
+	ifetch 1,contr
+	branch shutter_dy_push_queue_release1
+
+shutter_dy_push_queue_release1:
+	call shutter_clear_dy_key_state
+	fetch 1,mem_move_mode_trigger_enable
+	nbranch shutter_dy_move_mode_queue_release,blank
+shutter_dy_push_queue_release1_next:
+	call shutter_dy_jude_queue_size
+	branch shutter_dy_over_clear,positive
+	call shutter_dy_le_get_release_ptr
+	copy queue,pdata
+	beq SHUTTER_PHOTO_KEY_NUM,shutter_dy_le_get_release_ptr_volume
+	arg MAX_QUEUE_NUM_RELEASE,pdata
+shutter_dy_push_queue_press_or_release:
+	imul32 queue,pdata
+	iadd regc,regc
+	branch push_buffer_in_queue
+
+shutter_dy_move_mode_queue_release:
+	copy queue,pdata
+	beq SHUTTER_LIKE_KEY_NUM,shutter_dy_push_queue_release1_next
+	beq SHUTTER_PHOTO_KEY_NUM,shutter_dy_push_queue_release1_next
+	rtn
+	
+shutter_dy_jude_queue_size:
+	call queue_get_size
+	ifetcht 1,contr
+	isub temp,pdata
+	sub pdata,MAX_QUEUE_NEW_PRESS,null
+	rtn
+	
+shutter_dy_push_queue_long_release:
+	jam 1,mem_shutter_long_key_released_flag
+	call shutter_clear_dy_key_state
+	arg mem_key0_long_release,regc
+	arg MAX_QUEUE_NUM_LONG_RELEASE,pdata
+	branch shutter_dy_push_queue_press_or_release
+	
+shutter_clear_dy_key_state:
+	arg SHUTTER_KEY_CONF_SATE_BYTES,loopcnt
+	copy regc,contw
+	branch clear_mem
+
+shutter_dy_keyscan_key_process:
+	fetch 2,mem_key_value_xmem
+	store 2,mem_key_value_retention
+	call shutter_dy_keyscan_key_process_next
+	fetch 2,mem_key_value_retention
+	store 2,mem_key_value_xmem
+	
+	arg 0,queue
+	fetch 1,mem_shutter_key_num
+	copy pdata,loopcnt
+	arg mem_shutter_key_state0,regc
+shutter_dy_keyscan_key_check_release_loop:	
+	copy loopcnt,pdata
+	store 2,mem_temp
+	copy regc,pdata
+	store 2,mem_regc
+	copy queue,pdata
+	store 2,mem_temp+2
+	call shutter_dy_keyscan_key_check_release
+	
+	fetch 2,mem_regc
+	copy pdata,regc
+	fetch 2,mem_temp+2	
+	copy pdata,queue
+	call shutter_dy_keyscan_key_check_long_press
+	
+	fetch 2,mem_temp+2
+	add pdata,1,queue
+	fetch 2,mem_regc
+	add pdata,SHUTTER_KEY_CONF_SATE_BYTES,regc
+	fetch 2,mem_temp
+	copy pdata,loopcnt
+	loop shutter_dy_keyscan_key_check_release_loop
+	rtn
+	
+shutter_dy_keyscan_key_check_long_press:
+	ifetch KEY_STATE_PRESS_CLK_LENGTH,regc
+	rtn blank
+	copy pdata,temp
+	copy clkn_bt,pdata
+	isub temp,temp	
+	nrtn positive
+	setarg 2500 //1000ms 3200
+	isub temp,null
+	rtn positive
+	copy clkn_bt,pdata
+	istore 4,regc
+	increase KEY_STATE_LONGPRESS_OFFSET,regc
+	setarg 1  //long press flag
+	istore KEY_STATE_LONGPRESS_LENGTH,regc
+	fetch 1,mem_shutter_long_key_released_flag
+	rtn blank
+	jam 0,mem_shutter_long_key_released_flag
+	bpatch patch14_6,mem_patch14
+	call shutter_dy_long_key_function
+	fetch 1,mem_move_mode_set
+	beq MOVE_COMBINE_KEY,shutter_dy_key_long_press_set_key_normal
+	beq MOVE_SINGLE_KEY,shutter_dy_key_long_press_set_move_trigger
+	rtn
+	
+shutter_dy_key_long_press_set_key_normal:
+	call shutter_dy_long_press_android_or_ios
+	arg MAX_QUEUE_NUM_LONG,pdata
+	branch shutter_dy_push_queue_press_or_release
+
+shutter_dy_key_long_press_set_move_trigger:
+	copy queue,pdata
+	fetcht 1,mem_move_mode_key_index
+	isub temp,null
+	nbranch shutter_dy_key_long_press_set_key_normal,zero	
+	fetch 1,mem_move_mode_trigger_enable
+	setflip 0,pdata
+	store 1,mem_move_mode_trigger_enable
+	nrtn blank
+shutter_dy_move_mode_disable:
+	jam 0,mem_move_mode_trigger_enable
+	branch app_led_off
+
+shutter_dy_long_press_android_or_ios:
+	arg mem_key0_long_press,regc
+	call shutter_dy_check_iphone
+	rtn blank
+	arg mem_key0_long_press_i,regc
+	rtn
+
+shutter_dy_keyscan_key_check_release:
+	add regc,KEY_STATE_RELEASE_CLK_OFFSET,regb
+	ifetch KEY_STATE_RELEASE_CLK_LENGTH,regb
+	rtn blank
+	copy pdata,temp
+	copy clkn_bt,pdata
+	isub temp,temp
+	ncall ui_timer_timeout,positive
+	setarg 1000 //100ms 320
+	isub temp,null
+	branch shutter_dy_push_queue_release
+shutter_dy_keyscan_key_process_next:
+	fetch 2,mem_key_num_ptr
+	ifetch 1,pdata
+	rtn blank
+	
+	setarg 0
+	store 2,mem_key_value_temp
+	call keyscan_scan_key
+	nbranch lpm_button_clean_wake_lock,user
+	call lpm_button_get_wake_lock
+	disable user
+	fetch 1,mem_le_adv_enable
+	nrtn blank
+	bpatch patch14_7,mem_patch14
+	fetch 1,mem_move_mode_set
+	beq MOVE_SINGLE_KEY,shutter_dy_skip_check_combine_key
+	call shutter_dy_check_combine_key_release
+	call shutter_dy_check_combine_key	
+	rtn user
+shutter_dy_skip_check_combine_key:
+	call shutter_dy_single_key_led
+	fetch 2,mem_key_value_temp
+	store 2,mem_key_value_temp4
+	jam 0,mem_key_value_temp6
+	force 0,queue
+	branch keyscan_key_lp1
+
+shutter_dy_single_key_led:
+	fetch 1,mem_last_press_key_value
+	fetcht 1,mem_move_mode_key_index
+	isub temp,null
+	branch app_led_on,zero
+	fetch 1,mem_move_mode_trigger_enable
+	nbranch app_led_off,blank
+	rtn
+
+shutter_dy_check_combine_key:
+	arg 0,queue
+shutter_dy_check_combine_key_loop:
+	arg mem_combine_key0,regb
+	arg 2,pdata
+	imul32 queue,pdata
+	iadd regb,regb
+	ifetch 2,regb
+	
+	rtn blank
+	fetcht 2,mem_key_value_temp
+	ixor temp,null
+	branch shutter_dy_check_combine_key_parse,zero
+	increase 1,queue
+	branch shutter_dy_check_combine_key_loop
+	
+shutter_dy_check_combine_key_parse:
+	store 2,mem_combine_key_state0	
+	call app_led_on
+	arg mem_combine_key0_press,regc
+	arg MAX_QUEUE_NUM_COMBINEKEY,pdata
+	imul32 queue,pdata
+	iadd regc,regc
+	call shutter_dy_push_buffer_in_queue
+	branch shutter_dy_combine_key_enableuser
+	
+shutter_dy_push_buffer_in_queue:
+	call shutter_dy_jude_clear_move_config
+	ifetch 1,regc
+	rtn blank
+	call shutter_dy_check_move_data
+shutter_dy_move_to_specify_location:
+	call shutter_dy_jude_clear_move_config
+	call shutter_dy_move_down_left_corner
+	call shutter_dy_move_x_max
+	call shutter_dy_move_y_max
+	arg 0x05,pdata
+	call queue_push_one_byte
+	call shutter_dy_check_iphone
+	rtn blank
+	jam 120,mem_send_data_delay
+	arg 0x06,pdata
+	branch queue_push_one_byte
+
+shutter_dy_move_down_left_corner_count_set:
+	fetcht 1,mem_shutter_back_count
+	call shutter_dy_check_iphone
+	rtn blank
+	fetcht 1,mem_shutter_iphone_beyond_y_count
+	increase 1,temp
+	fetch 1,mem_shutter_first_move
+	rtn blank
+	fetcht 1,mem_shutter_back_count
+	jam 0,mem_shutter_first_move
+	rtn
+
+shutter_dy_move_down_left_corner:
+	call shutter_dy_move_down_left_corner_count_set
+	copy temp,pdata
+	rtn blank
+	store 1,mem_shutter_back_count_cache
+shutter_dy_move_down_left_corner_loop:
+	arg 0x13,pdata
+	call queue_push_one_byte
+	fetch 1,mem_shutter_back_count_cache
+	increase -1,pdata
+	store 1,mem_shutter_back_count_cache
+	rtn blank
+	branch shutter_dy_move_down_left_corner_loop
+
+shutter_dy_move_x_max:
+	fetch 1,mem_shutter_iphone_beyond_x_count
+	rtn blank
+	store 1,mem_shutter_iphone_beyond_x_cache
+shutter_dy_move_x_max_number:
+	arg 0x20,pdata
+	call queue_push_one_byte
+	fetch 1,mem_shutter_iphone_beyond_x_cache
+	increase -1,pdata
+	store 1,mem_shutter_iphone_beyond_x_cache
+	rtn blank
+	branch shutter_dy_move_x_max_number
+
+shutter_dy_move_y_max:
+	fetch 1,mem_shutter_iphone_beyond_y_count
+	rtn blank
+	store 1,mem_shutter_iphone_beyond_y_cache
+shutter_dy_move_y_max_number:
+	arg 0x21,pdata
+	call queue_push_one_byte
+	fetch 1,mem_shutter_iphone_beyond_y_cache
+	increase -1,pdata
+	store 1,mem_shutter_iphone_beyond_y_cache
+	rtn blank
+	branch shutter_dy_move_y_max_number
+
+shutter_dy_check_combine_key_release:
+	fetch 2,mem_combine_key_state0
+	rtn blank
+	fetcht 2,mem_key_value_temp
+	sub temp,0,null
+	branch shutter_dy_check_combine_key_release_all,zero
+	isub temp,null
+	rtn zero
+	storet 2,mem_combine_key_state0
+	fetch 2,mem_combine_key_release_value
+	isub temp,null
+	call app_led_off,zero
+shutter_dy_combine_key_enableuser:
+	fetch 2,mem_key_value_temp
+	store 2, mem_key_value_retention
+	branch enable_user
+shutter_dy_check_combine_key_release_all:
+	jam 1,mem_shutter_long_key_released_flag
+	call app_led_off
+	arg mem_combine_key_release,regc
+	call shutter_dy_push_buffer_in_queue
+	setarg 0
+	store 2,mem_combine_key_state0
+	jam 50,mem_shutter_1s_timer
+	call shutter_dy_combine_key_enableuser
+	fetch 1,mem_shutter_key_num
+	mul32 pdata,SHUTTER_KEY_CONF_SATE_BYTES,loopcnt
+	arg mem_shutter_key_state0,contw
+	branch clear_mem
+shutter_dy_check_move_data:
+	bpatch patch15_0,mem_patch15
+	fetch 1,mem_move_mode_set
+	beq MOVE_SINGLE_KEY,shutter_dy_check_move_data_single_key
+	beq MOVE_COMBINE_KEY,shutter_dy_check_move_data_combine_key
+	rtn
+shutter_dy_check_move_data_single_key:
+	copy queue,pdata
+	beq SHUTTER_LEFT_KEY_NUM,shutter_dy_move_left
+	beq SHUTTER_RIGHT_KEY_NUM,shutter_dy_move_right
+	beq SHUTTER_UP_KEY_NUM,shutter_dy_move_up
+	beq SHUTTER_DOWN_KEY_NUM,shutter_dy_move_down
+	rtn
+shutter_dy_check_move_data_combine_key:
+	ifetch 1,regc
+	beq 0x01,shutter_dy_move_left
+	beq 0x02,shutter_dy_move_right
+	beq 0x03,shutter_dy_move_up
+	beq 0x04,shutter_dy_move_down
+	beq 0x05,shutter_dy_get_move_data
+	rtn
+shutter_dy_get_move_data:
+	call shutter_dy_check_iphone
+	nbranch shutter_dy_get_move_data_iphone,blank
+	setarg 4
+	mul32 pdata,EVERY_PAYLOAD_LEN,pdata
+	arg mem_shutter_mousekey_value_list,temp
+	iadd temp,contw
+	increase 3,contw
+	fetch 3,mem_shutter_move_data
+	istore 3,contw
+	rtn
+shutter_dy_get_move_data_iphone:
+	setarg 4
+	mul32 pdata,EVERY_PAYLOAD_LEN,pdata
+	arg mem_shutter_mousekey_value_list,temp
+	iadd temp,contw
+	increase 3,contw
+	fetch 2,mem_shutter_move_data_x
+	istore 3,contw
+	increase 7,contw
+	fetch 2,mem_shutter_move_data_y
+	lshift4 pdata,pdata
+	lshift8 pdata,pdata
+	istore 3,contw
+	rtn
+	//branch p_store_move_config_info
+shutter_dy_move_x_empty_check:
+	fetch 1,mem_shutter_iphone_beyond_x_count
+	rtn blank
+	increase -1,pdata
+	store 1,mem_shutter_iphone_beyond_x_count
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,pdata
+	rtn
+shutter_dy_every_move_size_set:
+	arg ANDROID_EVERY_MOVE_SIZE,temp
+	call shutter_dy_check_iphone
+	rtn blank
+	arg IPHONE_EVERY_MOVE_SIZE,temp
+	rtn
+shutter_dy_move_left:
+	call shutter_dy_every_move_size_set
+	fetch 2,mem_shutter_move_data_x
+	isub temp,null
+	ncall shutter_dy_move_x_empty_check,positive
+	nrtn positive//if move_x to zero,rtn
+	isub temp,pdata
+shutter_dy_move_store_x:
+	store 2,mem_shutter_move_data_x
+shutter_dy_move_data_store:
+	bpatch patch15_1,mem_patch15
+	fetch 2,mem_shutter_move_data_x
+	fetcht 2,mem_shutter_move_data_y
+	lshift8 temp,temp
+	lshift4 temp,temp
+	iadd temp,pdata
+	store 3,mem_shutter_move_data
+	branch shutter_dy_get_move_data
+shutter_dy_move_x_check_max:
+	fetch 2,mem_shutter_move_data_x
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+	isub temp,temp
+	nrtn positive
+	copy temp,pdata
+	fetcht 1,mem_shutter_iphone_beyond_x_count
+	sub temp,0x03,null
+	branch shutter_dy_clear_move_x,zero
+	increase 1,temp
+	storet 1,mem_shutter_iphone_beyond_x_count
+	branch shutter_dy_move_store_x
+shutter_dy_clear_move_x:
+	jam 0,mem_shutter_iphone_beyond_x_count
+	arg 0,pdata
+	branch shutter_dy_move_store_x
+shutter_dy_move_right:
+	call shutter_dy_check_iphone
+	ncall shutter_dy_move_x_check_max,blank
+	call shutter_dy_every_move_size_set
+	fetch 2,mem_shutter_move_data_x
+shutter_dy_move_right_next:
+	iadd temp,pdata
+	arg 0xfff,temp
+	call ceiling
+	branch shutter_dy_move_store_x
+	
+shutter_dy_move_up:
+	call shutter_dy_every_move_size_set
+	fetch 2,mem_shutter_move_data_y
+	isub temp,pdata
+	store 2,mem_shutter_move_data_y
+shutter_dy_move_y_check_max:
+	fetcht 2,mem_shutter_move_data_y
+	call shutter_dy_check_iphone
+	branch shutter_dy_move_data_store,blank
+	setarg 0xfff
+	isub temp,pdata
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+	isub temp,temp
+	nbranch shutter_dy_move_data_store, positive
+	setarg 0xfff
+	isub temp,pdata
+	fetcht 1,mem_shutter_iphone_beyond_y_count
+	sub temp,0x05,null
+	branch shutter_dy_clear_move_y,zero
+	increase 1,temp
+	storet 1,mem_shutter_iphone_beyond_y_count
+	branch shutter_dy_move_store_y
+shutter_dy_clear_move_y:
+	jam 0,mem_shutter_iphone_beyond_y_count
+shutter_dy_android_move_y_empty_check:
+	setarg 0xfff
+	branch shutter_dy_move_store_y
+	
+shutter_dy_move_y_empty_check:
+	call shutter_dy_check_iphone
+	branch shutter_dy_android_move_y_empty_check,blank
+	fetch 1,mem_shutter_iphone_beyond_y_count
+	branch shutter_dy_android_move_y_empty_check, blank
+	increase -1,pdata
+	store 1,mem_shutter_iphone_beyond_y_count
+	setarg 0xfff
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+	isub temp,pdata
+	iadd rega,pdata
+shutter_dy_move_store_y:	
+	store 2,mem_shutter_move_data_y
+	branch shutter_dy_move_data_store
+shutter_dy_move_down:
+	call shutter_dy_every_move_size_set
+	fetch 2,mem_shutter_move_data_y
+shutter_dy_move_down_next:
+	iadd temp,pdata
+	arg 0xfff,temp
+	isub temp,rega
+	branch shutter_dy_move_y_empty_check,positive
+	branch shutter_dy_move_store_y
+	
+
+ble_shutter_dy_receive_data:
+	fetch 2,mem_le_att_handle
+	beq GATT_KEYBOARD_WRITE_HANDLE_NEW,ble_shutter_process_reconnect_complete
+	rtn
+
+shutter_dy_le_find_service_hand_by_uuid: 
+	arg 23,rega
+	arg LE_L2CAP_CID_ATT,regb
+	call le_fifo_malloc_tx_l2cap
+	setarg ATTOP_FIND_BY_TYPE_VALUE_REQUEST
+	istore 1,contw
+	setarg 0x0001		//start handle
+	istore 2,contw
+	setarg 0xffff		//end handle
+	istore 2,contw
+	setarg 0x2800		//uuid type
+	istore 2,contw
+	arg mem_dy_le_search_service_uuid,contr
+	branch memcpy16
+
+
+shutter_dy_le_parse_att:
+	bpatch patch15_2,mem_patch15
+	copy rega,contr
+	ifetch 3,contr
+	store 3,mem_le_att_opcode
+	beq ATTOP_FIND_BY_TYPE_VALUE_RESPONSE,shutter_dy_le_parse_att_find_by_type_value_rsp
+	beq ATTOP_ERROR_RESPONSE,shutter_dy_le_parse_error_rsp
+	beq ATTOP_READ_REQUEST,shutter_dy_le_parse_att_read_request
+	beq ATTOP_READ_BLOB_REQUEST,shutter_dy_le_parse_att_read_blob_request
+	branch le_parse_att2
+
+shutter_dy_le_parse_att_read_blob_request:
+	ifetch 2,contr
+	store 2,mem_le_att_offset
+	iforce rega
+	fetcht 2,mem_le_att_handle
+	fetch 2,mem_le_pairing_handle
+	isub temp,null
+	nbranch le_send_att_read_blob_response,zero
+	call shutter_dy_check_iphone
+	nbranch shutter_dy_le_parse_att_read_blob_request_ios,blank
+	fetcht 2,mem_shutter_le_map_len_android
+	branch shutter_dy_le_parse_att_read_blob_request2
+	
+shutter_dy_le_parse_att_read_blob_request_ios:
+	fetcht 2,mem_shutter_le_map_len_ios
+shutter_dy_le_parse_att_read_blob_request2:
+	arg mem_shutter_le_hid_map,contr
+	call store_contr
+	copy temp,pdata
+	isub rega,pdata
+	nbranch le_send_att_error_response_notfound,positive
+	increase 1,pdata
+	sub pdata,23,null
+	branch le_send_att_read_blob_response_less,positive
+	force 23,pdata
+	branch le_send_att_read_blob_response_less
+
+shutter_dy_le_parse_att_read_request:
+	fetcht 2,mem_le_att_handle
+	fetch 1,mem_le_configuration
+	bbit1 BIT_BLE_READ_AUTH,shutter_dy_le_send_att_read_response_check_auth
+	branch le_send_att_read_response
+shutter_dy_le_send_att_read_response_check_auth:
+	fetch 2,mem_le_pairing_handle
+	isub temp,null
+	nbranch le_send_att_read_response,zero
+	call le_check_encrypt_state
+	nbranch shutter_dy_le_send_att_read_response,user
+	branch le_send_att_read_response_error_insufficient_auth
+
+shutter_dy_le_send_att_read_response:
+	fetch 2,mem_le_pairing_handle
+	isub temp,null
+	nbranch le_send_att_read_response,zero
+	arg mem_shutter_le_hid_map,contr
+	force 23,pdata
+	branch le_send_att_read_response_less
+
+shutter_dy_le_parse_att_find_by_type_value_rsp:
+shutter_dy_le_remote_iphone:
+	bpatch patch15_3,mem_patch15
+	jam 5,mem_shutter_back_count
+	jam 1,mem_iphone_flag
+	jam 1,mem_last_shutter_le_iphone_flag
+	jam 240,mem_send_data_delay
+	jam 10,mem_shutter_move_mid_timer
+	jam 1,mem_shutter_first_move
+	call shutter_dy_load_move_config_info
+	fetch 1,mem_shutter_pairing_success
+	rtn blank
+	call shutter_dy_clear_move_config
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+//	setarg IPHONE_INITIAL_MOVE_X
+	fetch 2,mem_iphone_initial_move_x
+	arg mem_shutter_move_data_x,rega
+	arg mem_shutter_iphone_beyond_x_count,regb
+	call shutter_dy_iphone_move_initial_set
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+//	setarg IPHONE_INITIAL_MOVE_Y
+	fetch 2,mem_iphone_initial_move_y
+	arg mem_shutter_move_data_y,rega
+	arg mem_shutter_iphone_beyond_y_count,regb
+	call shutter_dy_iphone_move_initial_set
+	setarg 0xfff
+	fetcht 2,mem_shutter_move_data_y
+	isub temp,pdata
+	store 2,mem_shutter_move_data_y
+	rtn
+shutter_dy_iphone_move_initial_set:
+	idiv temp
+	call wait_div_end
+	quotient pdata
+	remainder temp
+	istore 1,regb
+	istoret 2,rega
+	rtn
+shutter_dy_le_parse_error_rsp:
+	increase -2,contr
+	ifetch 1,contr
+	beq ATTOP_FIND_BY_TYPE_VALUE_REQUEST,shutter_dy_not_iphone_read_conf
+	rtn
+shutter_dy_remote_not_iphone:
+	jam 1,mem_shutter_back_count
+	jam 0,mem_iphone_flag
+	jam 0,mem_last_shutter_le_iphone_flag
+	jam 10,mem_send_data_delay
+	rtn
+
+shutter_dy_not_iphone_read_conf:
+	call shutter_dy_remote_not_iphone
+	branch shutter_dy_load_move_config_info
+	
+shutter_dy_check_iphone:
+	fetch 1,mem_iphone_flag
+	rtn
+
+
+shutter_dy_le_get_press_ptr:	
+	arg mem_dy_key0_press,regc
+	call shutter_dy_check_iphone
+	rtn blank
+	jam 120,mem_send_data_delay
+	arg mem_key0_press_i,regc
+	rtn
+shutter_dy_le_get_release_ptr:	
+shutter_dy_le_get_release_ptr_set:
+	arg mem_key0_release_new,regc
+	call shutter_dy_check_iphone
+	rtn blank
+	arg mem_key0_release_new_i,regc
+	jam 12,mem_send_data_delay
+	copy queue,pdata
+	rtneq SHUTTER_LIKE_KEY_NUM
+	rtn
+shutter_dy_le_get_release_ptr_volume:
+	bpatch patch15_4,mem_patch15
+	fetch 1,mem_key3_press_count
+	setflip 0,pdata
+	store 1,mem_key3_press_count
+	beq 0,shutter_dy_le_get_release_ptr_set_volume_inc
+	beq 1,shutter_dy_le_get_release_ptr_set_volume_dec
+	rtn
+shutter_dy_le_get_release_ptr_set_volume_dec:
+	call shutter_dy_le_get_vol_dec_ptr
+	branch push_buffer_in_queue
+shutter_dy_le_get_release_ptr_set_volume_inc:
+	call shutter_dy_le_get_vol_inc_ptr
+	branch push_buffer_in_queue
+shutter_dy_le_get_vol_inc_ptr:
+	arg mem_key3_release_new,regc
+	call shutter_dy_check_iphone
+	rtn blank
+	arg mem_key3_release_new_i,regc
+	rtn
+shutter_dy_le_get_vol_dec_ptr:
+	arg mem_key3_release_new_t,regc
+	call shutter_dy_check_iphone
+	rtn blank
+	arg mem_key3_release_new_i_t,regc
+	rtn
+
+
+shutter_dy_long_key_function:
+	copy queue,pdata
+	beq SHUTTER_LIKE_KEY_NUM,shutter_dy_link_key_long_press
+	beq SHUTTER_DOWN_KEY_NUM,shutter_dy_loop_send_volume_dec_page
+	beq SHUTTER_UP_KEY_NUM,shutter_dy_loop_send_volume_inc_page
+	rtn
+
+//volume timer
+shutter_dy_long_key_volume_timer:
+	arg mem_shutter_volume_timer,regc
+	arg shutter_dy_long_key_volume_timeout,regb
+	branch timer_single_step
+shutter_dy_long_key_volume_timeout:
+	jam 4, mem_shutter_volume_timer
+	fetch 1,mem_key3_press_count
+	branch shutter_dy_loop_send_volume_inc_page,blank
+	branch shutter_dy_loop_send_volume_dec_page
+	
+
+shutter_dy_loop_send_volume_inc_page:
+	jam 0,mem_key3_press_count
+	jam 4, mem_shutter_volume_timer
+	arg mem_key4_long_press,regc
+	branch push_buffer_in_queue
+
+shutter_dy_loop_send_volume_dec_page:
+	jam 1,mem_key3_press_count
+	jam 4, mem_shutter_volume_timer
+	arg mem_key2_long_press,regc
+	branch push_buffer_in_queue
+shutter_dy_clear_volume_timer:
+	jam 0,mem_key3_press_count
+	jam 0, mem_shutter_volume_timer
+	rtn
+
+//link timer
+shutter_dy_link_key_loop_timer:
+	arg mem_shutter_link_timer,regc
+	arg shutter_dy_link_key_loop_timeout,regb
+	branch timer_single_step
+shutter_dy_link_key_loop_timeout:
+	jam 2, mem_shutter_link_timer
+	call shutter_dy_link_data_android_or_ios
+	branch push_buffer_in_queue
+
+shutter_dy_link_data_android_or_ios:
+	arg mem_shutter_link_data,regc
+	call shutter_dy_check_iphone
+	rtn blank
+	arg mem_shutter_link_data_i,regc
+	rtn
+
+shutter_dy_link_key_long_press:
+	fetch 1,mem_shutter_link_loop_flag
+	nbranch shutter_dy_clear_link_key_timer,blank
+	jam 1,mem_shutter_link_loop_flag
+	jam 2, mem_shutter_link_timer
+	rtn
+	
+shutter_dy_clear_link_key_timer:
+	jam 0,mem_shutter_link_loop_flag
+	jam 0, mem_shutter_link_timer
+	rtn
+
+shutter_dy_jude_clear_move_config:
+	fetch 1,mem_shutter_le_conned
+	nrtn blank
+	jam 1,mem_shutter_le_conned
+	branch shutter_dy_move_data_store
+
+shutter_dy_clear_move_config:
+	setarg 0
+	store 7,mem_move_config
+	rtn
+
+shutter_dy_write_otp_convert_data:
+	call shutter_dy_check_iphone
+	beq 0x01,shutter_dy_store_ios_config_data
+	beq 0x00,shutter_dy_store_android_config
+	rtn
+
+shutter_dy_read_otp_convert_data:
+	fetch 1,mem_otp_last_shutter_le_iphone_flag	//判断是否是IOS
+	beq 0x01,shutter_dy_get_ios_config
+	beq 0x00,shutter_dy_get_android_config
+	rtn
+
+shutter_dy_store_ios_config_data:
+	fetch 1,mem_shutter_iphone_beyond_x_count
+	mul32 pdata,IPHONE_ONCE_MAX_MOVE_VALUE,pdata
+	copy pdata,temp
+	fetch 2,mem_shutter_move_data_x
+	iadd temp,pdata	//pdata = pdata+temp
+	store 2,mem_otp_shutter_move_data_x
+
+	fetch 1,mem_shutter_iphone_beyond_y_count
+	mul32 pdata,IPHONE_ONCE_MAX_MOVE_VALUE,pdata
+	copy pdata,temp
+	fetch 2,mem_shutter_move_data_y
+	copy pdata,rega
+	setarg 0xfff
+	isub rega,pdata	//pdata = pdata-rega
+	iadd temp,pdata	//pdata = pdata+temp
+	store 2,mem_otp_shutter_move_data_y
+
+	call shutter_dy_check_iphone
+//	fetch 1,mem_last_shutter_le_iphone_flag
+	store 1,mem_otp_last_shutter_le_iphone_flag
+	rtn
+
+shutter_dy_store_android_config:
+	fetch 2,mem_shutter_move_data_x
+	store 2,mem_otp_shutter_move_data_x
+	fetch 2,mem_shutter_move_data_y
+	store 2,mem_otp_shutter_move_data_y
+	call shutter_dy_check_iphone
+	store 1,mem_otp_last_shutter_le_iphone_flag
+	rtn
+shutter_dy_get_ios_config:
+	fetch 2,mem_otp_shutter_move_data_x
+	div pdata,IPHONE_ONCE_MAX_MOVE_VALUE
+	call wait_div_end
+	quotient pdata
+	remainder temp
+	store 1,mem_shutter_iphone_beyond_x_count
+	copy temp,pdata
+	store 2,mem_shutter_move_data_x
+	fetch 2,mem_otp_shutter_move_data_y
+	div pdata,IPHONE_ONCE_MAX_MOVE_VALUE
+	call wait_div_end
+	quotient pdata
+	remainder temp
+	store 1,mem_shutter_iphone_beyond_y_count
+	//copy temp,pdata
+	setarg 0xfff
+	isub temp,pdata	//pdata = pdata-temp
+	store 2,mem_shutter_move_data_y
+//	fetch 1,mem_otp_last_shutter_le_iphone_flag
+//	store 1,mem_last_shutter_le_iphone_flag
+	rtn
+shutter_dy_get_android_config:
+	fetch 2,mem_otp_shutter_move_data_x
+	store 2,mem_shutter_move_data_x
+	fetch 2,mem_otp_shutter_move_data_y
+	store 2,mem_shutter_move_data_y
+//	fetch 1,mem_otp_last_shutter_le_iphone_flag
+//	store 1,mem_last_shutter_le_iphone_flag
+	rtn
+	
+shutter_dy_store_move_config_info:
+	branch shutter_dy_campare_effective_addr_write_otp
+
+shutter_dy_load_move_config_info:
+	branch shutter_dy_campare_effective_addr_read_otp
+
+//循环找数据，判断是否为空数据
+shutter_dy_shutter_uart_config_loop:
+	call shutter_dy_update_read_check_addr
+	fetch 2,mem_otp_read_offset_addr
+	call shutter_dy_shutter_read_move_config_from_otp_addr
+	jam 0,mem_shutter_first_read_flag
+	fetch 5,mem_otp_move_config
+	jam 0,mem_shutter_valid_data_flag
+	jam 0,mem_shutter_temp_count
+	call shutter_dy_campare_otp_data
+	fetch 1,mem_shutter_temp_count
+	rtneq 0
+	branch shutter_dy_shutter_uart_config_loop
+
+//第一次从0x1fe0处往前读
+shutter_dy_shutter_get_first_read_addr:
+//	setarg SHUTTER_EFUSE_START_OFFECT
+	fetch 2,mem_shutter_efuse_start_offset
+	increase -5,pdata
+	store 2,mem_otp_read_offset_addr
+	rtn
+
+//下次读，更新mem_otp_read_offset_addr 地址
+shutter_dy_shutter_next_read_addr:
+	fetch 2,mem_otp_read_offset_addr
+	increase -5,pdata
+	store 2,mem_otp_read_offset_addr
+	rtn
+
+//上次读，更新mem_otp_read_offset_addr 地址
+shutter_dy_shutter_last_read_addr:
+	fetch 2,mem_otp_read_offset_addr
+	pincrease 5
+	store 2,mem_otp_read_offset_addr
+	rtn
+
+shutter_dy_shutter_read_ios_android_addr:
+	fetch 2,mem_otp_read_ios_android_addr
+	pincrease 5
+	store 2,mem_otp_read_ios_android_addr
+	//检查在区间内
+	fetch 2,mem_otp_read_ios_android_addr
+	copy pdata, temp
+//	setarg SHUTTER_EFUSE_START_OFFECT
+	fetch 2,mem_shutter_efuse_start_offset
+	isub temp,pdata	//pdata = pdata-temp
+	arg SHUTTER_PARA_TOTAL_NUM,temp	//temp = 5
+	isub temp,null	//pdata = pdata-temp, 大于等于0，positive置1
+//	nrtn positive
+	nbranch shutter_dy_shutter_not_find_ios_or_android,positive
+	rtn
+
+shutter_dy_update_read_check_addr:
+	fetch 1,mem_shutter_first_read_flag	//第1次读标识
+	beq 0x01,shutter_dy_shutter_get_first_read_addr
+	beq 0x00,shutter_dy_shutter_next_read_addr
+	rtn
+	
+//比较数据，判断是否为0
+shutter_dy_campare_otp_data:
+	arg 0x0,regb
+	copy regb, temp
+	fetch 2,mem_otp_shutter_move_data_x
+	icompare 0xffff,temp
+//	isub temp,pdata	//pdata = pdata-temp
+	ncall shutter_dy_set_shutter_valid_data_flag,true
+	arg 0x0,regb
+	copy regb, temp
+	fetch 2,mem_otp_shutter_move_data_y
+	icompare 0xffff,temp
+	ncall shutter_dy_set_shutter_valid_data_flag,true
+	arg 0x0,regb
+	copy regb, temp
+	fetch 1,mem_otp_last_shutter_le_iphone_flag
+	icompare 0xff,temp
+	ncall shutter_dy_set_shutter_valid_data_flag,true
+	rtn
+
+//mem_shutter_temp_count +1 操作
+shutter_dy_set_shutter_valid_data_flag:
+	fetch 1,mem_shutter_temp_count
+	pincrease 1
+	store 1,mem_shutter_temp_count
+	rtn
+shutter_dy_shutter_judge_ios_or_android:
+	jam 1,mem_shutter_temp_count
+	call shutter_dy_shutter_read_ios_android_addr
+	fetch 2,mem_otp_read_ios_android_addr
+	call shutter_dy_shutter_read_move_config_from_otp_addr
+	call shutter_dy_check_iphone
+	copy pdata, temp
+	fetch 1,mem_otp_last_shutter_le_iphone_flag
+	icompare 0xff,temp
+	call shutter_dy_clear_temp_count,true
+	
+	fetch 1,mem_shutter_temp_count
+	rtneq 0
+	branch shutter_dy_shutter_judge_ios_or_android
+
+
+shutter_dy_shutter_not_find_ios_or_android:
+	bpatch patch15_5,mem_patch15
+	call shutter_dy_clear_temp_count
+	call shutter_dy_check_iphone
+	branch shutter_dy_shutter_android_save_init_loaction,blank
+	branch shutter_dy_shutter_ios_save_init_loaction
+shutter_dy_shutter_android_save_init_loaction:
+//	setarg ANDROID_INITIAL_MOVE_X
+	fetch 2,mem_android_initial_move_x
+	store 2, mem_shutter_move_data_x
+//	arg ANDROID_INITIAL_MOVE_Y,temp
+	fetcht 2,mem_android_initial_move_y
+	setarg 0xfff
+	isub temp,pdata
+	store 2, mem_shutter_move_data_y
+	branch shutter_dy_store_move_config_info
+	
+shutter_dy_shutter_ios_save_init_loaction:
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+//	setarg IPHONE_INITIAL_MOVE_X
+	fetch 2,mem_iphone_initial_move_x
+	arg mem_shutter_move_data_x,rega
+	arg  mem_shutter_iphone_beyond_x_count,regb
+	call shutter_dy_iphone_move_initial_set
+	arg IPHONE_ONCE_MAX_MOVE_VALUE,temp
+//	setarg IPHONE_INITIAL_MOVE_Y
+	fetch 2,mem_iphone_initial_move_y
+	arg mem_shutter_move_data_y,rega
+	arg  mem_shutter_iphone_beyond_y_count,regb
+	call shutter_dy_iphone_move_initial_set
+	setarg 0xfff
+	fetcht 2,mem_shutter_move_data_y
+	isub temp,pdata
+	store 2,mem_shutter_move_data_y
+	branch shutter_dy_store_move_config_info
+	
+shutter_dy_clear_temp_count:
+	jam 0,mem_shutter_temp_count
+	rtn
+//取有效地址给mem_otp_write_offset_addr
+shutter_dy_campare_effective_addr_read_otp:
+	bpatch patch15_6,mem_patch15
+	jam 1,mem_shutter_first_read_flag
+	call shutter_dy_shutter_uart_config_loop
+	//获得了地址
+	//校验是否是越界
+//	setarg SHUTTER_EFUSE_END_OFFECT
+	fetch 2,mem_shutter_efuse_end_offset
+	copy pdata, temp
+	fetch 2,mem_otp_read_offset_addr
+	isub temp,pdata	//pdata = pdata-temp
+	arg 0x0,temp	//temp = 0
+	isub temp,null	//null = pdata-temp, 大于等于0，positive置1
+	nrtn positive
+	fetch 2,mem_otp_read_offset_addr
+	copy pdata, temp
+//	setarg SHUTTER_EFUSE_START_OFFECT
+	fetch 2,mem_shutter_efuse_start_offset
+	increase -5,pdata
+	isub temp,pdata	//pdata = pdata-temp
+	//读上一次地址
+//	ncall p_shutter_last_read_addr,zero
+	fetch 2,mem_otp_read_offset_addr
+	store 2,mem_otp_read_ios_android_addr
+	call shutter_dy_shutter_judge_ios_or_android
+	fetch 2,mem_otp_read_ios_android_addr
+	ncall shutter_dy_shutter_read_move_config_from_otp_addr,zero
+	
+	//检查为0则不赋值
+	jam 0,mem_shutter_temp_count
+	call shutter_dy_campare_otp_data
+	fetch 1,mem_shutter_temp_count
+	rtneq 0
+	branch shutter_dy_read_otp_convert_data
+	
+//取有效地址给mem_otp_write_offset_addr
+shutter_dy_campare_effective_addr_write_otp:
+	bpatch patch15_7,mem_patch15
+	jam 1,mem_shutter_first_read_flag
+	call shutter_dy_shutter_uart_config_loop
+	//获得了地址
+	//校验是否是越界
+//	setarg SHUTTER_EFUSE_END_OFFECT
+	fetcht 2,mem_shutter_efuse_end_offset
+//	copy pdata, temp
+	fetch 2,mem_otp_read_offset_addr
+	isub temp,pdata	//pdata = pdata-temp
+	arg 0x0,temp	//temp = 0
+	isub temp,null	//pdata = pdata-temp, 大于等于0，positive置1
+	nrtn positive
+	//检查在区间内
+	fetcht 2,mem_otp_read_offset_addr
+//	setarg SHUTTER_EFUSE_START_OFFECT
+	fetch 2,mem_shutter_efuse_start_offset
+	isub temp,pdata	//pdata = pdata-temp
+	arg 0x0,temp	//temp = 0
+	isub temp,null	//pdata = pdata-temp, 大于等于0，positive置1
+	nrtn positive
+	fetch 2,mem_otp_read_offset_addr
+	store 2,mem_otp_write_offset_addr
+	call shutter_dy_write_otp_convert_data
+
+	branch shutter_dy_shutter_write_move_config_to_otp_addr
+
+
+shutter_dy_shutter_read_move_config_from_otp_addr:
+	bpatch patch16_0,mem_patch16
+	copy pdata,regb
+	arg SHUTTER_PARA_TOTAL_NUM,loopcnt
+//	fetch 2,mem_otp_read_offset_addr
+	arg mem_otp_move_config,rega
+	branch otp_read_data
+
+
+shutter_dy_shutter_write_move_config_to_otp_addr:
+	arg SHUTTER_PARA_TOTAL_NUM,loopcnt
+	arg mem_otp_move_config,rega
+	fetchr regb, 2, mem_otp_write_offset_addr
+	branch otp_write
+
+shutter_dy_shutter_1s_timer:
+	arg mem_shutter_1s_timer,regc
+	arg shutter_dy_store_move_config_info,regb
+	branch timer_single_step
+
+
+
+/*************shutter dy ending*********************/
+	
+endif
+

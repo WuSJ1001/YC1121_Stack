@@ -1,0 +1,382 @@
+
+//input:mem_mesh_mic_cache_ptr is cache buffer ptr
+//data ptr is store mem_ccm_data_ptr
+//data length is store mem_ccm_data_len
+//cache space size is TRANSPORT_MIC_CACHE_SPACE_SIZE
+//cache space num is TRANSPORT_MIC_CACHE_SPACE_NUM
+//output:user is enable ,mean new packet
+ali_mesh_base_adt_cache:
+	bpatchx patch34_4,mem_patch34
+	fetcht 2,mem_ccm_data_ptr
+	fetch 1,mem_ccm_data_len
+	copy temp,contr
+	arg mem_k4_SALT,rega
+	arg mem_k4_T,alarm
+	call ali_mesh_encrypt_base_function_AES_CMAC
+	call disable_user
+	copy regc,pdata
+	iadd alarm,contr
+	fetcht 4,mem_k4_T
+	fetch 2,mem_mesh_mic_cache_ptr
+	copy pdata,rega
+//	arg mem_mesh_access_message_mic_cache,rega
+	arg TRANSPORT_MIC_CACHE_SPACE_NUM,loopcnt
+ali_mesh_base_adt_cache_loop:
+	ifetch 4,rega
+	branch ali_mesh_base_adt_cache_empty_space,blank
+	isub temp,null
+	rtn zero
+	increase TRANSPORT_MIC_CACHE_SPACE_SIZE,rega
+	loop ali_mesh_base_adt_cache_loop
+	fetch 2,mem_mesh_mic_cache_ptr
+	copy pdata,contw
+	add pdata,TRANSPORT_MIC_CACHE_SPACE_SIZE,contr
+//	arg mem_mesh_access_message_mic_cache,contw
+//	arg mem_mesh_access_message_mic_cache+TRANSPORT_MIC_CACHE_SPACE_SIZE,contr
+	arg TRANSPORT_MIC_CACHE_TOTAL_SIZE,loopcnt
+	call memcpy_fast
+	istoret 4,contw
+	branch enable_user
+ali_mesh_base_adt_cache_empty_space:
+	istoret 4,rega
+	branch enable_user
+
+ali_mesh_chip_peripherals_load_data:
+	fetch 1,mem_mesh_chip_select
+	beq MESH_CHIP_FROM_EEPROM,ali_mesh_chip_peripherals_load_data_from_eep
+ali_mesh_chip_peripherals_load_data_from_flash:
+	call ali_mesh_chip_peripherals_load_three_tuple_from_flash
+	call ali_mesh_chip_peripherals_load_network_key_from_flash
+	call ali_mesh_chip_peripherals_load_application_key_from_flash
+	call ali_mesh_chip_peripherals_load_device_key_from_flash
+	call ali_mesh_chip_peripherals_load_reset_count_from_flash
+	call ali_mesh_chip_peripherals_load_seq_from_flash
+	branch ali_mesh_chip_peripherals_load_subscription_from_flash
+
+ali_mesh_chip_peripherals_load_three_tuple_from_flash:
+	arg MESH_EEP_THREE_TUPLE_LENGTH,temp
+	arg mem_mesh_three_tuple_ProductID,rega
+	setarg 0x1ffa0
+	branch spid_read_flash
+ali_mesh_chip_peripherals_load_network_key_from_flash:
+	arg MESH_EEP_NETWORK_KEY_LENGTH,temp
+	arg mem_mesh_Network_Key,rega
+	setarg MESH_FLASH_NETWORK_KEY_ADDR
+	call spid_read_flash
+	fetch 1,mem_mesh_last_IV_Index_byte
+	store 1,mem_mesh_IV_Index+3
+	rtn
+ali_mesh_chip_peripherals_load_application_key_from_flash:
+	arg MESH_EEP_APPLICATION_KEY_LENGTH,temp
+	arg mem_mesh_application_key,rega
+	setarg MESH_FLASH_APPLICATION_KEY_ADDR
+	branch spid_read_flash
+ali_mesh_chip_peripherals_load_device_key_from_flash:
+	arg MESH_EEP_DEVICE_KEY_LENGTH,temp
+	arg mem_mesh_Device_Key,rega
+	setarg MESH_FLASH_DEVICE_KEY_ADDR
+	branch spid_read_flash
+ali_mesh_chip_peripherals_load_reset_count_from_flash:
+	rtn
+ali_mesh_chip_peripherals_load_seq_from_flash:
+	arg MESH_EEP_SEQ_LENGTH,temp
+	arg mem_mesh_send_message_SEQ,rega
+	setarg MESH_FLASH_MESSAGE_SEQ_ADDR
+	branch spid_read_flash
+ali_mesh_chip_peripherals_load_subscription_from_flash:
+	fetch 2,mem_mesh_core_feature
+	rtnbit1 MESH_FEATURE_DISABLE_SUBSCRIPTION
+	arg MESH_EEP_SUBSCRIPTION_TOTAL_LENGTH,temp
+	arg mem_mesh_subscription_eep_temp,rega
+	setarg MESH_FLASH_SUBSCRIPTION_ADDR
+	call spid_read_flash
+	call mesh_get_element_info_config
+	arg mem_mesh_subscription_eep_temp,contr
+	add rega,ELEMENT_DEVICE_SUBSCRIPTION_LABEL,rega
+	branch ali_mesh_chip_peripherals_load_subscription_loop
+
+
+ali_mesh_chip_peripherals_load_data_from_eep:
+	call ali_mesh_chip_peripherals_load_three_tuple_from_eep
+	call ali_mesh_chip_peripherals_load_network_key_from_eep
+	call ali_mesh_chip_peripherals_load_application_key_from_eep
+	call ali_mesh_chip_peripherals_load_device_key_from_eep
+	call ali_mesh_chip_peripherals_load_reset_count_from_eep
+	call ali_mesh_chip_peripherals_load_seq_from_eep
+	branch ali_mesh_chip_peripherals_load_subscription_from_eep
+
+ali_mesh_chip_peripherals_load_three_tuple_from_eep:
+	arg MESH_EEP_THREE_TUPLE_LENGTH,temp
+	arg mem_mesh_three_tuple_ProductID,rega
+	arg MESH_EEP_THREE_TUPLE_OFFSET,regb
+	branch iicd_read_eep_data
+
+ali_mesh_chip_peripherals_load_network_key_from_eep:
+	arg MESH_EEP_NETWORK_KEY_LENGTH,temp
+	arg mem_mesh_Network_Key,rega
+	arg MESH_EEP_NETWORK_KEY_OFFSET,regb
+	call iicd_read_eep_data
+	fetch 1,mem_mesh_last_IV_Index_byte
+	store 1,mem_mesh_IV_Index+3
+	rtn
+
+ali_mesh_chip_peripherals_load_application_key_from_eep:
+	arg MESH_EEP_APPLICATION_KEY_LENGTH,temp
+	arg mem_mesh_application_key,rega
+	arg MESH_EEP_APPLICATION_KEY_OFFSET,regb
+	branch iicd_read_eep_data
+
+ali_mesh_chip_peripherals_load_device_key_from_eep:
+	arg MESH_EEP_DEVICE_KEY_LENGTH,temp
+	arg mem_mesh_Device_Key,rega
+	arg MESH_EEP_DEVICE_KEY_OFFSET,regb
+	branch iicd_read_eep_data
+
+ali_mesh_chip_peripherals_load_reset_count_from_eep:
+	rtn
+
+ali_mesh_chip_peripherals_load_seq_from_eep:
+	arg MESH_EEP_SEQ_LENGTH,temp
+	arg mem_mesh_send_message_SEQ,rega
+	arg MESH_EEP_SEQ_OFFSET,regb
+	branch iicd_read_eep_data
+
+ali_mesh_chip_peripherals_load_subscription_from_eep:
+	fetch 2,mem_mesh_core_feature
+	rtnbit1 MESH_FEATURE_DISABLE_SUBSCRIPTION
+	arg MESH_EEP_SUBSCRIPTION_TOTAL_LENGTH,temp
+	arg mem_mesh_subscription_eep_temp,rega
+	arg MESH_EEP_SUBSCRIPTION_OFFSET,regb
+	call iicd_read_eep_data
+	call mesh_get_element_info_config
+	arg mem_mesh_subscription_eep_temp,contr
+	add rega,ELEMENT_DEVICE_SUBSCRIPTION_LABEL,rega
+ali_mesh_chip_peripherals_load_subscription_loop:
+	copy rega,contw
+	call memcpy16
+	copy regb,pdata
+	iadd rega,rega
+	loop ali_mesh_chip_peripherals_load_subscription_loop
+	rtn
+
+mesh_receive_config_appkey_add_cb:
+	fetch 1,mem_mesh_chip_select
+	beq MESH_CHIP_FROM_EEPROM,mesh_receive_config_appkey_add_eeprom_cb
+	beq MESH_CHIP_FROM_FLASH,mesh_receive_config_appkey_add_flash_cb
+mesh_receive_config_appkey_add_flash_cb:
+	call ali_mesh_chip_peripherals_save_network_key_from_flash
+	call ali_mesh_chip_peripherals_save_application_key_from_flash
+	branch ali_mesh_chip_peripherals_save_device_key_from_flash
+ali_mesh_chip_peripherals_save_network_key_from_flash:
+	arg MESH_EEP_NETWORK_KEY_LENGTH,temp
+	arg mem_mesh_Network_Key,rega
+	setarg MESH_FLASH_NETWORK_KEY_ADDR
+	branch spid_write_flash_data
+ali_mesh_chip_peripherals_save_application_key_from_flash:
+	arg MESH_EEP_APPLICATION_KEY_LENGTH,temp
+	arg mem_mesh_application_key,rega
+	setarg MESH_FLASH_APPLICATION_KEY_ADDR
+	branch spid_write_flash_data
+ali_mesh_chip_peripherals_save_device_key_from_flash:
+	arg MESH_EEP_DEVICE_KEY_LENGTH,temp
+	arg mem_mesh_Device_Key,rega
+	setarg MESH_FLASH_DEVICE_KEY_ADDR
+	branch spid_write_flash_data
+	
+mesh_receive_config_appkey_add_eeprom_cb:
+	call ali_mesh_chip_peripherals_save_network_key_from_eep
+	call ali_mesh_chip_peripherals_save_application_key_from_eep
+	branch ali_mesh_chip_peripherals_save_device_key_from_eep
+
+ali_mesh_chip_peripherals_save_network_key_from_eep:
+	arg MESH_EEP_NETWORK_KEY_LENGTH,temp
+	arg mem_mesh_Network_Key,rega
+	arg MESH_EEP_NETWORK_KEY_OFFSET,regb
+	branch iicd_write_protect_eep_data
+
+ali_mesh_chip_peripherals_save_application_key_from_eep:
+	arg MESH_EEP_APPLICATION_KEY_LENGTH,temp
+	arg mem_mesh_application_key,rega
+	arg MESH_EEP_APPLICATION_KEY_OFFSET,regb
+	branch iicd_write_protect_eep_data
+
+ali_mesh_chip_peripherals_save_device_key_from_eep:
+	arg MESH_EEP_DEVICE_KEY_LENGTH,temp
+	arg mem_mesh_Device_Key,rega
+	arg MESH_EEP_DEVICE_KEY_OFFSET,regb
+	branch iicd_write_protect_eep_data
+
+mesh_store_new_seq_data:
+	fetch 3,mem_mesh_send_message_SEQ
+	fetcht 3,mem_mesh_send_message_SEQ_temp
+	isub temp,null
+	nrtn positive
+	add pdata,128,pdata
+	store 3,mem_mesh_send_message_SEQ_temp
+	fetch 1,mem_mesh_chip_select
+	beq 1,ali_mesh_chip_peripherals_save_seq_from_eep
+ali_mesh_chip_peripherals_save_seq_from_flash:
+	arg MESH_EEP_SEQ_LENGTH,temp
+	arg mem_mesh_send_message_SEQ_temp,rega
+	setarg MESH_FLASH_MESSAGE_SEQ_ADDR
+	branch spid_write_flash_data
+ali_mesh_chip_peripherals_save_seq_from_eep:
+	arg MESH_EEP_SEQ_LENGTH,temp
+	arg mem_mesh_send_message_SEQ_temp,rega
+	arg MESH_EEP_SEQ_OFFSET,regb
+	branch iicd_write_protect_eep_data
+
+mesh_store_new_subscriptuion_list_data:
+	call ali_mesh_chip_peripherals_save_subscriptuion_list_from_eep
+	fetch 1,mem_mesh_chip_select
+	beq 2,mesh_store_new_subscriptuion_list_data_from_flash
+	arg MESH_EEP_SUBSCRIPTION_TOTAL_LENGTH,temp
+	arg mem_mesh_subscription_eep_temp,rega
+	arg MESH_EEP_SUBSCRIPTION_OFFSET,regb
+	branch iicd_write_protect_eep_data
+mesh_store_new_subscriptuion_list_data_from_flash:
+	arg MESH_EEP_SUBSCRIPTION_TOTAL_LENGTH,temp
+	arg mem_mesh_subscription_eep_temp,rega
+	setarg MESH_FLASH_SUBSCRIPTION_ADDR
+	branch spid_write_flash_data
+
+ali_mesh_chip_peripherals_save_subscriptuion_list_from_eep:
+	call mesh_get_element_info_config
+	arg mem_mesh_subscription_eep_temp,contw
+	add rega,ELEMENT_DEVICE_SUBSCRIPTION_LABEL,rega
+ali_mesh_chip_peripherals_save_subscriptuion_list_from_eep_loop:
+	copy rega,contr
+	call memcpy16
+	copy regb,pdata
+	iadd rega,rega
+	loop ali_mesh_chip_peripherals_save_subscriptuion_list_from_eep_loop
+	rtn
+
+mesh_clear_pairing_key:
+	fetch 1,mem_mesh_chip_select
+	beq 1,ali_mesh_chip_clear_pairing_key_from_eeprom
+ali_mesh_chip_clear_pairing_key_from_flash:
+	setarg 0x1e000
+	store 3,mem_spi_write_addr
+	branch spid_flash_erase_sector+2
+ali_mesh_chip_clear_pairing_key_from_eeprom:
+	rtn
+
+mesh_vendor_timming_chage_cb:
+	fetch 1,mem_mesh_chip_select
+	rtnne 2
+	setarg 0x1d000
+	arg mem_mesh_vendor_timer_timing_buffer, rega  //mem ptr
+	arg MESH_X_TIMERS,temp
+	mul32 temp,18,temp	
+	branch spid_write_flash_data
+
+ali_mesh_vendor_timer_message_read:
+	fetch 1,mem_mesh_chip_select
+	rtnne 2
+	arg mem_mesh_vendor_timer_timing_buffer, rega  //mem ptr
+	arg MESH_X_TIMERS,temp
+	mul32 temp,18,temp	
+	setarg 0x1d000
+	branch spid_read_flash
+
+ifdef mesh_debug_log
+//input:rega is tx data ptr
+//loopcnt is tx data length
+//regb is logging type
+logging_tx_debug:
+	arg LOGGING_DEBUG,temp
+	branch logging_tx_common
+
+//input:rega is tx data ptr
+//loopcnt is tx data length
+//regb is logging type
+logging_tx_info:
+	arg LOGGING_INFO,temp
+	branch logging_tx_common
+
+
+//input:rega is tx data ptr
+//loopcnt is tx data length
+//regb is logging type
+logging_tx_warning:
+	arg LOGGING_WARNING,temp
+	branch logging_tx_common
+
+
+//input:rega is tx data ptr
+//loopcnt is tx data length
+//regb is logging type
+logging_tx_error:
+	arg LOGGING_ERROR,temp
+	branch logging_tx_common
+
+
+//input:rega is tx data ptr
+//loopcnt is tx data length
+//regb is logging type
+logging_tx_critical:
+	arg LOGGING_CRITICAL,temp
+	branch logging_tx_common
+
+
+//input:rega is tx data ptr
+//loopcnt is tx data length
+//regb is logging type
+//temp is logging level
+logging_tx_common:
+	call push_stack
+	fetch 1,mem_mesh_core_feature
+	bbit1 MESH_FEATURE_DISABLE_LOG,pop_stack
+	call uarta_prepare_tx_register_push
+	setarg LUA_LOG_PACKET_HEADER
+	istore 1,contwu
+	setarg LUA_LOG_PAKCET_TYPE
+	istore 1,contwu
+	add loopcnt,4,pdata
+	istore 1,contwu
+	istorer temp,2,contwu
+	istorer regb,2,contwu
+	copy rega,contr
+	call uart_copy_tx_bytes_fast
+	setarg LUA_LOG_PACKET_TRAIL
+	istore 1,contwu
+	call uarta_send_register_pop
+	branch pop_stack
+
+
+/*
+	function name:uart init by mem
+	input:
+		mem_module_uart_rx_buffer¡¢mem_module_uart_rx_buffer_end
+		mem_module_uart_tx_buffer¡¢mem_module_uart_tx_buffer_end
+		mem_module_uarta_baud_rate
+		bit0 of mem_module_flag
+*/
+mesh_uart_init:
+	fetch 1,mem_mesh_core_feature
+	rtnbit1 MESH_FEATURE_DISABLE_LOG
+	jam gpcfg_uart_txd,core_gpio_conf+11
+	jam gpcfg_uart_rxd|gpcfg_pullup,core_gpio_conf+12
+	call mesh_uart_init_buffer
+	arg 921600,temp
+	call uarta_calc_baud_rate_config
+	call uart_clock_select_main_freq_crystal
+	arg FUN_UART_CONTROL_ENABLE|FUN_UART_CONTROL_SETTING_RATE_BAUD,temp
+	storet 1,core_uart_ctrl
+	rtn
+
+mesh_uart_init_buffer:
+	setarg 0x4e00
+	store 2,mem_pdatatemp
+	setarg 0x4eff
+	istore 2,contw
+	setarg 0x4f00
+	istore 2,contw
+	setarg 0x4fff
+	istore 2,contw
+	fetch 8,mem_pdatatemp
+	branch uarta_init_dma_mem
+endif
+
+

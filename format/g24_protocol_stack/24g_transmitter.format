@@ -1,0 +1,67 @@
+
+
+xmemalloc g24_tx(
+2 mem_cb_24g_transmit_data
+2 mem_cb_24g_search_receiver
+2 mem_cb_24g_lpm_before
+2 mem_cb_24g_transmit_short_sleep
+2 mem_cb_24g_transmit_long_sleep
+
+1 mem_24g_conn_sm
+
+1 mem_24g_ensure
+2 mem_24g_txfail_cnt
+1 mem_24g_attempt_fail_flag
+
+1 mem_24g_retry
+1 mem_24g_abort_pac
+1 mem_24g_max_retry
+4 mem_24g_device_addr
+3 mem_24g_short_sleep_set
+8 mem_24g_long_sleep_set
+4 mem_24g_long_sleep_set1
+
+1 mem_24g_pac_index
+1 mem_24g_transmit_by_interrupt
+2 mem_24g_transmit_by_interrupt_exit_count
+2 mem_24g_transmit_by_interrupt_exit_count_init
+2 mem_24g_long_sleep_param_update_timer_init
+2 mem_24g_long_sleep_param_update_timer
+
+1 mem_24g_fast_hop_count
+2 mem_24g_retransmit
+)
+
+(
+1 NO_ACK_24G
+0 WITH_ACK_24G
+)
+
+(//mem_24g_conn_sm
+0 STATE_24G_STOP
+0 STATE_24G_START
+1 STATE_24G_PAIR
+2 STATE_24G_RECONN
+)
+
+(//mem_24g_transmit_by_interrupt
+1 G24_TX_TIMER_INT_ENABLE
+0 G24_TX_TIMER_INT_DISABLE
+)
+
+
+(
+1 OFFSET_DATA_TYPE
+2 OFFSET_LR_DATA_TYPE
+)
+
+(
+0x017700 G24_LONG_SLEEP_STEP1	//8ms
+0x36ee80 G24_LONG_SLEEP_STEP2	//300ms
+0x124f80 G24_LONG_SLEEP_STEP3	//100ms
+63500 G24_8MS_INTERVAL_PARAM		//8ms
+12210 G24_4MS_INTERVAL_PARAM
+)
+
+
+

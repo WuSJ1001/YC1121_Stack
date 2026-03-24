@@ -1,0 +1,571 @@
+
+g24_receive_init:
+	set1 mark_24g_rxmode,mark
+	fetch 1,mem_tx_power
+	store 1,mem_tx_power_temp
+	branch rssi_receiver_buff_init
+
+g24_receive_dispatch:
+	fetch 2,mem_cb_24g_receive_process
+	branch callback_func
+
+g24_ackpayload_prep:
+	bpatchx patch30_3,mem_patch30
+	jam 0,mem_24g_datalen
+	fetch 1,mem_24g_ackpayload_enable
+	rtn blank
+	fetch 2,mem_cb_24g_ackpayload
+	branch callback_func
+
+
+g24_receive_packet_start:
+	call g24_receive_transmit_ack
+	nbranch g24_rx_interrupt_clear,user3
+g24_receive_packet_parse:
+	call g24_receive_packet_parse_pid_crc
+	nbranch g24_rx_interrupt_clear,user
+	fetch 1,mem_24g_rxdata_length
+	branch g24_rx_interrupt_clear,blank
+	increase 2,pdata
+	iforce loopcnt
+	arg mem_24g_rxbuf,contr
+	arg mem_24g_rxdata_temp,contw
+	call memcpy
+	jam 0,mem_24g_mode_switch
+	fetch 1,mem_24g_pair_mode
+	call g24_enable_nodata_timer,blank
+	bpatchx patch30_4,mem_patch30
+	fetch 1,mem_24g_rxdata_temp+2
+	beq DATATYPE_DEVICE1,g24_data_device1	//mouse
+	beq DATATYPE_DEVICE2,g24_data_device2	//keyboard
+	beq DATATYPE_ATTEMP,g24_data_receive_attemp	//reconn packet
+g24_rx_interrupt_clear:
+	bpatchx patch30_5,mem_patch30
+	arg mem_24g_rxbuf,contw
+	arg 66,loopcnt
+	branch clear_mem
+
+g24_data_receive_attemp:
+	call g24_bind_device_status		//works on auto pair only
+	branch g24_data_attemp
+
+g24_data_device1:
+	call g24_binding_dvc1_living	//works on auto pair only
+	call g24_ch_timer_reinit
+	fetch 1,mem_24g_abort_packet
+	fetcht 1,mem_24g_rxdata_temp
+	isolate1 bit_abort,temp
+	setflag true,0,pdata
+	store 1,mem_24g_abort_packet
+	beq 1,g24_data_attemp_device1_abort
+	fetch 1,mem_24g_hop_packet
+	fetcht 1,mem_24g_rxdata_temp
+	isolate1 bit_hop,temp
+	setflag true,0,pdata
+	store 1,mem_24g_hop_packet
+	fetch 2,mem_cb_24g_data_device1
+	branch callback_func
+
+g24_data_device2:
+	call g24_binding_dvc2_living	//works on auto pair only
+	fetcht 1,mem_24g_rxdata_temp
+	isolate1 bit_abort,temp
+	branch g24_data_attemp_device2_abort,true
+	fetch 2,mem_cb_24g_data_device2
+	branch callback_func
+
+g24_data_attemp_device1_abort:
+	fetch 1,mem_device_option
+	sub pdata,DVC_OP_CAR,null
+	call car_stop_blink,zero
+	fetch 1,mem_24g_device1_bind_disable
+	nrtn blank
+	jam 1,mem_24g_device1_bind_disable
+	fetch 4,mem_24g_rxdata_temp+10
+	branch g24_store_device1_addr
+g24_data_attemp_device2_abort:
+	fetch 4,mem_24g_rxdata_temp+10
+	branch g24_store_device2_addr	
+
+
+g24_receive_packet_parse_pid_crc:
+	call disable_user
+	fetch 1,mem_24g_sta_pid
+	fetcht 1,mem_24g_last_pid
+	isub temp,null
+	ncall enable_user,zero
+	fetch 1,mem_24g_sta_pid
+	store 1,mem_24g_last_pid
+	fetch 3,mem_24g_sta_crc
+	fetcht 3,mem_24g_last_crc
+	isub temp,null
+	ncall enable_user,zero
+	fetch 3,mem_24g_sta_crc
+	store 3,mem_24g_last_crc
+	rtn
+
+g24_receive_transmit_ack:
+	call g24_rx_interrupt_clear
+	call g24_receive_packet
+	nrtn user3
+g24_transmit_ack:
+//data type
+	fetch 1,mem_24g_rxbuf
+	store 1,mem_24g_data_type
+//read len pid crc
+	call g24_read_len_pid_crc
+//read ack
+	fetch 1,mem_24g_rxbuf+1
+	isolate1 bit_ack_24g,pdata
+	branch g24tx_no_ack,true
+g24tx_with_ack:
+	call g24_ackpayload_prep
+	call g24_transmit_prep
+	call g24_transmit
+g24tx_no_ack:
+	branch g24_end_of_packet
+
+
+g24_enable_nodata_timer:
+	jam 1,mem_24g_nodata_timer_enable
+g24_enable_nodata_timer_init:
+	setarg TIMER_NODATA_DELAY
+	arg G24_TIMER_NODATA,queue
+	branch timer_init
+
+
+
+/****************************g24 receiver mode switch start********************************/
+
+g24_mode_switch_init:
+	bpatchx patch30_6,mem_patch30
+	jam 1,mem_24g_mode_switch
+	jam 0,mem_24g_time_slice
+	jam 0xff,mem_24g_interval
+	branch g24_timer_init
+	
+g24_mode_switch_bind_work:
+	bpatchx patch30_7,mem_patch30
+	fetch 1,mem_24g_mode_switch
+	rtn blank
+	call g24_timer_check
+	nrtn user	//80ms
+	call g24_bind_mode_continue
+	fetch 1,mem_24g_time_slice
+	increase 1,pdata
+	and_into 1,pdata
+	store 1,mem_24g_time_slice
+	beq 0,g24_work_mode_switch
+	beq 1,g24_bind_mode_switch
+	rtn
+
+g24_bind_mode_continue:
+	fetch 1,mem_24g_bind_mode_continue
+	rtn blank
+	increase -1,pdata
+	store 1,mem_24g_bind_mode_continue
+	rtn
+
+g24_work_mode_switch:
+	fetch 1,mem_24g_bind_mode_continue
+	nrtn blank
+	branch g24_switch_work_mode
+
+g24_bind_mode_switch:
+	fetch 1,mem_24g_bind_mode_continue
+	nrtn blank
+	branch g24_bind_mode_enable
+
+
+g24_mode_B_S_switch_init:	//bind and search
+	fetch 1,mem_24g_B_S_mode_switch_disable
+	nrtn blank
+	fetch 1,mem_24g_mode_B_S_switch_exit
+	call g24_mode_B_S_switch_start,blank
+	fetch 1,mem_24g_mode_B_S_switch_init
+	rtnbit1 0
+	set1 0,pdata
+	store 1,mem_24g_mode_B_S_switch_init
+	jam 1,mem_24g_mode_B_S_switch
+	jam 0,mem_24g_B_S_time_slice
+	setarg 0
+	store 2,mem_24g_mode_B_S_switch_cnt
+	jam 0x60,mem_24g_interval	//30ms
+	branch g24_timer_init
+
+g24_mode_switch_bind_search:
+	bpatchx patch31_0,mem_patch31
+	fetch 1,mem_24g_work_mode
+	rtneq DONGLE_WORK
+	fetch 1,mem_24g_B_S_mode_switch_disable
+	nrtn blank
+	fetch 1,mem_24g_mode_B_S_switch_exit
+	nrtn blank
+	fetch 1,mem_24g_mode_B_S_switch
+	rtn blank
+	fetch 1,mem_24g_bind_device_living
+	compare 3,pdata,3
+	branch g24_mode_B_S_switch_exit,true
+	call g24_timer_check
+	nrtn user
+	fetch 2,mem_24g_mode_B_S_switch_cnt
+	increase 1,pdata
+	store 2,mem_24g_mode_B_S_switch_cnt
+	arg 0x7d0,temp	//1min
+	isub temp,null
+	branch g24_mode_B_S_switch_exit,positive
+	fetch 1,mem_24g_B_S_time_slice
+	increase 1,pdata
+	and_into 1,pdata
+	store 1,mem_24g_B_S_time_slice
+	beq 0,g24_search_mode_enable
+	beq 1,g24_bind_mode_enable
+	rtn
+
+g24_mode_switch_search:
+	fetch 1,mem_24g_bind_mode_continue
+	nbranch g24_bind_mode_enable,blank
+	branch g24_search_mode_enable
+
+g24_mode_B_S_switch_exit:
+	jam 1,mem_24g_mode_B_S_switch_exit
+	branch g24_search_mode_enable
+
+g24_mode_B_S_switch_stop:
+	jam 0,mem_24g_mode_B_S_switch
+	rtn
+g24_mode_B_S_switch_start:
+	jam 1,mem_24g_mode_B_S_switch
+	rtn
+
+
+
+/****************************g24 receiver mode switch end********************************/
+
+
+
+
+/****************************g24 receiver work mode start********************************/
+
+g24_work_init:
+	bpatchx patch31_1,mem_patch31
+	fetch 1,mem_24g_mode_init
+	rtnbit1 DONGLE_WORK
+	set1 DONGLE_WORK,pdata
+	store 1,mem_24g_mode_init
+	fetch 1,mem_tx_power_temp
+	store 1,mem_tx_power
+	jam 0,mem_24g_ackpayload_enable
+	jam 0,mem_usb_tx_enable
+	jam 1,mem_24g_abort_packet
+	jam 0,mem_24g_pid
+	fetch 4,mem_24g_lap
+	call g24_update_addr_and_synccrc8
+	call g24_ch
+	branch g24_rx_interrupt_clear
+
+
+g24_switch_work_mode:
+	jam 0,mem_24g_ackpayload_enable
+g24_work_mode_enable:
+	jam DONGLE_WORK,mem_24g_work_mode
+	jam CLEAR_INIT,mem_24g_mode_init	
+	rtn
+
+
+g24_work_mode_start:
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_WORK
+	call g24_work_init
+	call g24_ch_process
+	branch g24_receive_packet_start
+
+
+
+/****************************g24 receiver work mode end********************************/
+
+
+
+
+
+
+/****************************g24 receiver bind mode start********************************/
+
+g24_bind_mode_auto:
+	bpatchx patch31_2,mem_patch31
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_BIND
+	call g24_bind_init
+	call g24_bind_data_process
+	fetch 1,mem_24g_pair_mode
+	nrtn blank
+	fetch 1,mem_24g_bind_device_status
+	rtn blank
+	jam 0,mem_24g_mode_switch
+	call g24_switch_work_mode
+	call g24_enable_nodata_timer
+	branch g24_timer_init
+
+
+/****************************g24 receiver bind mode end********************************/
+
+
+
+
+
+
+/****************************g24 receiver search mode start********************************/
+
+g24_search_mode_init:
+	fetch 1,mem_24g_mode_init
+	rtnbit1 DONGLE_SEARCH
+	set1 DONGLE_SEARCH,pdata
+	store 1,mem_24g_mode_init
+	fetch 1,mem_tx_power_temp	//reinit tx power when "search-pair-switch"  is enable
+	store 1,mem_tx_power
+
+	jam 0,mem_24g_time_slice
+	jam 1,mem_24g_ackpayload_enable
+	setarg 0
+	store 3,mem_rssi_noise_self_index
+	store 7,mem_24g_self_config_ch_once
+	call g24_receiver_addr_check
+	nrtn zero
+	fetch 1,mem_24g_current_ch_number
+	store 1,mem_24g_self_ch_number
+	fetch 1,mem_24g_ch
+	store 1,mem_24g_self_last_ch
+	rtn
+
+
+g24_search_mode_auto:
+	bpatchx patch31_3,mem_patch31
+	fetch 1,mem_24g_work_mode
+	rtnne DONGLE_SEARCH
+	call g24_search_mode_init
+	call g24_auto_addr_ch_search
+	call g24_receive_transmit_ack
+	nbranch g24_rx_interrupt_clear,user3
+	//dongle addr,then parse rxdata
+	call g24_receiver_addr_check
+	call g24_receive_packet_parse,zero
+
+	fetch 1,mem_24g_abort_packet
+	call g24_mode_B_S_switch_stop,blank	//works on auto pair only
+	
+	//receive data,then go to paired
+	jam DONGLE_WORK,mem_24g_work_mode
+	fetch 1,mem_24g_mode_init
+	set1 DONGLE_WORK,pdata
+	store 1,mem_24g_mode_init
+
+	fetch 1,mem_24g_ackpayload_enable
+	sub pdata,2,null
+	ncall g24_ackpayload_disable,zero
+
+	call g24_rx_interrupt_clear
+	call g24_enable_nodata_timer
+	call g24_receiver_addr_check
+	branch g24_self_ch_num_reinit,zero
+	fetch 4,mem_24g_addr
+	fetcht 4,mem_24g_device2_addr
+	isub temp,null
+	branch g24_device2_ch_num_reinit,zero		
+	fetch 4,mem_24g_addr
+	fetcht 4,mem_24g_device1_addr
+	isub temp,null
+	branch g24_device1_ch_num_reinit,zero
+	rtn
+
+
+g24_self_ch_num_reinit:
+	fetch 1,mem_24g_self_ch_number
+g24_current_ch_num_reinit:
+	store 1,mem_24g_current_ch_number
+	rtn
+
+g24_device2_ch_num_reinit:
+	fetch 1,mem_24g_device2_ch_number
+	branch g24_current_ch_num_reinit
+
+g24_device1_ch_num_reinit:
+	fetch 1,mem_24g_device1_ch_number
+	branch g24_current_ch_num_reinit
+
+
+g24_auto_addr_ch_search:
+	bpatchx patch31_4,mem_patch31
+	fetch 1,mem_24g_time_slice
+	increase 1,pdata
+	and_into 3,pdata
+	store 1,mem_24g_time_slice
+	//pairing address and channel come first
+	beq 0,g24_auto_bind_config_device2
+	beq 1,g24_auto_bind_config_self
+	beq 2,g24_auto_bind_config_device1
+	beq 3,g24_auto_bind_config_self
+	rtn
+
+g24_auto_bind_config_device1:
+	call g24_bind_dvc1_payload_cfg
+	fetch 4,mem_24g_device1_addr
+	branch g24_auto_addr_ch_search,blank
+	call g24_update_addr_and_synccrc8
+	fetch 1,mem_24g_device1_config_ch_once
+	call g24_device1_config_ch_once,blank
+	fetch 1,mem_24g_device1_last_ch
+	store 1,mem_24g_ch
+	fetcht 1,mem_rssi_noise_device1_index
+	fetchr rega,2,mem_rssi_noise_device1_buffer_ptr
+	call rssi_store
+	storet 1,mem_rssi_noise_device1_index
+	call rssi_average
+	storet 1,mem_rssi_noise_device1_avg
+	sub temp,RSSI_THRESH_NOISE,null
+	nrtn positive
+	fetcht 1,mem_24g_device1_ch_number
+	call g24_ch_map_size
+	storet 1,mem_24g_device1_ch_number
+	store 1,mem_24g_device1_last_ch
+	rtn
+
+g24_device1_config_ch_once:
+	jam 1,mem_24g_device1_config_ch_once
+	arg 0,temp
+	call g24_ch_calc
+	store 1,mem_24g_device1_last_ch
+	rtn
+	
+g24_auto_bind_config_device2:
+	call g24_bind_dvc2_payload_cfg
+	fetch 4,mem_24g_device2_addr
+	branch g24_auto_addr_ch_search,blank
+	call g24_update_addr_and_synccrc8
+	fetch 1,mem_24g_device2_config_ch_once
+	call g24_device2_config_ch_once,blank
+	fetch 1,mem_24g_device2_last_ch
+	store 1,mem_24g_ch
+	fetcht 1,mem_rssi_noise_device2_index
+	fetchr rega,2,mem_rssi_noise_device2_buffer_ptr
+	call rssi_store
+	storet 1,mem_rssi_noise_device2_index
+	call rssi_average
+	storet 1,mem_rssi_noise_device2_avg
+	sub temp,RSSI_THRESH_NOISE,null
+	nrtn positive
+	fetcht 1,mem_24g_device2_ch_number
+	call g24_ch_map_size
+	storet 1,mem_24g_device2_ch_number
+	store 1,mem_24g_device2_last_ch
+	rtn
+
+g24_device2_config_ch_once:
+	jam 1,mem_24g_device2_config_ch_once
+	arg 0,temp
+	call g24_ch_calc
+	store 1,mem_24g_device2_last_ch
+	rtn	
+
+g24_auto_bind_config_self:
+	call g24_bind_dvc1_payload_cfg
+	fetch 4,mem_24g_lap
+	call g24_update_addr_and_synccrc8
+	fetch 1,mem_24g_self_config_ch_once
+	call g24_self_config_ch_once,blank
+	fetch 1,mem_24g_self_last_ch
+	store 1,mem_24g_ch
+	fetcht 1,mem_rssi_noise_self_index
+	fetchr rega,2,mem_rssi_noise_self_buffer_ptr
+	call rssi_store
+	storet 1,mem_rssi_noise_self_index
+	call rssi_average
+	storet 1,mem_rssi_noise_self_avg
+	sub temp,RSSI_THRESH_NOISE,null
+	nrtn positive
+	fetcht 1,mem_24g_self_ch_number
+	call g24_ch_map_size
+	storet 1,mem_24g_self_ch_number
+	store 1,mem_24g_self_last_ch
+	rtn
+
+g24_self_config_ch_once:
+	jam 1,mem_24g_self_config_ch_once
+	fetch 1,mem_24g_self_last_ch
+	store 1,mem_24g_ch
+	rtn
+
+
+g24_ackpayload_disable:
+	jam 0,mem_24g_ackpayload_enable
+	rtn
+
+
+g24_receiver_addr_check:
+	fetch 4,mem_24g_addr
+	fetcht 4,mem_24g_lap
+	isub temp,null
+	rtn
+
+/****************************g24 receiver search mode end********************************/
+
+
+
+
+
+
+/****************************g24 receiver nodata process start********************************/
+
+
+g24_nodata_process:
+	fetch 1,mem_24g_ackpayload_enable
+	rtneq 2
+	fetch 1,mem_24g_nodata_timer_enable
+	rtn blank
+	arg G24_TIMER_NODATA,queue
+	call timer_check
+	nrtn blank
+	jam 0,mem_24g_nodata_timer_enable
+	jam 0,mem_24g_bind_mode_continue
+	call g24_mode_B_S_switch_init	//works on auto pair only	
+	//no data for more than 100ms,then go to search
+g24_search_mode_enable:	
+	bpatchx patch31_5,mem_patch31
+	jam DONGLE_SEARCH,mem_24g_work_mode
+	jam CLEAR_INIT,mem_24g_mode_init
+	branch g24_rx_interrupt_clear
+
+
+/****************************g24 receiver nodata process end********************************/
+
+
+g24_ch_process:
+	bpatchx patch31_6,mem_patch31
+	fetch 1,mem_24g_abort_packet
+	beq 1,rssi_noise_monitor
+	fetch 1,mem_24g_hop_packet
+	beq 1,g24_ch_receive_hop_pac
+	fetcht 4,mem_24g_hop_btclk
+	copy clkn_bt,pdata
+	isub temp,null
+	ncall g24_timer_timeout,positive
+	copy pdata,regb
+	fetch 4,mem_24g_hop_btclk
+	fetcht 1,mem_24g_hop_interval
+	iadd temp,temp
+	copy regb,pdata
+	isub temp,null
+	nrtn positive
+	set0 28,pdata
+	store 4,mem_24g_hop_btclk
+	jam 1,mem_24g_abort_packet
+	branch g24_ch
+
+g24_ch_receive_hop_pac:
+	jam 0,mem_24g_hop_packet
+	branch g24_ch
+
+g24_ch_timer_reinit:
+	copy clkn_bt,pdata
+	store 4,mem_24g_hop_btclk
+	rtn
+

@@ -1,0 +1,28 @@
+mem_xtal_freq:18
+mem_le_adv_enable:01
+
+mem_rx_window_sniff:00 0e
+
+mem_version:08 0e 05 03 00
+
+mem_le_lap:11 22 35
+mem_le_adv_data_len:03
+mem_le_adv_data:
+02 01 0e
+
+mem_le_scan_data_len:0b
+mem_le_scan_data:
+'\09FPGA1121S
+
+mem_le_adv_interval:20 00
+mem_le_scan_window:20 00
+mem_le_scan_type:01
+mem_le_adv_own_addr_type:01
+mem_le_adv_channel_map:07
+
+mem_device_option:05
+
+mem_rf_init_data:
+ff
+mem_rf_init_ptr:mem_rf_init_data
+

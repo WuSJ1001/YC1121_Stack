@@ -1,0 +1,38 @@
+//
+//
+//Large memory blocks defined in this file.
+//Blocks Shall be defined with absolute address.
+//Blocks' length Shall be specified in comment following Blocks' names.
+//Different blocks MAY be overlap.
+//Blocks defined in this file Shall NOT be overlap with variable in memmap.format.
+
+(
+0xf00 mem_dcoc_buf
+0xff0 mem_dcoc_buf_end
+)
+
+//l2cap RX buffers
+(
+0xf00 mem_le_l2cap_buf		//0x100
+)
+
+//l2cap TX buffers
+(
+0xd00 mem_ble_tx_buff0
+0x60 mem_ble_l2cap_tx_buff_size
+)
+
+
+//uart buffer
+(
+0xc00 mem_h5rx_buf//0x400
+0xeff mem_h5rx_buf_end
+0xf00 mem_h5tx_buf
+0xfff mem_h5tx_buf_end
+)
+
+
+(
+0x4c00 mem_savelist
+)
+
