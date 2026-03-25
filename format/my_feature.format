@@ -1,25 +1,28 @@
 
 
 xmemalloc stack(
+//UART串口通信RingBuff
+16  mem_uart_rx_ringbuf
+16  mem_uart_tx_ringbuf
 
-1   my_key1_flage
-1   my_key2_flage
-1   my_key1_release_flage
-1   my_key2_release_flage
-1   my_key1_press_flage
-1   my_key2_press_flage
+//UART串口通信RingBuff地址
+8   mem_pdatatemp
 
-1   mem_push_stack_data
-1   mem_pop_stack_data
+// UART 发送/接收临时变量
+1   mem_my_uart_tx_byte
+1   mem_my_uart_cmd0
+1   mem_my_uart_cmd1
 
-//栈指针
-2   mem_stack_sp
-16  mem_stack_space
-
+// 协议用“覆盖式堆栈”（16字节，满了继续push会覆盖最老数据）
+16  mem_cmd_stack_space
+1   mem_cmd_stack_top_idx
+1   mem_cmd_stack_count
 
 )
 
-23 KEY1
-12 KEY2
+(
+
+15  My_UART_RX_NUM
+16  My_UART_TX_NUM
 
 )

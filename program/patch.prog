@@ -1408,143 +1408,184 @@ Wu_app_evt_10ms_loop:
 	call my_loop
 	branch Wu_app_evt_10ms_loop
 
-
+/*
+ * function name: my_feature_uart_init
+ * 功能：
+ *   1) GPIO16 -> UART_TXD
+ *   2) GPIO15 -> UART_RXD（上拉）
+ *   3) 初始化 UARTA DMA ring buffer（RX/TX start/end）
+ *   4) 选择 crystal 主时钟
+ *   5) 波特率设为 115200（用 uarta_calc_baud_rate_config 计算写 core_uart_baud）
+ *   6) 使能 UART（不启用硬件流控）
+ *
+ */
 p_my_feature_init:
-	jam 0x00,  my_key1_flage
-	jam 0x00,  my_key2_flage
-	jam 0x00,  my_key1_release_flage
-	jam 0x00,  my_key2_release_flage
-	jam 0x00,  my_key1_press_flage
-	jam 0x00,  my_key2_press_flage
+	jam 0x00,mem_cmd_stack_top_idx
+	jam 0x00,mem_cmd_stack_count
+my_feature_uart_init:
+    // ---------- 1) 配 GPIO 复用 ----------
+    // GPIO16 属于扩展段（>=16），建议走 gpio_config_function_int 以正确写 core_gpio_conf_hi
+    arg gpcfg_uart_txd,temp
+    setarg My_UART_TX_NUM
+    call gpio_config_function_int
+    arg gpcfg_uart_rxd|gpcfg_pullup,temp
+    setarg My_UART_RX_NUM
+    call gpio_config_function_int
 
-	//- 配置 GPIO23 为上拉输入（按下接地，视为有效）
-	// 选择输入+上拉复用
-	arg gpcfg_input|gpcfg_pullup,temp
-	setarg KEY1
-	call gpio_config_function_int
-	setarg KEY2
-	call gpio_config_function_int
-	// 声明它为低有效输入
-	arg KEY1,temp        // bit7=1, 低电平算“按下”
-	call gpio_config_input
-	arg KEY2,temp        // bit7=0, 低电平算“按下”
-	call gpio_config_input
+    // ---------- 2) 先关闭 UART（可选但推荐） ----------
+    fetch 1,core_uart_ctrl
+    set0 BIT_UART_CONTROL_ENABLE,pdata
+    store 1,core_uart_ctrl
 
-	// 初始化堆栈指针 mem_stack_sp
-	setarg  mem_stack_space
-    store 2, mem_stack_sp          // 写入 2 个字节的堆栈空间地址到 mem_stack_sp 寄存器
-init_stack:
-    arg 16, loopcnt           // 1. 设置循环次数为 16，存入 loopcnt 寄存器
-    arg  mem_stack_space, contw    // 2. 将  mem_stack_space 的首地址赋给写指针 contw
-    setarg 0                  // 3. 准备要写入的数据，将 pdata 设为 0
-clear_stack_loop:
-    istore 1, contw           // 4. 将 pdata 中的 1 个字节(也就是0)存入 contw 指向的内存
-//    【注意】：istore 执行完后，contw 的地址会自动 +1
-    loop clear_stack_loop     // 5. loopcnt 自动减 1；若不为 0，则跳回 clear_stack_loop 继续执行
-	rtn
+    // ---------- 3) 打包 RX/TX ring buffer 的 4 个地址（共 8 字节） ----------
+	// RX start
+    setarg mem_uart_rx_ringbuf
+    store 2,mem_pdatatemp
+    // RX end
+    setarg mem_uart_rx_ringbuf+15
+    istore 2,contw
+    // TX start
+    setarg mem_uart_tx_ringbuf
+    istore 2,contw
+    // TX end
+    setarg mem_uart_tx_ringbuf+15
+    istore 2,contw
+
+    // ---------- 4) 初始化 UARTA DMA ring buffer ----------
+    fetch 8,mem_pdatatemp
+    call uarta_init_dma_mem
+
+    // ---------- 5) 选择 UART 主时钟 + 配波特率 115200 ----------
+    call uart_clock_select_main_freq_crystal
+    arg 115200,temp
+    call uarta_calc_baud_rate_config
+
+    // ---------- 6) 使能 UART（不打开硬件流控） ----------
+    arg FUN_UART_CONTROL_ENABLE|FUN_UART_CONTROL_SETTING_RATE_BAUD,temp
+    storet 1,core_uart_ctrl
+    rtn
 
 
 // 主循环
 my_loop:
-key_loop:
+receive_loop:
 	// 轮询扫键，更新按键状态
-	call key_loop_key1
-	call key_loop_key2
 stack_loop:
 	// 根据按键状态执行入栈或出栈操作
-	call  push_data
-	call  pop_data
+	call  my_uart_receive_cmd2
+	rtn
+/*
+ * function name: my_uart_receive_cmd2
+ * 功能：从 UART RX ring 读取并处理 2 字节命令包
+ *   - cmd0=0x00：push cmd1（满了覆盖最老数据）
+ *   - cmd0=0x01：pop 1 字节并通过串口发送（空栈发送 0xEE）
+ */
+my_uart_receive_cmd2:
+my_uart_receive_cmd2_loop:
+	// 至少 2 字节才处理
+	fetch 2,core_uart_rxitems
+	add pdata,-2,rega
+	nrtn positive
+
+	// 读出 2 字节
+	call uarta_prepare_rx
+	arg mem_my_uart_cmd0,contw
+	arg 2,loopcnt
+	call uart_copy_rx_bytes
+	call uarta_rxdone
+
+	// 分发
+	fetch 1,mem_my_uart_cmd0
+	beq 0x00,my_uart_receive_cmd2_push
+	beq 0x01,my_uart_receive_cmd2_pop
+	rtn
+
+my_uart_receive_cmd2_push:
+	fetch 1,mem_my_uart_cmd1
+	call my_cmd_stack_push_overwrite
+	branch my_uart_receive_cmd2_loop
+
+my_uart_receive_cmd2_pop:
+	call my_cmd_stack_pop_and_send
+	branch my_uart_receive_cmd2_loop
+
+/*
+ * function name: my_cmd_stack_push_overwrite
+ * input:
+ *   pdata：要 push 的 1 字节数据
+ * 功能：
+ *   - 使用 mem_cmd_stack_space（16 字节）作为“覆盖式堆栈”
+ *   - 满了继续 push 会覆盖最老数据
+ */
+my_cmd_stack_push_overwrite:
+	// regb 保存要写入的数据
+	copy pdata,regb
+
+	// 计算写入地址：mem_cmd_stack_space + top_idx
+	fetch 1,mem_cmd_stack_top_idx
+	and pdata,0x0f,temp
+	arg mem_cmd_stack_space,rega
+	iadd temp,rega
+	copy regb,pdata
+	istore 1,rega
+
+	// top_idx = (top_idx + 1) & 0x0F
+	fetch 1,mem_cmd_stack_top_idx
+	increase 1,pdata
+	and pdata,0x0f,pdata
+	store 1,mem_cmd_stack_top_idx
+
+	// count = min(count + 1, 16)
+	fetch 1,mem_cmd_stack_count
+	beq 16,my_cmd_stack_push_overwrite_full
+	increase 1,pdata
+	store 1,mem_cmd_stack_count
+my_cmd_stack_push_overwrite_full:
 	rtn
 
 
-// key1 按键,连接 GPIO23
-key_loop_key1:
-	// 读取 GPIO23
-	arg KEY1,temp        // 仍然是“低有效、编号23”
-	call gpio_get_bit
-	fetch  1,   my_key1_flage
-	lshift  pdata, pdata
-	setflag true,0,pdata
-	store  1,   my_key1_flage
-	and   pdata, 0x0f, pdata      // 仅保留低四位
-	branch key1_released, blank   // 低四位全 0 -> 松开
-key1_pressed:
-	//按键按下标志位
-	jam 0x00,   my_key1_release_flage
-	jam 0x01,  my_key1_press_flage	//按键被按下，置位按下标志位
+/*
+ * function name: my_cmd_stack_pop_and_send
+ * 功能：
+ *   - 栈空：发送 0xEE
+ *   - 否则：弹出 1 字节到 mem_my_uart_tx_byte 并发送
+ */
+my_cmd_stack_pop_and_send:
+	fetch 1,mem_cmd_stack_count
+	beq 0,my_cmd_stack_pop_and_send_empty
+
+	// top_idx = (top_idx - 1) & 0x0F
+	fetch 1,mem_cmd_stack_top_idx
+	increase -1,pdata
+	and pdata,0x0f,pdata
+	store 1,mem_cmd_stack_top_idx
+
+	// 读取 mem_cmd_stack_space[top_idx]
+	and pdata,0x0f,temp
+	arg mem_cmd_stack_space,rega
+	iadd temp,rega
+	ifetch 1,rega
+	store 1,mem_my_uart_tx_byte
+
+	// count--
+	fetch 1,mem_cmd_stack_count
+	increase -1,pdata
+	store 1,mem_cmd_stack_count
+
+	branch my_uart_send_tx_byte
+
+my_cmd_stack_pop_and_send_empty:
+	jam 0xee,mem_my_uart_tx_byte
+	branch my_uart_send_tx_byte
+
+/*
+ * function name: my_uart_send_tx_byte
+ * 功能：发送 mem_my_uart_tx_byte（1 字节）
+ */
+my_uart_send_tx_byte:
+	call uarta_prepare_tx
+	arg mem_my_uart_tx_byte,contr
+	arg 1,loopcnt
+	call uart_copy_tx_bytes
+	call uarta_send
 	rtn
-key1_released:
-	//按键释放后再做后续处理，避免按键长按时重复触发
-	jam 0x1 ,	 my_key1_release_flage
-	rtn
-
-
-// key2 按键,连接 GPIO12
-key_loop_key2:
-	// 读取 GPIO12
-	arg KEY2,temp        // 仍然是“低有效、编号12”
-	call gpio_get_bit
-	fetch  1,   my_key2_flage
-	lshift  pdata, pdata
-	setflag true,0,pdata
-	store  1,   my_key2_flage
-	and   pdata, 0x0f, pdata      // 仅保留低四位
-	branch key2_released, blank   // 低四位全 0 -> 松开
-key2_pressed:
-	//按键按下标志位
-	jam 0x00,   my_key2_release_flage
-	jam 0x01,  my_key2_press_flage	//按键被按下，置位按下标志位
-	rtn
-key2_released:
-	//按键释放后再做后续处理，避免按键长按时重复触发
-	jam 0x1 ,	 my_key2_release_flage
-	rtn
-
-
-// ==========================================
-// 堆栈的基础功能函数
-// rega 指向堆栈顶，pdata 是要入栈或出栈的数据
-// KEY1按键对应push_data，KEY2按键对应pop_data
-// ==========================================
-push_data:
-	fetch  1,   my_key1_release_flage
-	rtn blank  // 按键没释放继续轮询
-	fetch  1,  my_key1_press_flage
-	rtn blank  // 按键没被按下继续轮询
-
-    // 1. 从内存取出 mem_stack_sp 到 rega
-    fetch 2, mem_stack_sp          // 将当前 mem_stack_sp 的地址值读入 pdata
-    iforce rega          // 把 pdata 的值赋值给 rega（此时 rega 指向栈顶空位）
-
-    // 2. 写入数据
-	fetch  1,  mem_push_stack_data
-    istore 1, rega       // 把 pdata 中的数据存入 rega 当前指向的内存地址
-
-    // 3. 更新指针并存回 mem_stack_sp 变量
-    increase 1, rega     // 指针地址 +1 (向后移动一个字节)
-    copy rega, pdata     // 将 rega 中的新地址传给 pdata
-    store 2, mem_stack_sp          // 保存新地址回内存变量 mem_stack_sp
-	jam 0x00,  my_key1_press_flage
-    rtn
-
-
-pop_data:
-	fetch  1,   my_key2_release_flage
-	rtn blank  // 按键没释放继续轮询
-	fetch  1,  my_key2_press_flage
-	rtn blank  // 按键没被按下继续轮询
-	
-    // 从内存取出 mem_stack_sp 到 rega
-    fetch 2, mem_stack_sp          // 将当前 mem_stack_sp 的地址值读入 pdata
-    // 指针回退
-    increase -1, pdata    // 栈底在低地址，出栈所以地址 -1，退回到上次存数据的位置
-	copy pdata, rega     // 把更新后的地址传给 rega（此时 rega 指向栈顶数据）
-    store 2, mem_stack_sp          // 保存新地址回内存变量 mem_stack_sp
-
-    // 读取堆栈数据
-    ifetch 1, rega       // 从 rega 指向的真实地址中读取 1 个字节数据到 pdata
-	store  1,  mem_pop_stack_data	// 把 pdata 中的数据存入 pop_stack_data 变量，供后续使用
-	setarg  0
-	istore  1,  rega
-	jam 0x00,  my_key2_press_flage
-    rtn                  // 返回。此时 mem_pop_stack_data 里就是你刚出栈的数据
