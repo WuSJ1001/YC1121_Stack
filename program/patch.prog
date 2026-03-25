@@ -25,9 +25,10 @@ endif
 	beq patch0f_7,p_mouse_3io6key_check
 	beq patch11_6,p_mouse_idle
 	beq patch11_3,p_mouse_app_initflag_check
+	
 	beq patch16_1,p_my_feature
 
-	beq patch18_4,p_otp_write
+	// beq patch18_4,p_otp_write
 	beq patch1b_2,p_sadc_calibration
 ifdef ADC_1121SA
 	beq patch1b_3,p_adc_init_data_a
@@ -1340,7 +1341,9 @@ p_enable_adc_reference_source_inter1p8V_vdcdc:
 	jam 0x00,0x8ac6
 	rtn
 
-endif 	
+endif 
+
+endif 
 // 
 // 
 // 
@@ -1358,23 +1361,190 @@ endif
 // 
 
 p_my_feature:
+	call  p_my_feature_init
+p_my_feature_loop:
+	call  Wu_ui_timer_check
+	branch  p_my_feature_loop
+
+//10ms定时器
+Wu_ui_timer_check:
+	arg 0,rega
+	fetcht 4,mem_ui_timer_last_btclk
+	copy clkn_bt,regb
+	copy regb,pdata
+	isub temp,null
+	ncall ui_timer_timeout,positive
+Wu_ui_timer_check_loop:
+	copy regb,pdata
+	increase 16,temp    //32btclk = 10ms
+	increase 16,temp
+	isub temp,null
+	nbranch Wu_ui_timer_check_end,positive
+	increase 1,rega   //increase 1 every 10ms count
+	and rega,0x0f,pdata
+	nbranch Wu_ui_timer_check_loop,blank
+	arg 0,rega  //reset timer if it's longer than 1.5s between 2 checks
+	call Wu_ui_timer_check_send_evt
+Wu_ui_timer_init:
+	copy clkn_bt,pdata
+	store 4,mem_ui_timer_last_btclk
+	rtn
+Wu_ui_timer_check_end:
+	copy rega,pdata
+	rtn blank
+	increase -16,temp    //32btclk = 10ms
+	increase -16,temp
+	set0 28,temp
+	storet 4,mem_ui_timer_last_btclk
+Wu_ui_timer_check_send_evt:
+	branch Wu_app_evt_timer
+Wu_app_evt_timer:
+	store 1,mem_app_evt_timer_count
+Wu_app_evt_10ms_loop:
+	fetch 1,mem_app_evt_timer_count
+	rtn blank
+	increase -1,pdata
+	store 1,mem_app_evt_timer_count
+	call my_loop
+	branch Wu_app_evt_10ms_loop
 
 
-	branch  p_my_feature
+p_my_feature_init:
+	jam 0x00,  my_key1_flage
+	jam 0x00,  my_key2_flage
+	jam 0x00,  my_key1_release_flage
+	jam 0x00,  my_key2_release_flage
+	jam 0x00,  my_key1_press_flage
+	jam 0x00,  my_key2_press_flage
+
+	//- 配置 GPIO23 为上拉输入（按下接地，视为有效）
+	// 选择输入+上拉复用
+	arg gpcfg_input|gpcfg_pullup,temp
+	setarg KEY1
+	call gpio_config_function_int
+	setarg KEY2
+	call gpio_config_function_int
+	// 声明它为低有效输入
+	arg KEY1,temp        // bit7=1, 低电平算“按下”
+	call gpio_config_input
+	arg KEY2,temp        // bit7=0, 低电平算“按下”
+	call gpio_config_input
+
+	// 初始化堆栈指针 mem_stack_sp
+	setarg  mem_stack_space
+    store 2, mem_stack_sp          // 写入 2 个字节的堆栈空间地址到 mem_stack_sp 寄存器
+init_stack:
+    arg 16, loopcnt           // 1. 设置循环次数为 16，存入 loopcnt 寄存器
+    arg  mem_stack_space, contw    // 2. 将  mem_stack_space 的首地址赋给写指针 contw
+    setarg 0                  // 3. 准备要写入的数据，将 pdata 设为 0
+clear_stack_loop:
+    istore 1, contw           // 4. 将 pdata 中的 1 个字节(也就是0)存入 contw 指向的内存
+//    【注意】：istore 执行完后，contw 的地址会自动 +1
+    loop clear_stack_loop     // 5. loopcnt 自动减 1；若不为 0，则跳回 clear_stack_loop 继续执行
+	rtn
+
+
+// 主循环
+my_loop:
+key_loop:
+	// 轮询扫键，更新按键状态
+	call key_loop_key1
+	call key_loop_key2
+stack_loop:
+	// 根据按键状态执行入栈或出栈操作
+	call  push_data
+	call  pop_data
+	rtn
+
+
+// key1 按键,连接 GPIO23
+key_loop_key1:
+	// 读取 GPIO23
+	arg KEY1,temp        // 仍然是“低有效、编号23”
+	call gpio_get_bit
+	fetch  1,   my_key1_flage
+	lshift  pdata, pdata
+	setflag true,0,pdata
+	store  1,   my_key1_flage
+	and   pdata, 0x0f, pdata      // 仅保留低四位
+	branch key1_released, blank   // 低四位全 0 -> 松开
+key1_pressed:
+	//按键按下标志位
+	jam 0x00,   my_key1_release_flage
+	jam 0x01,  my_key1_press_flage	//按键被按下，置位按下标志位
+	rtn
+key1_released:
+	//按键释放后再做后续处理，避免按键长按时重复触发
+	jam 0x1 ,	 my_key1_release_flage
+	rtn
+
+
+// key2 按键,连接 GPIO12
+key_loop_key2:
+	// 读取 GPIO12
+	arg KEY2,temp        // 仍然是“低有效、编号12”
+	call gpio_get_bit
+	fetch  1,   my_key2_flage
+	lshift  pdata, pdata
+	setflag true,0,pdata
+	store  1,   my_key2_flage
+	and   pdata, 0x0f, pdata      // 仅保留低四位
+	branch key2_released, blank   // 低四位全 0 -> 松开
+key2_pressed:
+	//按键按下标志位
+	jam 0x00,   my_key2_release_flage
+	jam 0x01,  my_key2_press_flage	//按键被按下，置位按下标志位
+	rtn
+key2_released:
+	//按键释放后再做后续处理，避免按键长按时重复触发
+	jam 0x1 ,	 my_key2_release_flage
+	rtn
 
 
 // ==========================================
 // 堆栈的基础功能函数
 // rega 指向堆栈顶，pdata 是要入栈或出栈的数据
+// KEY1按键对应push_data，KEY2按键对应pop_data
 // ==========================================
 push_data:
-    // 把 pdata 存入 rega 指向的地址，然后 rega 指针加 1
-    istore 1, rega
-    increase 1, rega
+	fetch  1,   my_key1_release_flage
+	rtn blank  // 按键没释放继续轮询
+	fetch  1,  my_key1_press_flage
+	rtn blank  // 按键没被按下继续轮询
+
+    // 1. 从内存取出 mem_stack_sp 到 rega
+    fetch 2, mem_stack_sp          // 将当前 mem_stack_sp 的地址值读入 pdata
+    iforce rega          // 把 pdata 的值赋值给 rega（此时 rega 指向栈顶空位）
+
+    // 2. 写入数据
+	fetch  1,  mem_push_stack_data
+    istore 1, rega       // 把 pdata 中的数据存入 rega 当前指向的内存地址
+
+    // 3. 更新指针并存回 mem_stack_sp 变量
+    increase 1, rega     // 指针地址 +1 (向后移动一个字节)
+    copy rega, pdata     // 将 rega 中的新地址传给 pdata
+    store 2, mem_stack_sp          // 保存新地址回内存变量 mem_stack_sp
+	jam 0x00,  my_key1_press_flage
     rtn
 
+
 pop_data:
-    // rega 指针减 1，然后把指向的地址的数据读到 pdata 中
-    increase -1, rega
-    ifetch 1, rega
-    rtn
+	fetch  1,   my_key2_release_flage
+	rtn blank  // 按键没释放继续轮询
+	fetch  1,  my_key2_press_flage
+	rtn blank  // 按键没被按下继续轮询
+	
+    // 从内存取出 mem_stack_sp 到 rega
+    fetch 2, mem_stack_sp          // 将当前 mem_stack_sp 的地址值读入 pdata
+    // 指针回退
+    increase -1, pdata    // 栈底在低地址，出栈所以地址 -1，退回到上次存数据的位置
+	copy pdata, rega     // 把更新后的地址传给 rega（此时 rega 指向栈顶数据）
+    store 2, mem_stack_sp          // 保存新地址回内存变量 mem_stack_sp
+
+    // 读取堆栈数据
+    ifetch 1, rega       // 从 rega 指向的真实地址中读取 1 个字节数据到 pdata
+	store  1,  mem_pop_stack_data	// 把 pdata 中的数据存入 pop_stack_data 变量，供后续使用
+	setarg  0
+	istore  1,  rega
+	jam 0x00,  my_key2_press_flage
+    rtn                  // 返回。此时 mem_pop_stack_data 里就是你刚出栈的数据

@@ -2,14 +2,24 @@
 
 xmemalloc stack(
 
+1   my_key1_flage
+1   my_key2_flage
+1   my_key1_release_flage
+1   my_key2_release_flage
+1   my_key1_press_flage
+1   my_key2_press_flage
 
+1   mem_push_stack_data
+1   mem_pop_stack_data
 
-
+//栈指针
+2   mem_stack_sp
+16  mem_stack_space
 
 
 )
 
-(
-
+23 KEY1
+12 KEY2
 
 )
