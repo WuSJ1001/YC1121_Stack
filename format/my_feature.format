@@ -1,28 +1,62 @@
-
-
 xmemalloc stack(
-//UART串口通信RingBuff
+// UART RX/TX RingBuff (DMA用)
 16  mem_uart_rx_ringbuf
 16  mem_uart_tx_ringbuf
 
-//UART串口通信RingBuff地址
+// uarta_init_dma_mem 打包地址用
 8   mem_pdatatemp
 
-// UART 发送/接收临时变量
-1   mem_my_uart_tx_byte
-1   mem_my_uart_cmd0
-1   mem_my_uart_cmd1
+// ---------- 接收状态机 ----------
+// 接收状态：0=等帧头 1=等len 2=等cmd 3=收data 4=等checksum 5=帧完整待处理
+2   mem_rx_message_sum
+1   mem_rx_state
+1   mem_rx_len          // 本帧data区字节数
+1   mem_rx_cmd          // 本帧命令字
+1   mem_rx_data_idx     // 已收data字节数
+1   mem_rx_checksum_calc // 累计校验值
+16  mem_rx_data         // data区缓冲（最大16字节）
 
-// 协议用“覆盖式堆栈”（16字节，满了继续push会覆盖最老数据）
+// ---------- 发送响应帧 ----------
+// 响应缓冲区布局：AA | len | cmd | status | data[最多13] | checksum
+//   最大 = 1+1+1+1+13+1 = 18字节
+// 发送时从 mem_tx_buf 开始，长度存在 mem_tx_len
+1   mem_tx_len          // 响应帧总字节数（含帧头和校验）
+18  mem_tx_buf          // 响应帧缓冲区
+1   mem_tx_state
+
+// ---------- 栈 ----------
 16  mem_cmd_stack_space
 1   mem_cmd_stack_top_idx
-1   mem_cmd_stack_count
-
 )
 
 (
-
 15  My_UART_RX_NUM
 16  My_UART_TX_NUM
 
+// 接收状态机状态常量
+0   RX_STATE_WAIT_HEAD
+1   RX_STATE_WAIT_LEN
+2   RX_STATE_WAIT_CMD
+3   RX_STATE_RECV_DATA
+4   RX_STATE_WAIT_CHKSUM
+5   RX_STATE_FRAME_READY
+
+// 命令字
+0x01 CMD_PUSH
+0x02 CMD_POP
+0x03 CMD_TOP
+0x04 CMD_SIZE
+0x05 CMD_CLEAR
+
+// 状态码
+0x00 STATUS_OK
+0x01 STATUS_OK_NODATA
+0x10 STATUS_ERR_LEN
+0x11 STATUS_ERR_PARAM
+0x20 STATUS_ERR_FULL
+0x21 STATUS_ERR_EMPTY
+0x22 STATUS_ERR_BOUNDS
+0x30 STATUS_ERR_UNKNOWN_CMD
+0x32 STATUS_ERR_FRAME
+0x40 STATUS_ERR_CHECKSUM
 )
