@@ -1546,6 +1546,20 @@ my_fsm_wait_cmd:
     fetcht 1,mem_rx_checksum_calc
     iadd temp,pdata
     store 1,mem_rx_checksum_calc
+	// 读取mem_rx_cmd后，判断是否是CMD_POP
+	fetch 1,mem_rx_cmd
+	sub pdata,CMD_POP,null
+	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
+	fetch 1,mem_rx_cmd
+	sub pdata,CMD_TOP,null
+	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
+	fetch 1,mem_rx_cmd
+	sub pdata,CMD_SIZE,null
+	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
+	fetch 1,mem_rx_cmd
+	sub pdata,CMD_CLEAR,null
+	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
+
     // 判断是否有data字节
     fetch 1,mem_rx_len
     jam 0,mem_rx_data_idx
@@ -1561,10 +1575,10 @@ my_fsm_to_chksum:
 my_fsm_recv_data:
     // 存入 mem_rx_data[data_idx]
     fetch 1,mem_rx_data_idx
-    arg mem_rx_data,rega
-    iadd rega,rega
+    arg mem_rx_data,regb
+    iadd regb,regb
 	copy rega, pdata
-    istore 1,rega                    // mem_rx_data[idx] = byte
+    istore 1,regb                    // mem_rx_data[idx] = byte
     // checksum_calc += byte
     fetcht 1,mem_rx_checksum_calc
     iadd temp,pdata
@@ -1658,29 +1672,35 @@ my_push_loop:
     fetch 1,mem_cmd_stack_top_idx
     increase 1,pdata
     store 1,mem_cmd_stack_top_idx
+	copy rega, pdata
+	increase 1,rega
     loop my_push_loop
     // 响应成功，无附加数据
     jam CMD_PUSH,mem_rx_cmd
-    jam STATUS_OK,mem_rx_data        // 复用rx_data[0]存status
-    jam 0,mem_rx_len                 // 响应data区长度=0
+    jam STATUS_OK,mem_tx_state        // 用mem_tx_state存status
+    // jam 0,mem_rx_len                 // 响应data区长度=0
     branch my_resp_send             // → 发送响应
 
 
 // ================================================================
 //  CMD_POP (0x02)
-//  上位机帧：AA | 00 | 0x02 | chk
-//  响应成功：AA | 02 | 02 | 00 | val | chk
-//  响应栈空：AA | 01 | 02 | 21 | chk
+//  上位机帧：AA | num | 0x02 | chk
+//  响应成功：AA | num | 02 | 00 | val | chk
+//  响应栈空：AA | num | 02 | 21 | chk
 // ================================================================
 my_cmd_pop:
-    // len必须为0
+    // len必须大于0
     fetch 1,mem_rx_len
     sub pdata,0,null
-    nbranch my_resp_err_len,zero
+    branch my_resp_err_len,positive
     // 检查栈是否为空
     fetch 1,mem_cmd_stack_top_idx
     sub pdata,0,null
     branch my_resp_err_empty,zero
+	arg mem_rx_data, regb
+	fetch 1,mem_rx_len
+	copy pdata,loopcnt
+my_cmd_pop_loop:
     // top_idx--
     fetch 1,mem_cmd_stack_top_idx
     increase -1,pdata
@@ -1691,19 +1711,21 @@ my_cmd_pop:
     iadd rega,rega
     ifetch 1,rega
     // 存入响应data区
-    store 1,mem_rx_data
+    istore 1,regb
+	copy regb, pdata
+	increase 1,regb
+	loop my_cmd_pop_loop
     jam CMD_POP,mem_rx_cmd
-    jam STATUS_OK,mem_rx_data+1      // 注意：响应帧 data区 = status(1) + val(1)
+    jam STATUS_OK,mem_tx_state      // 用mem_tx_state存status
     // 实际上响应帧结构：AA|len|cmd|status|data|chk
     // 这里用my_resp_send_with_data发送，data=弹出的值
-    jam 1,mem_rx_len                 // 附加1字节数据（弹出值）
     branch my_resp_send
 
 
 // ================================================================
 //  CMD_TOP (0x03)
 //  上位机帧：AA | 00 | 0x03 | chk
-//  响应成功：AA | 02 | 03 | 00 | val | chk
+//  响应成功：AA | 01 | 03 | 00 | val | chk
 //  响应栈空：AA | 01 | 03 | 21 | chk
 // ================================================================
 my_cmd_top:
@@ -1789,7 +1811,7 @@ my_resp_error_no_cmd:
 //
 //  调用前准备：
 //    mem_rx_cmd     = 命令字（原样回显）
-//    mem_rx_data[0] = status码
+//    mem_tx_state	 = status码
 //    mem_rx_data[1..] = 附加数据（如有）
 //    mem_rx_len     = 附加数据字节数（不含status那1字节）
 //
@@ -1804,52 +1826,56 @@ my_resp_send:
     istore 1,contw                   // mem_tx_buf[0] = 0xAA
     // len字段 = 1(status) + mem_rx_len
     fetch 1,mem_rx_len
-    increase 1,pdata                 // len_field = 1 + data_len
     istore 1,contw                   // mem_tx_buf[1] = len_field
-    store 1,mem_pdatatemp            // 暂存len_field供后续计算帧长度和校验
+    // store 1,mem_pdatatemp            // 暂存len_field供后续计算帧长度和校验
     // cmd
     fetch 1,mem_rx_cmd
     istore 1,contw                   // mem_tx_buf[2] = cmd
     // status (data[0])
-    fetch 1,mem_rx_data
+    fetch 1,mem_tx_state
     istore 1,contw                   // mem_tx_buf[3] = status
     // ---------- 2) 边复制附加data边计算校验 ----------
     // checksum 从 len_field 开始累加
     // checksum_calc = len_field
-    fetch 1,mem_pdatatemp
+    fetch 1,mem_rx_len
     store 1,mem_rx_checksum_calc
     // checksum_calc += cmd
     fetch 1,mem_rx_cmd
-    fetch 1,mem_rx_checksum_calc
-    iadd pdata,pdata
-    and_into 0xff,pdata
+    fetcht 1,mem_rx_checksum_calc
+    iadd temp,pdata
     store 1,mem_rx_checksum_calc
     // checksum_calc += status
-    fetch 1,mem_rx_data
-    fetch 1,mem_rx_checksum_calc
-    iadd pdata,pdata
+    fetch 1,mem_tx_state
+    fetcht 1,mem_rx_checksum_calc
+    iadd temp,pdata
     and_into 0xff,pdata
     store 1,mem_rx_checksum_calc
     // 复制附加数据并累加校验
+	arg mem_tx_buf+4,regb		//存储数据写入地址
     fetch 1,mem_rx_len
     copy pdata,loopcnt
     sub pdata,0,null
     branch my_resp_no_extra_data,zero
     arg mem_rx_data,rega             // 源：从data[0]开始
-    increase 1,rega                  // 跳过data[0](status)，从data[1]开始
 my_resp_copy_data_loop:
     ifetch 1,rega                    // pdata = data[i]
-    istore 1,contw                   // 写入tx_buf
+    istore 1,regb                   // 写入tx_buf
     // checksum_calc += data[i]
-    fetch 1,mem_rx_checksum_calc
-    iadd pdata,pdata
+    fetcht 1,mem_rx_checksum_calc
+    iadd temp,pdata
     and_into 0xff,pdata
     store 1,mem_rx_checksum_calc
+	copy rega,pdata
+	increase 1,pdata
+	copy pdata,rega
+	copy regb, pdata
+	increase 1,pdata
+	copy pdata,regb
     loop my_resp_copy_data_loop
 my_resp_no_extra_data:
     // ---------- 3) 写入校验字节 ----------
     fetch 1,mem_rx_checksum_calc
-    istore 1,contw                   // mem_tx_buf[末尾] = checksum
+    istore 1,regb                   // mem_tx_buf[末尾] = checksum
     // ---------- 4) 计算帧总长度并发送 ----------
     // 总长度 = 1(AA) + 1(len) + 1(cmd) + 1(status) + rx_len + 1(chk)
     //        = 5 + rx_len
@@ -1864,268 +1890,3 @@ my_resp_no_extra_data:
     call uart_copy_tx_bytes
     call uarta_send
     rtn
-
-
-
-
-
-
-
-// //10ms定时器
-// Wu_ui_timer_check:
-// 	arg 0,rega
-// 	fetcht 4,mem_ui_timer_last_btclk
-// 	copy clkn_bt,regb
-// 	copy regb,pdata
-// 	isub temp,null
-// 	ncall ui_timer_timeout,positive
-// Wu_ui_timer_check_loop:
-// 	copy regb,pdata
-// 	increase 16,temp    //32btclk = 10ms
-// 	increase 16,temp
-// 	isub temp,null
-// 	nbranch Wu_ui_timer_check_end,positive
-// 	increase 1,rega   //increase 1 every 10ms count
-// 	and rega,0x0f,pdata
-// 	nbranch Wu_ui_timer_check_loop,blank
-// 	arg 0,rega  //reset timer if it's longer than 1.5s between 2 checks
-// 	call Wu_ui_timer_check_send_evt
-// Wu_ui_timer_init:
-// 	copy clkn_bt,pdata
-// 	store 4,mem_ui_timer_last_btclk
-// 	rtn
-// Wu_ui_timer_check_end:
-// 	copy rega,pdata
-// 	rtn blank
-// 	increase -16,temp    //32btclk = 10ms
-// 	increase -16,temp
-// 	set0 28,temp
-// 	storet 4,mem_ui_timer_last_btclk
-// Wu_ui_timer_check_send_evt:
-// 	branch Wu_app_evt_timer
-// Wu_app_evt_timer:
-// 	store 1,mem_app_evt_timer_count
-// Wu_app_evt_10ms_loop:
-// 	fetch 1,mem_app_evt_timer_count
-// 	rtn blank
-// 	increase -1,pdata
-// 	store 1,mem_app_evt_timer_count
-// 	call my_loop
-// 	branch Wu_app_evt_10ms_loop
-
-// /*
-//  * function name: my_feature_uart_init
-//  * 功能：
-//  *   1) GPIO16 -> UART_TXD
-//  *   2) GPIO15 -> UART_RXD（上拉）
-//  *   3) 初始化 UARTA DMA ring buffer（RX/TX start/end）
-//  *   4) 选择 crystal 主时钟
-//  *   5) 波特率设为 115200（用 uarta_calc_baud_rate_config 计算写 core_uart_baud）
-//  *   6) 使能 UART（不启用硬件流控）
-//  *
-//  */
-// p_my_feature:
-// 	call  p_my_feature_init
-// p_my_feature_loop:
-// 	call  Wu_ui_timer_check
-// 	branch  p_my_feature_loop
-
-
-// p_my_feature_init:
-// 	jam 0x00,mem_cmd_stack_top_idx
-// my_feature_uart_init:
-//     // ---------- 1) 配 GPIO 复用 ----------
-//     // GPIO16 属于扩展段（>=16），建议走 gpio_config_function_int 以正确写 core_gpio_conf_hi
-//     arg gpcfg_uart_txd,temp
-//     setarg My_UART_TX_NUM
-//     call gpio_config_function_int
-//     arg gpcfg_uart_rxd|gpcfg_pullup,temp
-//     setarg My_UART_RX_NUM
-//     call gpio_config_function_int
-//     // ---------- 2) 先关闭 UART（可选但推荐） ----------
-//     fetch 1,core_uart_ctrl
-//     set0 BIT_UART_CONTROL_ENABLE,pdata
-//     store 1,core_uart_ctrl
-//     // ---------- 3) 打包 RX/TX ring buffer 的 4 个地址（共 8 字节） ----------
-// 	// RX start
-//     setarg mem_uart_rx_ringbuf
-//     store 2,mem_pdatatemp
-//     // RX end
-//     setarg mem_uart_rx_ringbuf+15
-//     istore 2,contw
-//     // TX start
-//     setarg mem_uart_tx_ringbuf
-//     istore 2,contw
-//     // TX end
-//     setarg mem_uart_tx_ringbuf+15
-//     istore 2,contw
-//     // ---------- 4) 初始化 UARTA DMA ring buffer ----------
-//     fetch 8,mem_pdatatemp
-//     call uarta_init_dma_mem
-//     // ---------- 5) 选择 UART 主时钟 + 配波特率 115200 ----------
-//     call uart_clock_select_main_freq_crystal
-//     arg 115200,temp
-//     call uarta_calc_baud_rate_config
-//     // ---------- 6) 使能 UART（不打开硬件流控） ----------
-//     arg FUN_UART_CONTROL_ENABLE|FUN_UART_CONTROL_SETTING_RATE_BAUD,temp
-//     storet 1,core_uart_ctrl
-//     rtn
-
-
-// // 主循环
-// my_loop:
-// receive_loop:
-// 	// 轮询扫键，更新按键状态
-// 	call  my_uart_receive_cmd
-// stack_loop:
-// 	// 根据mem_uart_rx_cmd分发操作
-// 	call my_uart_receive_cmd_dispatch
-// 	rtn
-// /*
-//  * function name: my_uart_receive_cmd
-//  * 功能：从 UART RX ring 读取并处理命令包
-//  */
-// my_uart_receive_cmd:
-//     fetch 2,core_uart_rxitems
-//     rtn blank
-//     copy pdata,loopcnt           // loopcnt = 接收到的字节数
-//     call uarta_prepare_rx
-//     arg mem_uart_rx_data,contw
-//     call uart_copy_rx_bytes      // 一次性拷贝所有字节
-//     call uarta_rxdone
-//     fetch 1,mem_my_uart_tx_count
-//     iadd loopcnt,pdata           // 累加计数
-//     store 1,mem_my_uart_tx_count
-//     rtn
-
-
-// my_uart_receive_cmd_dispatch:
-// 	//将接收到的数据拆分解析
-// 	arg mem_uart_rx_data,  contr
-// 	ifetch 1,contr
-// 	store 1,mem_uart_rx_start
-// 	ifetch 1,contr
-// 	store 1,mem_uart_rx_len
-// 	ifetch 1,contr
-// 	store 1,mem_uart_rx_cmd
-// 	ifetch 1,contr
-// 	store 1,mem_uart_rx_cnt
-// 	//校验消息头
-// 	fetch 1,mem_uart_rx_start
-// 	sub 0xaa,pdata,null
-// 	nrtn  zero
-// 	//校验参数长度
-// 	fetcht 1,mem_uart_rx_len
-// 	fetch 1,mem_my_uart_tx_count
-// 	increase -4,pdata
-// 	sub temp,pdata,null
-// 	nbranch my_cmd_stack_send_length_error,zero
-// 	// 分发
-// 	fetch 1,mem_uart_rx_cmd
-// 	// beq 0x01,my_uart_receive_cmd_push
-// 	// beq 0x02,my_uart_receive_cmd_pop
-// 	// beq 0x03,my_uart_receive_cmd_top
-// 	// beq	0x04,my_uart_receive_cmd_size
-// 	// beq 0x05,my_uart_receive_cmd_clear
-// 	//命令非法
-
-
-// 	branch my_uart_send_tx_byte
-// 	rtn
-
-
-
-
-// // my_uart_receive_cmd_pop:
-// // 	call my_cmd_stack_pop_and_send
-// // 	rtn
-
-// /*
-//  * function name: my_uart_receive_cmd_push
-//  * 功能:
-//  *   - 依次将数据压栈
-//  *   - 
-//  *   - 
-//  */
-// my_uart_receive_cmd_push:
-// 	fetch 1,mem_uart_rx_len
-// 	branch  blank
-
-
-// 	call uarta_prepare_rx
-// 	arg mem_uart_rx_data,contw
-// 	arg 1,loopcnt
-// 	call uart_copy_rx_bytes
-// 	call uarta_rxdone
-
-// 	fetch 1,mem_uart_tx_len
-// 	increase 1,pdata
-// 	store 1,mem_uart_tx_len
-
-// //将接收到的数据压入栈
-// my_stack_push_data:
-// 	// 计算写入地址：mem_cmd_stack_space + top_idx
-// 	arg mem_cmd_stack_space,rega
-// 	fetch 1,mem_cmd_stack_top_idx
-// 	iadd rega,rega
-// 	fetch 1,mem_uart_rx_data
-// 	istore 1,rega
-
-// 	// top_idx = (top_idx + 1) & 0x0F
-// 	fetch 1,mem_cmd_stack_top_idx
-// 	increase 1,pdata
-// 	store 1,mem_cmd_stack_top_idx
-// 	beq 16,  my_cmd_stack_send_data_full
-// 	jam 0x00,mem_uart_tx_State
-// 	rtn
-
-// //参数长度错误
-// my_cmd_stack_send_length_error:
-// 	jam 0x10,mem_uart_tx_State
-// 	rtn
-// //参数值非法
-// my_cmd_stack_send_invalid_parameter:
-// 	jam 0x11,mem_uart_tx_State
-// 	rtn
-// //栈满（push失败）
-// my_cmd_stack_send_data_full:
-// 	jam 0x20,mem_uart_tx_State
-// 	rtn
-
-
-// /*
-//  * function name: my_cmd_stack_pop_and_send
-//  * 功能：
-//  *   - 栈空：发送 0xEE
-//  *   - 否则：弹出 1 字节到 mem_my_uart_tx_byte 并发送
-// //  */
-// // my_cmd_stack_pop_and_send:
-// // 	fetch 1,mem_cmd_stack_top_idx
-// // 	beq 0,my_cmd_stack_pop_and_send_empty
-
-// // 	// top_idx = (top_idx - 1) & 0x0F
-// // 	fetch 1,mem_cmd_stack_top_idx
-// // 	increase -1,pdata
-// // 	store 1,mem_cmd_stack_top_idx
-
-// // 	// 读取 mem_cmd_stack_space[top_idx]
-// // 	arg mem_cmd_stack_space,rega
-// // 	iadd rega,rega
-// // 	ifetch 1,rega
-// // 	store 1,mem_my_uart_tx_byte
-// // 	branch my_uart_send_tx_byte
-// // my_cmd_stack_pop_and_send_empty:
-// // 	jam 0xee,mem_my_uart_tx_byte
-// // 	branch my_uart_send_tx_byte
-// /*
-//  * function name: my_uart_send_tx_byte
-//  * 功能：发送 mem_my_uart_tx_byte（1 字节）
-//  */
-// my_uart_send_tx_byte:
-
-// 	call uarta_prepare_tx
-// 	arg mem_uart_tx_start,contr
-// 	arg 6,loopcnt
-// 	call uart_copy_tx_bytes
-// 	call uarta_send
-// 	rtn
