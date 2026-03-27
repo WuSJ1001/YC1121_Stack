@@ -1640,8 +1640,8 @@ my_uart_dispatch:
 // ================================================================
 //  CMD_PUSH (0x01)
 //  上位机帧：AA | len | 0x01 | data[len] | chk
-//  响应成功：AA | 01 | 01 | 00 | chk
-//  响应栈满：AA | 01 | 01 | 20 | chk
+//  响应成功：AA | len | 0x01 | 00 | data[len] | chk
+//  响应栈满：AA | len | 0x01 | 20 | data[len] | chk
 // ================================================================
 my_cmd_push:
     // len必须 >= 1
@@ -1684,9 +1684,9 @@ my_push_loop:
 
 // ================================================================
 //  CMD_POP (0x02)
-//  上位机帧：AA | num | 0x02 | chk
-//  响应成功：AA | num | 02 | 00 | val | chk
-//  响应栈空：AA | num | 02 | 21 | chk
+//  上位机帧：AA | len | 0x02 | chk
+//  响应成功：AA | len | 02 | 00 | data[len] | chk
+//  响应栈空：AA | len | 02 | 21 | chk
 // ================================================================
 my_cmd_pop:
     // len必须大于0
@@ -1736,9 +1736,9 @@ my_cmd_top:
     sub pdata,0,null
     branch my_resp_err_empty,zero
     // 读取栈顶：top_idx - 1
+    arg mem_cmd_stack_space,rega
     fetch 1,mem_cmd_stack_top_idx
     increase -1,pdata
-    arg mem_cmd_stack_space,rega
     iadd rega,rega
     ifetch 1,rega
     store 1,mem_rx_data              // 存入data[0]
@@ -1750,7 +1750,7 @@ my_cmd_top:
 // ================================================================
 //  CMD_SIZE (0x04)
 //  上位机帧：AA | 00 | 0x04 | chk
-//  响应：AA | 02 | 04 | 00 | size | chk
+//  响应：AA | 01 | 04 | 00 | size | chk
 // ================================================================
 my_cmd_size:
     fetch 1,mem_rx_len
@@ -1815,7 +1815,7 @@ my_resp_error_no_cmd:
 //    mem_rx_data[1..] = 附加数据（如有）
 //    mem_rx_len     = 附加数据字节数（不含status那1字节）
 //
-//  响应帧格式：AA | (1+len) | cmd | status | data[len] | checksum
+//  响应帧格式：AA | len | cmd | status | data[len] | checksum
 //  checksum = (len_field + cmd + status + data[0..len-1]) & 0xFF
 // ================================================================
 my_resp_send:
