@@ -1,10 +1,12 @@
 xmemalloc stack(
 // UART RX/TX RingBuff (DMA用)
-16  mem_uart_rx_ringbuf
-16  mem_uart_tx_ringbuf
+30  mem_uart_rx_ringbuf
+30  mem_uart_tx_ringbuf
 
 // uarta_init_dma_mem 打包地址用
-8   mem_pdatatemp
+8   mem_pdata_temp
+
+1   mem_rx_timeout_cnt    // 接收超时计数（10ms单位）
 
 // ---------- 接收状态机 ----------
 // 接收状态：0=等帧头 1=等len 2=等cmd 3=收data 4=等checksum 5=帧完整待处理
@@ -50,13 +52,11 @@ xmemalloc stack(
 
 // 状态码
 0x00 STATUS_OK
-0x01 STATUS_OK_NODATA
 0x10 STATUS_ERR_LEN
-0x11 STATUS_ERR_PARAM
 0x20 STATUS_ERR_FULL
 0x21 STATUS_ERR_EMPTY
-0x22 STATUS_ERR_BOUNDS
 0x30 STATUS_ERR_UNKNOWN_CMD
 0x32 STATUS_ERR_FRAME
 0x40 STATUS_ERR_CHECKSUM
+0x44 STATUS_ERR_HEAD
 )

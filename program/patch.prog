@@ -1422,6 +1422,7 @@ p_my_feature_init:
     jam 0x00,mem_cmd_stack_top_idx
     // 初始化接收状态机
     jam RX_STATE_WAIT_HEAD,mem_rx_state
+	jam 0,mem_rx_timeout_cnt
     jam 0,mem_rx_len
     jam 0,mem_rx_cmd
     jam 0,mem_rx_data_idx
@@ -1438,17 +1439,17 @@ my_feature_uart_init:
     fetch 1,core_uart_ctrl
     set0 BIT_UART_CONTROL_ENABLE,pdata
     store 1,core_uart_ctrl
-    // 3) 打包 RX/TX ring buffer 地址到 mem_pdatatemp
+    // 3) 打包 RX/TX ring buffer 地址到 mem_pdata_temp
     setarg mem_uart_rx_ringbuf
-    store 2,mem_pdatatemp
-    setarg mem_uart_rx_ringbuf+15
+    store 2,mem_pdata_temp
+    setarg mem_uart_rx_ringbuf+30
     istore 2,contw
     setarg mem_uart_tx_ringbuf
     istore 2,contw
-    setarg mem_uart_tx_ringbuf+15
+    setarg mem_uart_tx_ringbuf+30
     istore 2,contw
     // 4) 初始化 UARTA DMA ring buffer
-    fetch 8,mem_pdatatemp
+    fetch 8,mem_pdata_temp
     call uarta_init_dma_mem
     // 5) 时钟 + 波特率
     call uart_clock_select_main_freq_crystal
@@ -1463,9 +1464,21 @@ my_feature_uart_init:
 // ================================================================
 //  my_loop: 每次10ms定时器触发调用一次
 // ================================================================
+// 在 my_loop 中，每次tick检查超时
 my_loop:
-    call my_uart_receive_bytes   // 从ring buffer逐字节喂给状态机
-    call my_uart_dispatch        // 若帧完整则处理
+    fetch 1,mem_rx_state
+    sub pdata,0,null
+    branch my_loop_no_timeout_check,positive   // WAIT_HEAD状态不需要检查
+    fetch 1,mem_rx_timeout_cnt            // 超时计数器 +1
+    increase 1,pdata
+    store 1,mem_rx_timeout_cnt
+    sub pdata,150,null                      // 100 × 10ms = 1.5s超时
+    // 超时 → 参数错误
+    nbranch my_resp_err_frame,positive
+	rtn
+my_loop_no_timeout_check:
+	jam 0 , mem_rx_timeout_cnt
+    call my_uart_receive_bytes
     rtn
 
 
@@ -1481,13 +1494,15 @@ my_uart_receive_bytes:
 my_uart_receive_bytes_loop:
     call uarta_prepare_rx        // 准备rx指针
     // 从ring中读1字节到临时位置
-    arg mem_pdatatemp,contw      // 临时用mem_pdatatemp[0]存单字节
+    arg mem_pdata_temp,contw      // mem_pdata_temp[0]存单字节
     arg 1,loopcnt                // 注意：这里借用loopcnt但下面要恢复
-    call uart_copy_rx_bytes      // 读1字节 → mem_pdatatemp
+    call uart_copy_rx_bytes      // 读1字节 → mem_pdata_temp
     call uarta_rxdone            // 更新ring读指针
 
-    fetch 1,mem_pdatatemp        // pdata = 刚读到的字节
+    fetch 1,mem_pdata_temp        // pdata = 刚读到的字节
     call my_rx_fsm_feed          // 喂给状态机
+
+    call my_uart_dispatch        // 分发已接收到的命令
 	fetch 2,mem_rx_message_sum
 	increase -1,pdata
 	store 2,mem_rx_message_sum
@@ -1519,16 +1534,25 @@ my_fsm_wait_head:
 	copy rega, pdata
 	// 判断是否是帧头
     sub pdata,0xaa,null
-    nrtn zero                        // 不是AA，忽略
-    jam RX_STATE_WAIT_LEN,mem_rx_state
+	nrtn zero
+    // nbranch my_fsm_wait_head_err, zero                        // 不是AA，忽略
+	// 是帧头，进入等len状态
+	jam RX_STATE_WAIT_LEN,mem_rx_state
     rtn
+my_fsm_wait_head_err:
+	// 不是帧头，返回帧头错误
+	jam STATUS_ERR_HEAD,mem_tx_state
+	jam 0 , mem_rx_len
+	jam 0 , mem_rx_cmd
+	branch my_resp_send
+	rtn
 
 // --- 等 len ---
 my_fsm_wait_len:
 	copy rega, pdata
     // len最大16（data区），否则帧格式错误，重置
     sub pdata,16,null
-    nbranch my_fsm_reset,positive    // len > 16，非法
+    nbranch my_fsm_wait_len_err,positive    // len > 16，非法
     store 1,mem_rx_len
     jam 0,mem_rx_checksum_calc       // 校验从len字段开始累加
     // checksum_calc += len
@@ -1538,6 +1562,14 @@ my_fsm_wait_len:
     store 1,mem_rx_checksum_calc
     jam RX_STATE_WAIT_CMD,mem_rx_state
     rtn
+my_fsm_wait_len_err:
+	// 不是帧头，返回帧头错误
+	jam STATUS_ERR_LEN,mem_tx_state
+	jam 0 , mem_rx_cmd
+	jam 0 , mem_rx_data_idx
+	jam 0 , mem_rx_checksum_calc
+	branch my_resp_send
+	rtn
 
 // --- 等 cmd ---
 my_fsm_wait_cmd:
@@ -1548,13 +1580,66 @@ my_fsm_wait_cmd:
     iadd temp,pdata
     store 1,mem_rx_checksum_calc
 
-    // 判断是否有data字节
+    // 新增：立即验证cmd是否合法，不合法说明帧头对齐错误
+    fetch 1,mem_rx_cmd
+    sub pdata,CMD_PUSH,null
+    branch my_fsm_cmd_ok,zero
+    fetch 1,mem_rx_cmd
+    sub pdata,CMD_POP,null
+    branch my_fsm_cmd_ok,zero
+    fetch 1,mem_rx_cmd
+    sub pdata,CMD_TOP,null
+    branch my_fsm_cmd_ok,zero
+    fetch 1,mem_rx_cmd
+    sub pdata,CMD_SIZE,null
+    branch my_fsm_cmd_ok,zero
+    fetch 1,mem_rx_cmd
+    sub pdata,CMD_CLEAR,null
+    branch my_fsm_cmd_ok,zero
+    // 非法cmd → 整帧作废，重置
+my_fsm_wait_cmd_err:
+	// 非法cmd，返回cmd错误
+	jam STATUS_ERR_UNKNOWN_CMD,mem_tx_state
+	jam 0 , mem_rx_len
+	jam 0 , mem_rx_data_idx
+	jam 0 , mem_rx_checksum_calc
+	branch my_resp_send
+	rtn
+
+
+my_fsm_cmd_ok:
+    // 根据cmd验证len是否合理
+    fetch 1,mem_rx_cmd
+    beq CMD_PUSH,  my_fsm_check_len_push
+    beq CMD_POP,   my_fsm_check_len_pop
+    beq CMD_TOP,   my_fsm_check_len_nozero    // len必须==0
+    beq CMD_SIZE,  my_fsm_check_len_nozero
+    beq CMD_CLEAR, my_fsm_check_len_nozero
+    branch my_fsm_wait_cmd_err
+my_fsm_check_len_nozero:
+    // TOP/SIZE/CLEAR: len必须为0
     fetch 1,mem_rx_len
-    jam 0,mem_rx_data_idx
     sub pdata,0,null
-    branch my_fsm_to_chksum,zero     // len==0，直接等校验
+    nbranch my_fsm_wait_len_err,zero     // len不为0 → 重置
+    branch my_fsm_to_chksum
+my_fsm_check_len_push:
+    // PUSH: len必须1~16
+    fetch 1,mem_rx_len
+    sub pdata,0,null
+    branch my_fsm_wait_len_err,zero      // len==0 → 非法
+    // len>16已在wait_len阶段过滤
+    // 进入收data状态
+    jam 0,mem_rx_data_idx
     jam RX_STATE_RECV_DATA,mem_rx_state
     rtn
+my_fsm_check_len_pop:
+    // POP: len必须1~16（要pop几个）
+    fetch 1,mem_rx_len
+    sub pdata,0,null
+    branch my_fsm_wait_len_err,zero      // len==0 → 非法
+    branch my_fsm_to_chksum
+    rtn
+
 my_fsm_to_chksum:
     jam RX_STATE_WAIT_CHKSUM,mem_rx_state
     rtn
@@ -1593,8 +1678,9 @@ my_fsm_wait_chksum:
 my_fsm_chksum_fail:
     // 校验失败：响应0x40错误，重置状态机
     jam STATUS_ERR_CHECKSUM,mem_tx_state   // 用mem_tx_state存状态码
-    jam RX_STATE_WAIT_HEAD,mem_rx_state
+	jam 0,mem_rx_len
     branch my_resp_send
+	rtn
 my_fsm_reset:
     jam RX_STATE_WAIT_HEAD,mem_rx_state
     jam 0,mem_rx_len
@@ -1611,8 +1697,6 @@ my_uart_dispatch:
     fetch 1,mem_rx_state
     sub pdata,RX_STATE_FRAME_READY,null
     nrtn zero                        // 帧未就绪
-    // 帧就绪，立即重置状态机准备接收下一帧
-    jam RX_STATE_WAIT_HEAD,mem_rx_state
     // 分发命令
     fetch 1,mem_rx_cmd
     beq CMD_PUSH, my_cmd_push
@@ -1620,9 +1704,7 @@ my_uart_dispatch:
     beq CMD_TOP,  my_cmd_top
     beq CMD_SIZE, my_cmd_size
     beq CMD_CLEAR,my_cmd_clear
-    // 未知命令
-    jam STATUS_ERR_UNKNOWN_CMD,mem_tx_state
-    branch my_resp_send
+	rtn
 
 
 // ================================================================
@@ -1632,10 +1714,6 @@ my_uart_dispatch:
 //  响应栈满：AA | len | 0x01 | 20 | data[len] | chk
 // ================================================================
 my_cmd_push:
-    // len必须 >= 1
-    fetch 1,mem_rx_len
-    sub pdata,0,null
-    branch my_resp_err_len,zero      // len==0，参数长度错误
     // 检查栈是否有空间
     fetch 1,mem_cmd_stack_top_idx
     sub pdata,16,null
@@ -1677,11 +1755,6 @@ my_push_loop:
 //  响应栈空：AA | len | 02 | 21 | chk
 // ================================================================
 my_cmd_pop:
-    // len必须大于0
-    fetch 1,mem_rx_len
-    sub pdata,0,null
-    branch my_resp_err_len,positive
-    // 检查栈是否为空
     fetch 1,mem_cmd_stack_top_idx
     sub pdata,0,null
     branch my_resp_err_empty,zero
@@ -1719,7 +1792,7 @@ my_cmd_pop_loop:
 my_cmd_top:
     fetch 1,mem_rx_len
     sub pdata,0,null
-    nbranch my_resp_err_len,zero
+    nbranch my_fsm_wait_len_err,zero
     fetch 1,mem_cmd_stack_top_idx
     sub pdata,0,null
     branch my_resp_err_empty,zero
@@ -1743,7 +1816,7 @@ my_cmd_top:
 my_cmd_size:
     fetch 1,mem_rx_len
     sub pdata,0,null
-    nbranch my_resp_err_len,zero
+    nbranch my_fsm_wait_len_err,zero
     fetch 1,mem_cmd_stack_top_idx    // pdata = 当前栈大小
     store 1,mem_rx_data              // data[0] = size
     jam CMD_SIZE,mem_rx_cmd
@@ -1759,7 +1832,7 @@ my_cmd_size:
 my_cmd_clear:
     fetch 1,mem_rx_len
     sub pdata,0,null
-    nbranch my_resp_err_len,zero
+    nbranch my_fsm_wait_len_err,zero
     jam 0,mem_cmd_stack_top_idx
     jam CMD_CLEAR,mem_rx_cmd
     jam 0,mem_rx_len
@@ -1769,19 +1842,26 @@ my_cmd_clear:
 // ================================================================
 //  错误响应快捷入口
 // ================================================================
-my_resp_err_len:
-    jam STATUS_ERR_LEN,mem_tx_state
-    // jam 0,mem_rx_len
-    branch my_resp_send
+// 超时错误
+my_resp_err_frame:
+	jam STATUS_ERR_FRAME,mem_tx_state
+	jam 0 , mem_rx_timeout_cnt
+	jam 0 , mem_rx_len
+	jam 0 , mem_rx_cmd
+	jam 0 , mem_rx_data_idx
+	jam 0 , mem_rx_checksum_calc
+	branch my_resp_send
+	rtn
+
 
 my_resp_err_full:
     jam STATUS_ERR_FULL,mem_tx_state
-    // jam 0,mem_rx_len
+	jam 0,mem_rx_len
     branch my_resp_send
 
 my_resp_err_empty:
     jam STATUS_ERR_EMPTY,mem_tx_state
-    // jam 0,mem_rx_len
+	jam 0,mem_rx_len
     branch my_resp_send
 
 
@@ -1873,4 +1953,7 @@ my_resp_no_extra_data:
     arg mem_tx_buf,contr             // 源：响应帧缓冲区
     call uart_copy_tx_bytes
     call uarta_send
+	
+    // 帧处理完毕，重置状态机准备接收下一帧
+	call my_fsm_reset
     rtn
