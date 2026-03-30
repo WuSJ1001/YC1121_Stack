@@ -1604,9 +1604,9 @@ my_fsm_wait_chksum:
     rtn
 my_fsm_chksum_fail:
     // 校验失败：响应0x40错误，重置状态机
-    jam STATUS_ERR_CHECKSUM,mem_tx_state   // 借用mem_tx_state存状态码
-    call my_resp_error_no_cmd
-    branch my_fsm_reset
+    jam STATUS_ERR_CHECKSUM,mem_tx_state   // 用mem_tx_state存状态码
+    jam 0,mem_rx_len
+    branch my_resp_send
 my_fsm_reset:
     jam RX_STATE_WAIT_HEAD,mem_rx_state
     jam 0,mem_rx_len
@@ -1634,7 +1634,8 @@ my_uart_dispatch:
     beq CMD_CLEAR,my_cmd_clear
     // 未知命令
     jam STATUS_ERR_UNKNOWN_CMD,mem_tx_state
-    branch my_resp_error_no_cmd
+    jam 0,mem_rx_len
+    branch my_resp_send
 
 
 // ================================================================
@@ -1716,7 +1717,7 @@ my_cmd_pop_loop:
 	increase 1,regb
 	loop my_cmd_pop_loop
     jam CMD_POP,mem_rx_cmd
-    jam STATUS_OK,mem_tx_state      // 用mem_tx_state存status
+    jam STATUS_OK,mem_tx_state      // mem_tx_state存status
     // 实际上响应帧结构：AA|len|cmd|status|data|chk
     // 这里用my_resp_send_with_data发送，data=弹出的值
     branch my_resp_send
@@ -1793,14 +1794,6 @@ my_resp_err_full:
 
 my_resp_err_empty:
     jam STATUS_ERR_EMPTY,mem_tx_state
-    jam 0,mem_rx_len
-    branch my_resp_send
-
-// 校验错误/未知命令（无有效cmd可回显，用mem_tx_state中暂存的状态码）
-my_resp_error_no_cmd:
-    fetch 1,mem_tx_state               // 状态码暂存在rx_cmd
-    store 1,mem_rx_data
-    jam 0x00,mem_tx_state              // cmd回显0
     jam 0,mem_rx_len
     branch my_resp_send
 
