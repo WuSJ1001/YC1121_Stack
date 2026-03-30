@@ -1485,6 +1485,7 @@ my_uart_receive_bytes_loop:
     arg 1,loopcnt                // 注意：这里借用loopcnt但下面要恢复
     call uart_copy_rx_bytes      // 读1字节 → mem_pdatatemp
     call uarta_rxdone            // 更新ring读指针
+
     fetch 1,mem_pdatatemp        // pdata = 刚读到的字节
     call my_rx_fsm_feed          // 喂给状态机
 	fetch 2,mem_rx_message_sum
@@ -1546,19 +1547,6 @@ my_fsm_wait_cmd:
     fetcht 1,mem_rx_checksum_calc
     iadd temp,pdata
     store 1,mem_rx_checksum_calc
-	// 读取mem_rx_cmd后，判断是否是CMD_POP
-	fetch 1,mem_rx_cmd
-	sub pdata,CMD_POP,null
-	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
-	fetch 1,mem_rx_cmd
-	sub pdata,CMD_TOP,null
-	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
-	fetch 1,mem_rx_cmd
-	sub pdata,CMD_SIZE,null
-	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
-	fetch 1,mem_rx_cmd
-	sub pdata,CMD_CLEAR,null
-	branch my_fsm_to_chksum,zero	// 是CMD_POP，直接等校验
 
     // 判断是否有data字节
     fetch 1,mem_rx_len
@@ -1605,7 +1593,7 @@ my_fsm_wait_chksum:
 my_fsm_chksum_fail:
     // 校验失败：响应0x40错误，重置状态机
     jam STATUS_ERR_CHECKSUM,mem_tx_state   // 用mem_tx_state存状态码
-    jam 0,mem_rx_len
+    jam RX_STATE_WAIT_HEAD,mem_rx_state
     branch my_resp_send
 my_fsm_reset:
     jam RX_STATE_WAIT_HEAD,mem_rx_state
@@ -1634,7 +1622,6 @@ my_uart_dispatch:
     beq CMD_CLEAR,my_cmd_clear
     // 未知命令
     jam STATUS_ERR_UNKNOWN_CMD,mem_tx_state
-    jam 0,mem_rx_len
     branch my_resp_send
 
 
@@ -1784,17 +1771,17 @@ my_cmd_clear:
 // ================================================================
 my_resp_err_len:
     jam STATUS_ERR_LEN,mem_tx_state
-    jam 0,mem_rx_len
+    // jam 0,mem_rx_len
     branch my_resp_send
 
 my_resp_err_full:
     jam STATUS_ERR_FULL,mem_tx_state
-    jam 0,mem_rx_len
+    // jam 0,mem_rx_len
     branch my_resp_send
 
 my_resp_err_empty:
     jam STATUS_ERR_EMPTY,mem_tx_state
-    jam 0,mem_rx_len
+    // jam 0,mem_rx_len
     branch my_resp_send
 
 
@@ -1813,25 +1800,30 @@ my_resp_err_empty:
 // ================================================================
 my_resp_send:
     // ---------- 1) 构造帧头到 mem_tx_buf ----------
-    arg mem_tx_buf,contw
+    arg mem_tx_buf,rega
     // 帧头 AA
     setarg 0xaa
-    istore 1,contw                   // mem_tx_buf[0] = 0xAA
-    // len字段 = 1(status) + mem_rx_len
+    istore 1,rega                   // mem_tx_buf[0] = 0xAA
+	copy rega,pdata
+	increase 1,rega
     fetch 1,mem_rx_len
-    istore 1,contw                   // mem_tx_buf[1] = len_field
-    // store 1,mem_pdatatemp            // 暂存len_field供后续计算帧长度和校验
-    // cmd
+	istore 1,rega                   // mem_tx_buf[1] = len
+    store 1,mem_rx_checksum_calc	// checksum从len开始
+	copy rega,pdata
+	increase 1,rega
+	// cmd
     fetch 1,mem_rx_cmd
-    istore 1,contw                   // mem_tx_buf[2] = cmd
-    // status (data[0])
+    istore 1,rega                   // mem_tx_buf[2] = cmd
+	copy rega,pdata
+	increase 1,rega
+    // status
     fetch 1,mem_tx_state
-    istore 1,contw                   // mem_tx_buf[3] = status
+    istore 1,rega                   // mem_tx_buf[3] = status
+	copy rega,pdata
+	increase 1,rega
     // ---------- 2) 边复制附加data边计算校验 ----------
     // checksum 从 len_field 开始累加
     // checksum_calc = len_field
-    fetch 1,mem_rx_len
-    store 1,mem_rx_checksum_calc
     // checksum_calc += cmd
     fetch 1,mem_rx_cmd
     fetcht 1,mem_rx_checksum_calc
@@ -1843,6 +1835,7 @@ my_resp_send:
     iadd temp,pdata
     and_into 0xff,pdata
     store 1,mem_rx_checksum_calc
+
     // 复制附加数据并累加校验
 	arg mem_tx_buf+4,regb		//存储数据写入地址
     fetch 1,mem_rx_len
@@ -1874,12 +1867,10 @@ my_resp_no_extra_data:
     //        = 5 + rx_len
     fetch 1,mem_rx_len
     increase 5,pdata
-    store 1,mem_tx_len
+    copy pdata,loopcnt
     // ---------- 5) 通过 UART 发送 ----------
     call uarta_prepare_tx
     arg mem_tx_buf,contr             // 源：响应帧缓冲区
-    fetch 1,mem_tx_len
-    copy pdata,loopcnt
     call uart_copy_tx_bytes
     call uarta_send
     rtn
